@@ -1,0 +1,44 @@
+<view class="container">
+  <view class="title-section">
+    <text class="main-title">元素守护者</text>
+    <text class="sub-title">ELEMENT GUARDIAN</text>
+    <view class="title-glow"></view>
+  </view>
+
+  <view class="menu-section">
+    <button class="game-btn start-btn" bindtap="startGame">
+      <text class="btn-text">开始游戏</text>
+      <text class="btn-icon">⚔️</text>
+    </button>
+    
+    <view class="stats-panel">
+      <view class="stat-item">
+        <text class="stat-label">最高分数</text>
+        <text class="stat-value">{{highScore}}</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-label">最高波数</text>
+        <text class="stat-value">{{maxWave}}</text>
+      </view>
+    </view>
+
+    <view class="feature-list">
+      <view class="feature-item">
+        <text class="feature-icon">🏰</text>
+        <text class="feature-text">放置防御塔抵御怪物</text>
+      </view>
+      <view class="feature-item">
+        <text class="feature-icon">✨</text>
+        <text class="feature-text">合成相同塔获得更强塔</text>
+      </view>
+      <view class="feature-item">
+        <text class="feature-icon">🔮</text>
+        <text class="feature-text">多种元素塔属性克制</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="footer">
+    <text class="version">v1.0 · Tower Defense & Merge</text>
+  </view>
+</view>

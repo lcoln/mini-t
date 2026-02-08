@@ -1,0 +1,125 @@
+<view class="game-container" catchtouchmove="onGlobalTouchMove" catchtouchend="onGlobalTouchEnd">
+  <!-- 顶部状态栏 -->
+  <view class="status-bar">
+    <view class="status-item wave">
+      <text class="status-icon">🌊</text>
+      <text class="status-value">{{wave}}</text>
+      <text class="status-label">波</text>
+    </view>
+    <view class="status-item gold">
+      <text class="status-icon">💰</text>
+      <text class="status-value gold-value">{{gold}}</text>
+    </view>
+    <view class="status-item lives">
+      <text class="status-icon">❤️</text>
+      <text class="status-value lives-value">{{lives}}</text>
+    </view>
+    <view class="status-item score">
+      <text class="status-icon">⭐</text>
+      <text class="status-value">{{score}}</text>
+    </view>
+    <view class="pause-btn" bindtap="togglePause">
+      <text>⏸</text>
+    </view>
+  </view>
+
+  <!-- 游戏Canvas -->
+  <canvas 
+    type="2d" 
+    id="gameCanvas" 
+    class="game-canvas"
+    bindtouchstart="onCanvasTouchStart"
+    bindtouchmove="onTouchMove"
+    bindtouchend="onTouchEnd"
+  ></canvas>
+
+  <!-- 合成提示 -->
+  <view class="merge-hint" wx:if="{{showMergeHint}}">
+    <text class="merge-text">✨ 松开合成升级 ✨</text>
+  </view>
+
+  <!-- 底部仓库区域 -->
+  <view class="inventory-area">
+    <view class="inventory-header">
+      <text class="inventory-title">🏰 防御塔仓库</text>
+      <view class="summon-btn {{gold < summonCost || inventoryFull ? 'disabled' : ''}}" catchtap="summonTower">
+        <text class="summon-icon">✨</text>
+        <text class="summon-text">召唤</text>
+        <text class="summon-cost">💰{{summonCost}}</text>
+      </view>
+    </view>
+    
+    <view class="inventory-hint">
+      <text>拖动塔到上方格子放置 | 相同塔合成升级</text>
+    </view>
+    
+    <view class="inventory-grid">
+      <view 
+        class="inventory-slot {{item ? 'has-tower tower-' + item.type : 'empty'}} {{draggingSlotIndex === index ? 'dragging' : ''}} {{mergeTargetSlotIndex === index ? 'merge-target' : ''}}"
+        wx:for="{{inventorySlots}}"
+        wx:key="index"
+        data-index="{{index}}"
+        catchtouchstart="onInventoryTouchStart"
+        catchtouchmove="onTouchMove"
+        catchtouchend="onTouchEnd"
+      >
+        <block wx:if="{{item}}">
+          <view class="slot-tower" style="background: radial-gradient(circle at 30% 30%, #fff, {{item.color}}); box-shadow: 0 0 15px {{item.color}}, inset 0 -3px 8px rgba(0,0,0,0.3);">
+            <text class="tower-emoji">{{item.emoji}}</text>
+          </view>
+          <view class="tower-level-badge">
+            <text class="tower-level">Lv.{{item.level}}</text>
+          </view>
+          <view class="tower-name">
+            <text>{{item.name}}</text>
+          </view>
+        </block>
+        <block wx:else>
+          <text class="empty-slot">+</text>
+        </block>
+      </view>
+    </view>
+  </view>
+
+  <!-- 暂停面板 -->
+  <view class="overlay" wx:if="{{gameState === 'paused'}}">
+    <view class="panel">
+      <text class="panel-title">游戏暂停</text>
+      <view class="panel-stats">
+        <view class="panel-stat">
+          <text class="panel-stat-label">当前波数</text>
+          <text class="panel-stat-value">{{wave}}</text>
+        </view>
+        <view class="panel-stat">
+          <text class="panel-stat-label">当前金币</text>
+          <text class="panel-stat-value gold-text">💰 {{gold}}</text>
+        </view>
+      </view>
+      <button class="btn primary" bindtap="resumeGame">继续游戏</button>
+      <button class="btn secondary" bindtap="restartGame">重新开始</button>
+      <button class="btn secondary" bindtap="backToMenu">返回菜单</button>
+    </view>
+  </view>
+
+  <!-- 游戏结束面板 -->
+  <view class="overlay" wx:if="{{gameState === 'gameover'}}">
+    <view class="panel gameover-panel">
+      <text class="panel-title gameover">💀 防守失败!</text>
+      <view class="panel-stats">
+        <view class="panel-stat">
+          <text class="panel-stat-label">最终分数</text>
+          <text class="panel-stat-value big">{{score}}</text>
+        </view>
+        <view class="panel-stat">
+          <text class="panel-stat-label">坚持波数</text>
+          <text class="panel-stat-value">{{wave}}</text>
+        </view>
+        <view class="record" wx:if="{{isNewRecord}}">
+          <text>🏆 新纪录!</text>
+        </view>
+      </view>
+      <button class="btn primary" bindtap="restartGame">再来一局</button>
+      <button class="btn secondary" bindtap="backToMenu">返回菜单</button>
+    </view>
+  </view>
+</view>

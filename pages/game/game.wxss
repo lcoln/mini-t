@@ -1,0 +1,438 @@
+.game-container {
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(180deg, #0a1a0a 0%, #152515 50%, #0a1a0a 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 顶部状态栏 */
+.status-bar {
+  display: flex;
+  align-items: center;
+  padding: 15rpx 20rpx;
+  background: linear-gradient(180deg, rgba(30, 60, 30, 0.95) 0%, rgba(15, 30, 15, 0.9) 100%);
+  border-bottom: 3rpx solid rgba(80, 255, 80, 0.4);
+  box-shadow: 0 4rpx 15rpx rgba(0, 0, 0, 0.5);
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  margin-right: 20rpx;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+  padding: 10rpx 18rpx;
+  border-radius: 25rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2rpx 5rpx rgba(255, 255, 255, 0.05);
+}
+
+.status-icon {
+  font-size: 26rpx;
+  margin-right: 8rpx;
+}
+
+.status-value {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.5);
+}
+
+.status-label {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.6);
+  margin-left: 4rpx;
+}
+
+.gold-value {
+  color: #ffd700;
+  text-shadow: 0 0 15rpx rgba(255, 215, 0, 0.6), 0 2rpx 4rpx rgba(0, 0, 0, 0.5);
+  min-width: 70rpx;
+  font-size: 32rpx;
+}
+
+.lives-value {
+  color: #ff6666;
+  text-shadow: 0 0 15rpx rgba(255, 102, 102, 0.6), 0 2rpx 4rpx rgba(0, 0, 0, 0.5);
+}
+
+.pause-btn {
+  margin-left: auto;
+  width: 65rpx;
+  height: 65rpx;
+  background: linear-gradient(135deg, rgba(80, 255, 80, 0.2) 0%, rgba(40, 120, 40, 0.3) 100%);
+  border: 2rpx solid rgba(80, 255, 80, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  box-shadow: 0 0 15rpx rgba(80, 255, 80, 0.3);
+}
+
+.pause-btn:active {
+  transform: scale(0.95);
+  background: rgba(80, 255, 80, 0.3);
+}
+
+/* 游戏Canvas */
+.game-canvas {
+  width: 100%;
+  flex: 1;
+  min-height: 350px;
+  background: linear-gradient(180deg, #0f1f0f 0%, #1a2a1a 50%, #0f1f0f 100%);
+}
+
+/* 合成提示 */
+.merge-hint {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 30rpx 60rpx;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.95) 0%, rgba(255, 170, 0, 0.95) 100%);
+  border-radius: 30rpx;
+  box-shadow: 0 0 50rpx rgba(255, 215, 0, 0.8), inset 0 2rpx 10rpx rgba(255, 255, 255, 0.3);
+  animation: mergeHintPulse 0.5s ease-in-out infinite;
+  z-index: 50;
+}
+
+.merge-text {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #1a1a00;
+  text-shadow: 0 2rpx 4rpx rgba(255, 255, 255, 0.3);
+}
+
+@keyframes mergeHintPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 50rpx rgba(255, 215, 0, 0.8); }
+  50% { transform: translate(-50%, -50%) scale(1.08); box-shadow: 0 0 70rpx rgba(255, 215, 0, 1); }
+}
+
+/* 底部仓库区域 */
+.inventory-area {
+  background: linear-gradient(0deg, rgba(5, 15, 5, 0.98) 0%, rgba(20, 40, 20, 0.95) 100%);
+  border-top: 3rpx solid rgba(80, 255, 80, 0.5);
+  padding: 8rpx 10rpx 15rpx;
+  box-shadow: 0 -8rpx 25rpx rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4rpx;
+  padding: 0 10rpx;
+}
+
+.inventory-title {
+  font-size: 24rpx;
+  color: #50ff50;
+  font-weight: bold;
+  text-shadow: 0 0 15rpx rgba(80, 255, 80, 0.5);
+}
+
+.summon-btn {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #ffd700 0%, #ff9500 100%);
+  padding: 10rpx 18rpx;
+  border-radius: 25rpx;
+  box-shadow: 0 0 20rpx rgba(255, 215, 0, 0.5), inset 0 2rpx 8rpx rgba(255, 255, 255, 0.3);
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.summon-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 0 30rpx rgba(255, 215, 0, 0.8);
+}
+
+.summon-btn.disabled {
+  background: linear-gradient(135deg, #555 0%, #333 100%);
+  box-shadow: none;
+  opacity: 0.5;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.summon-icon {
+  font-size: 22rpx;
+  margin-right: 6rpx;
+}
+
+.summon-text {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #1a1a00;
+  margin-right: 8rpx;
+}
+
+.summon-cost {
+  font-size: 20rpx;
+  color: #1a1a00;
+  font-weight: bold;
+}
+
+.inventory-hint {
+  text-align: center;
+  margin-bottom: 4rpx;
+}
+
+.inventory-hint text {
+  font-size: 18rpx;
+  color: rgba(150, 200, 150, 0.7);
+}
+
+.inventory-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6rpx;
+}
+
+.inventory-slot {
+  width: 100rpx;
+  height: 100rpx;
+  background: linear-gradient(135deg, rgba(20, 40, 20, 0.8) 0%, rgba(10, 25, 10, 0.9) 100%);
+  border: 2rpx solid rgba(80, 255, 80, 0.25);
+  border-radius: 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: inset 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+}
+
+.inventory-slot.has-tower {
+  border-color: rgba(80, 255, 80, 0.5);
+  background: linear-gradient(135deg, rgba(40, 80, 40, 0.4) 0%, rgba(20, 50, 20, 0.6) 100%);
+  box-shadow: 0 0 15rpx rgba(80, 255, 80, 0.2), inset 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+}
+
+/* 不同类型塔的边框颜色 */
+.inventory-slot.tower-fire {
+  border-color: rgba(255, 68, 0, 0.6);
+  box-shadow: 0 0 15rpx rgba(255, 68, 0, 0.3);
+}
+
+.inventory-slot.tower-ice {
+  border-color: rgba(0, 204, 255, 0.6);
+  box-shadow: 0 0 15rpx rgba(0, 204, 255, 0.3);
+}
+
+.inventory-slot.tower-nature {
+  border-color: rgba(68, 255, 68, 0.6);
+  box-shadow: 0 0 15rpx rgba(68, 255, 68, 0.3);
+}
+
+.inventory-slot.tower-arcane {
+  border-color: rgba(170, 68, 255, 0.6);
+  box-shadow: 0 0 15rpx rgba(170, 68, 255, 0.3);
+}
+
+.inventory-slot.tower-lightning {
+  border-color: rgba(255, 255, 0, 0.6);
+  box-shadow: 0 0 15rpx rgba(255, 255, 0, 0.3);
+}
+
+.inventory-slot.dragging {
+  opacity: 0.4;
+  transform: scale(0.9);
+  border-style: dashed;
+}
+
+.inventory-slot.merge-target {
+  border-color: #ffd700 !important;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.8), 0 0 40px rgba(255, 215, 0, 0.4) !important;
+  animation: mergeTargetPulse 0.5s ease-in-out infinite;
+}
+
+@keyframes mergeTargetPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.inventory-slot.empty {
+  border-style: dashed;
+  border-color: rgba(80, 255, 80, 0.2);
+}
+
+.slot-tower {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.tower-emoji {
+  font-size: 24rpx;
+}
+
+.tower-level-badge {
+  position: absolute;
+  top: 3rpx;
+  right: 3rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ff9500 100%);
+  padding: 1rpx 8rpx;
+  border-radius: 8rpx;
+  box-shadow: 0 2rpx 5rpx rgba(0, 0, 0, 0.3);
+}
+
+.tower-level {
+  font-size: 16rpx;
+  color: #1a1a00;
+  font-weight: bold;
+}
+
+.tower-name {
+  margin-top: 1rpx;
+}
+
+.tower-name text {
+  font-size: 16rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.empty-slot {
+  font-size: 36rpx;
+  color: rgba(80, 255, 80, 0.25);
+}
+
+/* 遮罩和面板 */
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(5, 15, 5, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.panel {
+  width: 85%;
+  max-width: 580rpx;
+  padding: 55rpx 45rpx;
+  background: linear-gradient(135deg, rgba(40, 80, 40, 0.3) 0%, rgba(20, 50, 20, 0.4) 100%);
+  border: 3rpx solid rgba(80, 255, 80, 0.5);
+  border-radius: 35rpx;
+  box-shadow: 0 0 50rpx rgba(80, 255, 80, 0.2), inset 0 2rpx 15rpx rgba(255, 255, 255, 0.05);
+}
+
+.panel-title {
+  display: block;
+  text-align: center;
+  font-size: 52rpx;
+  font-weight: bold;
+  color: #50ff50;
+  margin-bottom: 40rpx;
+  text-shadow: 0 0 25rpx rgba(80, 255, 80, 0.8), 0 3rpx 6rpx rgba(0, 0, 0, 0.5);
+}
+
+.panel-title.gameover {
+  color: #ff6666;
+  text-shadow: 0 0 25rpx rgba(255, 102, 102, 0.8), 0 3rpx 6rpx rgba(0, 0, 0, 0.5);
+}
+
+.panel-stats {
+  margin-bottom: 40rpx;
+}
+
+.panel-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 25rpx;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+  border-radius: 15rpx;
+  margin-bottom: 18rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-stat-label {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.panel-stat-value {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.5);
+}
+
+.panel-stat-value.big {
+  font-size: 46rpx;
+  color: #ffd700;
+  text-shadow: 0 0 15rpx rgba(255, 215, 0, 0.5);
+}
+
+.panel-stat-value.gold-text {
+  color: #ffd700;
+  text-shadow: 0 0 15rpx rgba(255, 215, 0, 0.5);
+}
+
+.record {
+  text-align: center;
+  padding: 22rpx;
+  background: linear-gradient(135deg, rgba(255, 170, 0, 0.2) 0%, rgba(255, 200, 0, 0.15) 100%);
+  border-radius: 15rpx;
+  margin-top: 12rpx;
+  border: 2rpx solid rgba(255, 170, 0, 0.4);
+}
+
+.record text {
+  font-size: 40rpx;
+  color: #ffaa00;
+  animation: recordPulse 1s ease-in-out infinite;
+  text-shadow: 0 0 15rpx rgba(255, 170, 0, 0.6);
+}
+
+@keyframes recordPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.btn {
+  width: 100%;
+  height: 95rpx;
+  border-radius: 20rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-bottom: 22rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, #50ff50 0%, #20aa20 100%);
+  color: #0d1f0d;
+  box-shadow: 0 0 25rpx rgba(80, 255, 80, 0.5), inset 0 2rpx 8rpx rgba(255, 255, 255, 0.2);
+}
+
+.btn.primary:active {
+  background: linear-gradient(135deg, #40dd40 0%, #188818 100%);
+  box-shadow: 0 0 35rpx rgba(80, 255, 80, 0.7);
+}
+
+.btn.secondary {
+  background: linear-gradient(135deg, rgba(80, 80, 80, 0.4) 0%, rgba(50, 50, 50, 0.5) 100%);
+  border: 2rpx solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.btn.secondary:active {
+  background: rgba(100, 100, 100, 0.5);
+}

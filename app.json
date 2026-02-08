@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/game/game"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#1a2a1a",
+    "navigationBarTitleText": "元素守护者 · Element Guardian",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#1a2a1a"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}
