@@ -368,6 +368,7 @@ Page({
         // 获取canvas在页面中的位置
         wx.createSelectorQuery().select('#gameCanvas').boundingClientRect((rect) => {
           this.setData({ canvasRect: rect })
+          this.cachedCanvasRect = rect  // 缓存供拖动使用
         }).exec()
         
         this.initGame()
@@ -1160,7 +1161,7 @@ Page({
         color: config.color,
         speed: tower.type === 'arcane' ? 10 : 7,
         piercing: tower.type === 'arcane' ? 2 + tower.level : 0,
-        size: 6 + tower.level,
+        size: 4 + tower.level * 1.2,
         angle: 0,
         trail: []
       })
@@ -1170,31 +1171,34 @@ Page({
   },
 
   lightningAttack(tower, target) {
-    const chainCount = 2 + tower.level
+    const lv = tower.level || 1
+    const chainCount = 1 + lv  // lv1=2链, lv5=6链
     
     this.applyDamage(target, tower.damage, 'lightning')
     
-    // 闪电主链
+    // 闪电主链 - 等级影响颜色、粗细、持续时间
+    const mainColor = lv >= 5 ? '#ffffff' : lv >= 4 ? '#ffffcc' : lv >= 3 ? '#ffff88' : lv >= 2 ? '#ffff44' : '#dddd00'
+    const mainWidth = 2 + lv * 0.6
     this.lightningEffects.push({
       x1: tower.x,
       y1: tower.y - 10,
       x2: target.x,
       y2: target.y,
-      life: 20,
-      maxLife: 20,
-      color: '#ffff00',
-      width: 4
+      life: 16 + lv * 2,
+      maxLife: 16 + lv * 2,
+      color: mainColor,
+      width: mainWidth
     })
     
-    // 电击光环
-    this.createElectricBurst(target.x, target.y)
+    // 电击光环 - 等级越高光环越大
+    this.createElectricBurst(target.x, target.y, lv)
     
     let lastTarget = target
     let hitTargets = [target]
     
     for (let i = 0; i < chainCount; i++) {
       let nearestMonster = null
-      let nearestDist = 90
+      let nearestDist = 70 + lv * 5  // 等级越高链越远
       
       this.monsters.forEach(m => {
         if (hitTargets.includes(m)) return
@@ -1208,20 +1212,21 @@ Page({
       })
       
       if (nearestMonster) {
-        this.applyDamage(nearestMonster, tower.damage * 0.7, 'lightning')
+        this.applyDamage(nearestMonster, tower.damage * (0.6 + lv * 0.05), 'lightning')
         
+        const chainColor = lv >= 4 ? '#ffff88' : lv >= 3 ? '#ffff66' : lv >= 2 ? '#eeee33' : '#cccc00'
         this.lightningEffects.push({
           x1: lastTarget.x,
           y1: lastTarget.y,
           x2: nearestMonster.x,
           y2: nearestMonster.y,
-          life: 18,
-          maxLife: 18,
-          color: '#ffff88',
-          width: 3
+          life: 14 + lv * 2,
+          maxLife: 14 + lv * 2,
+          color: chainColor,
+          width: mainWidth * 0.75
         })
         
-        this.createElectricBurst(nearestMonster.x, nearestMonster.y)
+        this.createElectricBurst(nearestMonster.x, nearestMonster.y, lv)
         
         hitTargets.push(nearestMonster)
         lastTarget = nearestMonster
@@ -1229,18 +1234,21 @@ Page({
     }
   },
 
-  createElectricBurst(x, y) {
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI * 2 / 6) * i
+  createElectricBurst(x, y, level) {
+    const lv = level || 1
+    const burstCount = 3 + lv  // lv1=4, lv5=8
+    const burstDist = 8 + lv * 2.5
+    for (let i = 0; i < burstCount; i++) {
+      const angle = (Math.PI * 2 / burstCount) * i
       this.lightningEffects.push({
         x1: x,
         y1: y,
-        x2: x + Math.cos(angle) * 15,
-        y2: y + Math.sin(angle) * 15,
-        life: 10,
-        maxLife: 10,
-        color: '#ffffff',
-        width: 2
+        x2: x + Math.cos(angle) * burstDist,
+        y2: y + Math.sin(angle) * burstDist,
+        life: 8 + lv,
+        maxLife: 8 + lv,
+        color: lv >= 4 ? '#ffffff' : lv >= 2 ? '#ffffdd' : '#ffffaa',
+        width: 1 + lv * 0.3
       })
     }
   },
@@ -1992,85 +2000,936 @@ Page({
     
     ctx.save()
     ctx.globalAlpha = alpha
-    
-    // 底座阴影 - 椭圆形更有立体感
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.beginPath()
-    ctx.ellipse(x, y + 12, 18, 8, 0, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 塔身光晕
-    ctx.shadowBlur = 20
-    ctx.shadowColor = config.color
-    
-    // 塔身 - 圆形渐变
-    const gradient = ctx.createRadialGradient(x - 4, y - 6, 0, x, y, 20)
-    gradient.addColorStop(0, '#ffffff')
-    gradient.addColorStop(0.2, config.color)
-    gradient.addColorStop(0.7, config.color)
-    gradient.addColorStop(1, '#111111')
-    
-    ctx.fillStyle = gradient
-    ctx.beginPath()
-    ctx.arc(x, y, 16, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 外发光边框
-    ctx.strokeStyle = config.color
-    ctx.lineWidth = 2.5
-    ctx.beginPath()
-    ctx.arc(x, y, 16, 0, Math.PI * 2)
-    ctx.stroke()
-    
-    // 内部高光
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-    ctx.beginPath()
-    ctx.arc(x - 5, y - 5, 6, 0, Math.PI * 2)
-    ctx.fill()
-    
-    ctx.shadowBlur = 0
-    
-    // 图标
-    ctx.font = '18px Arial'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(config.emoji, x, y - 1)
+    
+    // 底座阴影
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.beginPath()
+    ctx.ellipse(x, y + 14, 16, 6, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // 根据塔类型绘制不同形状
+    if (type === 'fire') {
+      this._drawFireTower(ctx, x, y, config, level)
+    } else if (type === 'ice') {
+      this._drawIceTower(ctx, x, y, config, level)
+    } else if (type === 'nature') {
+      this._drawNatureTower(ctx, x, y, config, level)
+    } else if (type === 'arcane') {
+      this._drawArcaneTower(ctx, x, y, config, level)
+    } else if (type === 'lightning') {
+      this._drawLightningTower(ctx, x, y, config, level)
+    }
     
     // 等级标签
+    ctx.shadowBlur = 0
     ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
     ctx.beginPath()
-    drawRoundRect(ctx, x - 14, y + 10, 28, 14, 4)
+    drawRoundRect(ctx, x - 14, y + 12, 28, 14, 4)
     ctx.fill()
     
     ctx.fillStyle = '#ffd700'
     ctx.font = 'bold 10px Arial'
-    ctx.fillText(`Lv.${level}`, x, y + 17)
+    ctx.fillText(`Lv.${level}`, x, y + 19)
     
     ctx.restore()
+  },
+
+  // 火焰塔 - 熔岩石塔造型，等级影响火焰强度和塔身
+  _drawFireTower(ctx, x, y, config, level) {
+    const lv = level || 1
+    const scale = 0.9 + lv * 0.05
+    ctx.shadowBlur = 12 + lv * 4
+    ctx.shadowColor = lv >= 4 ? '#ff2200' : '#ff4400'
+
+    // 塔身 - 圆角石塔
+    const bw = 10 * scale
+    const bh = 20 * scale
+    const grad = ctx.createLinearGradient(x, y + 10, x, y - bh + 10)
+    if (lv >= 4) {
+      grad.addColorStop(0, '#1a0000')
+      grad.addColorStop(0.2, '#440000')
+      grad.addColorStop(0.5, '#881100')
+      grad.addColorStop(0.8, '#bb2200')
+      grad.addColorStop(1, '#dd3311')
+    } else if (lv >= 2) {
+      grad.addColorStop(0, '#331100')
+      grad.addColorStop(0.5, '#773300')
+      grad.addColorStop(1, '#aa4400')
+    } else {
+      grad.addColorStop(0, '#443322')
+      grad.addColorStop(0.5, '#665544')
+      grad.addColorStop(1, '#887766')
+    }
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.moveTo(x - bw, y + 10)
+    ctx.lineTo(x - bw + 3, y + 10 - bh)
+    ctx.arc(x, y + 10 - bh, bw - 3, Math.PI, 0, false)
+    ctx.lineTo(x + bw, y + 10)
+    ctx.closePath()
+    ctx.fill()
+
+    // 石塔边框
+    ctx.strokeStyle = lv >= 4 ? '#ff5533' : lv >= 3 ? '#cc4422' : lv >= 2 ? '#aa6644' : '#776655'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    // 横纹装饰
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'
+    ctx.lineWidth = 0.8
+    for (let i = 1; i <= 2; i++) {
+      const ry = y + 10 - bh * (i / 3)
+      const rw = bw - i * 1.5
+      ctx.beginPath()
+      ctx.moveTo(x - rw, ry)
+      ctx.lineTo(x + rw, ry)
+      ctx.stroke()
+    }
+
+    // 熔岩裂缝 (lv2+ 开始出现，随等级增多变亮)
+    if (lv >= 2) {
+      const pulse = Math.sin(Date.now() / 300) * 0.15
+      const lavaAlpha = lv >= 4 ? 0.7 + pulse : lv >= 3 ? 0.5 + pulse : 0.3 + pulse
+      const lavaColor = lv >= 4 ? `rgba(255, 180, 30, ${lavaAlpha})` : `rgba(255, 100, 0, ${lavaAlpha})`
+      ctx.strokeStyle = lavaColor
+      ctx.lineWidth = lv >= 4 ? 1.8 : 1.2
+      // 主裂缝
+      ctx.beginPath()
+      ctx.moveTo(x - 2, y + 8)
+      ctx.quadraticCurveTo(x + 1, y + 3, x - 1, y - 2)
+      ctx.quadraticCurveTo(x + 2, y - 5, x, y - 8)
+      ctx.stroke()
+      if (lv >= 3) {
+        // 分支裂缝
+        ctx.beginPath()
+        ctx.moveTo(x + 3, y + 6)
+        ctx.quadraticCurveTo(x + 5, y + 2, x + 2, y - 3)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(x - 1, y - 2)
+        ctx.lineTo(x - 5, y - 4)
+        ctx.stroke()
+      }
+      if (lv >= 5) {
+        // 更多裂缝
+        ctx.beginPath()
+        ctx.moveTo(x - 4, y + 4)
+        ctx.quadraticCurveTo(x - 6, y, x - 3, y - 6)
+        ctx.stroke()
+      }
+      // 裂缝发光
+      ctx.shadowBlur = 8
+      ctx.shadowColor = lv >= 4 ? '#ff8800' : '#ff4400'
+    }
+
+    // 顶部火焰
+    const flicker = Math.sin(Date.now() / 100) * 1.5
+    const flameH = (10 + lv * 4) * scale
+    const flameW = (6 + lv * 1.5) * scale
+    const flameY = y + 10 - bh - 2
+
+    // 外焰
+    ctx.shadowBlur = 20 + lv * 5
+    ctx.shadowColor = lv >= 4 ? '#ff6600' : '#ff4400'
+    const fg = ctx.createRadialGradient(x, flameY - flameH * 0.3 + flicker, 0, x, flameY, flameH)
+    fg.addColorStop(0, lv >= 4 ? '#ffffff' : '#ffff66')
+    fg.addColorStop(0.2, lv >= 3 ? '#ffcc00' : '#ff8800')
+    fg.addColorStop(0.5, '#ff4400')
+    fg.addColorStop(0.8, lv >= 4 ? '#cc0000' : '#aa2200')
+    fg.addColorStop(1, 'rgba(255, 30, 0, 0)')
+    ctx.fillStyle = fg
+    ctx.beginPath()
+    ctx.moveTo(x, flameY - flameH + flicker)
+    ctx.bezierCurveTo(x + flameW, flameY - flameH * 0.6, x + flameW * 0.8, flameY - 2, x + 3, flameY)
+    ctx.lineTo(x - 3, flameY)
+    ctx.bezierCurveTo(x - flameW * 0.8, flameY - 2, x - flameW, flameY - flameH * 0.6, x, flameY - flameH + flicker)
+    ctx.fill()
+
+    // 侧翼小火焰 (lv3+)
+    if (lv >= 3) {
+      const sideFlameH = flameH * 0.45
+      const sideFlameW = flameW * 0.4
+      const flicker2 = Math.sin(Date.now() / 130 + 1) * 1.2
+      for (const dir of [-1, 1]) {
+        const sfx = x + dir * (bw - 2)
+        const sfy = flameY + 4
+        const sfg = ctx.createRadialGradient(sfx, sfy - sideFlameH * 0.3 + flicker2, 0, sfx, sfy, sideFlameH)
+        sfg.addColorStop(0, '#ffff88')
+        sfg.addColorStop(0.4, '#ff6600')
+        sfg.addColorStop(1, 'rgba(255, 30, 0, 0)')
+        ctx.fillStyle = sfg
+        ctx.beginPath()
+        ctx.moveTo(sfx, sfy - sideFlameH + flicker2)
+        ctx.bezierCurveTo(sfx + dir * sideFlameW, sfy - sideFlameH * 0.4, sfx + dir * sideFlameW * 0.5, sfy - 1, sfx + dir * 1, sfy)
+        ctx.lineTo(sfx - dir * 1, sfy)
+        ctx.bezierCurveTo(sfx - dir * sideFlameW * 0.5, sfy - 1, sfx - dir * sideFlameW * 0.3, sfy - sideFlameH * 0.5, sfx, sfy - sideFlameH + flicker2)
+        ctx.fill()
+      }
+    }
+
+    // 内焰（lv2+更亮）
+    if (lv >= 2) {
+      const innerH = flameH * (lv >= 4 ? 0.6 : 0.5)
+      const ig = ctx.createRadialGradient(x, flameY - innerH * 0.3 + flicker, 0, x, flameY, innerH)
+      ig.addColorStop(0, '#ffffff')
+      ig.addColorStop(0.3, lv >= 4 ? '#ffffcc' : '#ffff88')
+      ig.addColorStop(0.7, lv >= 3 ? '#ffcc44' : '#ffaa44')
+      ig.addColorStop(1, 'rgba(255, 200, 0, 0)')
+      ctx.fillStyle = ig
+      ctx.beginPath()
+      ctx.moveTo(x, flameY - innerH + flicker * 0.7)
+      ctx.bezierCurveTo(x + flameW * 0.35, flameY - innerH * 0.5, x + 2, flameY - 1, x + 1, flameY)
+      ctx.lineTo(x - 1, flameY)
+      ctx.bezierCurveTo(x - 2, flameY - 1, x - flameW * 0.35, flameY - innerH * 0.5, x, flameY - innerH + flicker * 0.7)
+      ctx.fill()
+    }
+
+    // 飞散火星 (lv2+)
+    if (lv >= 2) {
+      const sparkCount = lv >= 5 ? 6 : lv >= 3 ? 4 : 2
+      const t = Date.now() / 250
+      for (let i = 0; i < sparkCount; i++) {
+        const sa = t + i * 1.5
+        const lifetime = (sa * 3) % 6.28
+        const sx = x + Math.sin(sa * 1.7) * (3 + lv + Math.random() * 2)
+        const sy = flameY - flameH * 0.3 - lifetime * 2.5
+        const sparkAlpha = Math.max(0, 0.8 - lifetime / 5)
+        if (sparkAlpha > 0 && sy > flameY - flameH - 8) {
+          const sparkSize = lv >= 4 ? 1.5 : 1
+          ctx.fillStyle = `rgba(255, ${200 + Math.floor(Math.random() * 55)}, ${60 + Math.floor(Math.random() * 40)}, ${sparkAlpha})`
+          ctx.beginPath()
+          ctx.arc(sx, sy, sparkSize, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+
+    // 塔顶装饰环 (lv4+)
+    if (lv >= 4) {
+      ctx.strokeStyle = `rgba(255, 200, 50, ${0.5 + Math.sin(Date.now() / 200) * 0.2})`
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.ellipse(x, y + 10 - bh, bw - 2, 3, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  },
+
+  // 寒冰塔 - 冰锥尖塔造型，等级影响冰晶层数和光芒
+  _drawIceTower(ctx, x, y, config, level) {
+    const lv = level || 1
+    const scale = 0.9 + lv * 0.05
+    ctx.shadowBlur = 10 + lv * 4
+    ctx.shadowColor = lv >= 4 ? '#44eeff' : '#00aadd'
+
+    // 基座 - 冰台
+    const baseW = 12 * scale
+    const baseGrad = ctx.createLinearGradient(x - baseW, y + 8, x + baseW, y + 2)
+    baseGrad.addColorStop(0, '#003344')
+    baseGrad.addColorStop(0.5, lv >= 3 ? '#0099bb' : '#005577')
+    baseGrad.addColorStop(1, '#002233')
+    ctx.fillStyle = baseGrad
+    ctx.beginPath()
+    ctx.moveTo(x - baseW, y + 10)
+    ctx.lineTo(x - baseW + 2, y + 4)
+    ctx.lineTo(x + baseW - 2, y + 4)
+    ctx.lineTo(x + baseW, y + 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(100, 220, 255, 0.5)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    // 中央冰锥
+    const spikeH = (22 + lv * 3) * scale
+    const spikeW = 6 * scale
+    const grad = ctx.createLinearGradient(x, y + 4, x, y + 4 - spikeH)
+    grad.addColorStop(0, '#005588')
+    grad.addColorStop(0.3, lv >= 3 ? '#33ccee' : '#0099cc')
+    grad.addColorStop(0.7, lv >= 4 ? '#aaeeff' : '#66bbdd')
+    grad.addColorStop(1, '#eeffff')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.moveTo(x, y + 4 - spikeH)
+    ctx.lineTo(x + spikeW, y + 4)
+    ctx.lineTo(x - spikeW, y + 4)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = lv >= 3 ? '#aaeeff' : '#77bbdd'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    // 冰锥高光
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'
+    ctx.beginPath()
+    ctx.moveTo(x - 1, y + 4 - spikeH + 4)
+    ctx.lineTo(x - spikeW + 2, y + 2)
+    ctx.lineTo(x - 1, y + 2)
+    ctx.closePath()
+    ctx.fill()
+
+    // 侧翼冰晶（等级2+）
+    if (lv >= 2) {
+      const sideH = spikeH * (lv >= 4 ? 0.65 : 0.5)
+      const sideW = 4 * scale
+      const offX = 7 * scale
+      const sideColors = lv >= 4 ? ['#0099cc', '#77ddff', '#ddffff'] : ['#006688', '#33aacc', '#aaddee']
+      
+      for (const dir of [-1, 1]) {
+        const sg = ctx.createLinearGradient(x + dir * offX, y + 5, x + dir * offX, y + 5 - sideH)
+        sg.addColorStop(0, sideColors[0])
+        sg.addColorStop(0.5, sideColors[1])
+        sg.addColorStop(1, sideColors[2])
+        ctx.fillStyle = sg
+        ctx.beginPath()
+        ctx.moveTo(x + dir * offX, y + 5 - sideH)
+        ctx.lineTo(x + dir * (offX + sideW), y + 5)
+        ctx.lineTo(x + dir * (offX - sideW), y + 5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(150, 230, 255, 0.4)'
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+      }
+    }
+
+    // 额外侧翼（等级4+）
+    if (lv >= 4) {
+      const sideH2 = spikeH * 0.35
+      const offX2 = 13 * scale
+      for (const dir of [-1, 1]) {
+        const sg = ctx.createLinearGradient(x + dir * offX2, y + 6, x + dir * offX2, y + 6 - sideH2)
+        sg.addColorStop(0, '#005577')
+        sg.addColorStop(1, '#aaeeff')
+        ctx.fillStyle = sg
+        ctx.beginPath()
+        ctx.moveTo(x + dir * offX2, y + 6 - sideH2)
+        ctx.lineTo(x + dir * (offX2 + 3), y + 7)
+        ctx.lineTo(x + dir * (offX2 - 3), y + 7)
+        ctx.closePath()
+        ctx.fill()
+      }
+    }
+
+    // 冰雾环绕
+    const t = Date.now() / 600
+    const fogCount = 2 + lv
+    for (let i = 0; i < fogCount; i++) {
+      const fa = t + i * (Math.PI * 2 / fogCount)
+      const fr = (8 + lv * 2) * scale
+      const fx = x + Math.cos(fa) * fr
+      const fy = y + Math.sin(fa) * 3 - 4
+      const fAlpha = (Math.sin(fa + t) + 1) / 2 * (0.15 + lv * 0.05)
+      ctx.fillStyle = `rgba(150, 230, 255, ${fAlpha})`
+      ctx.beginPath()
+      ctx.arc(fx, fy, 2 + lv * 0.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // 顶部闪光（等级3+）
+    if (lv >= 3) {
+      const glow = (Math.sin(Date.now() / 200) + 1) / 2
+      ctx.fillStyle = `rgba(220, 250, 255, ${0.3 + glow * 0.5})`
+      ctx.beginPath()
+      const starSize = 3 + lv * 0.5
+      // 十字闪光
+      ctx.moveTo(x, y + 4 - spikeH - starSize)
+      ctx.lineTo(x + 1.5, y + 4 - spikeH)
+      ctx.lineTo(x + starSize, y + 4 - spikeH + 1)
+      ctx.lineTo(x + 1.5, y + 4 - spikeH + 2)
+      ctx.lineTo(x, y + 4 - spikeH + starSize + 2)
+      ctx.lineTo(x - 1.5, y + 4 - spikeH + 2)
+      ctx.lineTo(x - starSize, y + 4 - spikeH + 1)
+      ctx.lineTo(x - 1.5, y + 4 - spikeH)
+      ctx.closePath()
+      ctx.fill()
+    }
+  },
+
+  // 自然塔 - 生命之树造型，等级影响茂盛度和特效
+  _drawNatureTower(ctx, x, y, config, level) {
+    const lv = level || 1
+    const scale = 0.9 + lv * 0.05
+    ctx.shadowBlur = 8 + lv * 3
+    ctx.shadowColor = lv >= 4 ? '#44ff88' : '#22aa44'
+
+    // 地面草丛 (lv2+)
+    if (lv >= 2) {
+      const grassCount = lv >= 4 ? 6 : lv >= 3 ? 4 : 3
+      const grassColor = lv >= 4 ? '#44dd44' : '#338822'
+      ctx.strokeStyle = grassColor
+      ctx.lineWidth = 1.2
+      ctx.lineCap = 'round'
+      for (let i = 0; i < grassCount; i++) {
+        const gx = x - 12 + i * (24 / (grassCount - 1))
+        const sway = Math.sin(Date.now() / 500 + i * 1.3) * 2
+        ctx.beginPath()
+        ctx.moveTo(gx, y + 12)
+        ctx.quadraticCurveTo(gx + sway, y + 6, gx + sway * 0.5, y + 3)
+        ctx.stroke()
+      }
+      ctx.lineCap = 'butt'
+    }
+
+    // 树干
+    const trunkW = (3 + lv * 0.5) * scale
+    const trunkH = (18 + lv * 2) * scale
+    const trunkGrad = ctx.createLinearGradient(x - trunkW, y + 10, x + trunkW, y + 10 - trunkH)
+    trunkGrad.addColorStop(0, '#2a1500')
+    trunkGrad.addColorStop(0.3, lv >= 3 ? '#5a3000' : '#3d2200')
+    trunkGrad.addColorStop(1, lv >= 3 ? '#7a4a10' : '#5a3800')
+    ctx.fillStyle = trunkGrad
+    ctx.beginPath()
+    ctx.moveTo(x - trunkW - 2, y + 10)
+    ctx.quadraticCurveTo(x - trunkW, y + 10 - trunkH * 0.5, x - trunkW + 1, y + 10 - trunkH)
+    ctx.lineTo(x + trunkW - 1, y + 10 - trunkH)
+    ctx.quadraticCurveTo(x + trunkW, y + 10 - trunkH * 0.5, x + trunkW + 2, y + 10)
+    ctx.closePath()
+    ctx.fill()
+
+    // 树皮纹理
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'
+    ctx.lineWidth = 0.5
+    ctx.beginPath()
+    ctx.moveTo(x - 1, y + 8); ctx.lineTo(x, y - 2)
+    ctx.moveTo(x + 1, y + 6); ctx.quadraticCurveTo(x + 2, y, x + 1, y - 4)
+    ctx.stroke()
+
+    // 藤蔓缠绕 (lv3+)
+    if (lv >= 3) {
+      const vineAlpha = lv >= 5 ? 0.7 : 0.5
+      ctx.strokeStyle = `rgba(80, 200, 60, ${vineAlpha})`
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      for (let t = 0; t <= 1; t += 0.05) {
+        const vy = y + 10 - trunkH * t
+        const vx = x + Math.sin(t * Math.PI * 3) * (trunkW + 2)
+        if (t === 0) ctx.moveTo(vx, vy)
+        else ctx.lineTo(vx, vy)
+      }
+      ctx.stroke()
+      // 藤蔓小叶子
+      if (lv >= 4) {
+        ctx.fillStyle = `rgba(80, 220, 50, ${vineAlpha})`
+        for (let t = 0.2; t <= 0.8; t += 0.3) {
+          const vy = y + 10 - trunkH * t
+          const vx = x + Math.sin(t * Math.PI * 3) * (trunkW + 2)
+          ctx.beginPath()
+          ctx.ellipse(vx + 2, vy, 2.5, 1.5, 0.5, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+
+    // 根部
+    ctx.strokeStyle = lv >= 3 ? '#5a3000' : '#3d2200'
+    ctx.lineWidth = 2.5 * scale
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(x - trunkW, y + 8); ctx.quadraticCurveTo(x - trunkW - 4, y + 11, x - trunkW - 7, y + 12)
+    ctx.moveTo(x + trunkW, y + 8); ctx.quadraticCurveTo(x + trunkW + 4, y + 11, x + trunkW + 7, y + 12)
+    ctx.stroke()
+    if (lv >= 3) {
+      ctx.beginPath()
+      ctx.moveTo(x - 1, y + 10); ctx.quadraticCurveTo(x - 2, y + 13, x - 5, y + 14)
+      ctx.stroke()
+    }
+    ctx.lineCap = 'butt'
+
+    // 树冠
+    const canopyY = y + 10 - trunkH
+    const canopyR = (9 + lv * 2) * scale
+    const canopyColors = lv >= 5
+      ? ['#55ff55', '#33dd33', '#11aa11']
+      : lv >= 4
+        ? ['#44ff44', '#22cc22', '#118811']
+        : lv >= 2
+          ? ['#66ee44', '#33aa22', '#116600']
+          : ['#55cc33', '#338822', '#115500']
+
+    // 底层树冠（两侧）
+    const cg1 = ctx.createRadialGradient(x, canopyY + 3, 0, x, canopyY + 3, canopyR + 4)
+    cg1.addColorStop(0, canopyColors[0])
+    cg1.addColorStop(0.6, canopyColors[1])
+    cg1.addColorStop(1, canopyColors[2])
+    ctx.fillStyle = cg1
+    ctx.beginPath()
+    ctx.arc(x - canopyR * 0.5, canopyY + 3, canopyR * 0.7, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x + canopyR * 0.5, canopyY + 3, canopyR * 0.7, 0, Math.PI * 2)
+    ctx.fill()
+
+    // 顶层树冠
+    const cg2 = ctx.createRadialGradient(x, canopyY - 2, 0, x, canopyY - 2, canopyR)
+    cg2.addColorStop(0, canopyColors[0])
+    cg2.addColorStop(0.5, canopyColors[1])
+    cg2.addColorStop(1, canopyColors[2])
+    ctx.fillStyle = cg2
+    ctx.beginPath()
+    ctx.arc(x, canopyY - 2, canopyR, 0, Math.PI * 2)
+    ctx.fill()
+
+    // 树冠高光
+    ctx.fillStyle = `rgba(180, 255, 120, ${0.2 + lv * 0.06})`
+    ctx.beginPath()
+    ctx.arc(x - canopyR * 0.3, canopyY - canopyR * 0.4, canopyR * 0.45, 0, Math.PI * 2)
+    ctx.fill()
+
+    // 树冠暗部
+    ctx.fillStyle = 'rgba(0, 40, 0, 0.15)'
+    ctx.beginPath()
+    ctx.arc(x + canopyR * 0.2, canopyY + canopyR * 0.3, canopyR * 0.5, 0, Math.PI * 2)
+    ctx.fill()
+
+    // 树冠斑点纹理（深浅变化）
+    if (lv >= 2) {
+      const spotCount = lv >= 4 ? 5 : 3
+      for (let i = 0; i < spotCount; i++) {
+        const angle = (Math.PI * 2 / spotCount) * i + 0.5
+        const sr = canopyR * 0.5
+        const sx = x + Math.cos(angle) * sr * 0.6
+        const sy = canopyY + Math.sin(angle) * sr * 0.5
+        ctx.fillStyle = `rgba(80, 180, 40, 0.2)`
+        ctx.beginPath()
+        ctx.arc(sx, sy, 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+
+    // 花朵 (lv2+) / 果实 (lv4+)
+    if (lv >= 2) {
+      const ft = Date.now() / 1000
+      if (lv >= 4) {
+        // 金色果实
+        const fruitCount = lv >= 5 ? 5 : 3
+        const fruitPositions = [
+          { dx: -canopyR * 0.35, dy: canopyR * 0.15 },
+          { dx: canopyR * 0.4, dy: 0 },
+          { dx: 0, dy: canopyR * 0.35 },
+          { dx: canopyR * 0.25, dy: -canopyR * 0.3 },
+          { dx: -canopyR * 0.45, dy: -canopyR * 0.15 }
+        ]
+        for (let i = 0; i < fruitCount; i++) {
+          const fp = fruitPositions[i]
+          const fx = x + fp.dx
+          const fy = canopyY + fp.dy
+          // 果实阴影
+          ctx.fillStyle = 'rgba(0,0,0,0.15)'
+          ctx.beginPath()
+          ctx.arc(fx + 0.5, fy + 1, 3, 0, Math.PI * 2)
+          ctx.fill()
+          // 果实
+          const fruitGrad = ctx.createRadialGradient(fx - 1, fy - 1, 0, fx, fy, 3)
+          fruitGrad.addColorStop(0, '#ffff88')
+          fruitGrad.addColorStop(0.5, `rgba(255, 210, 40, ${0.8 + Math.sin(ft + i) * 0.15})`)
+          fruitGrad.addColorStop(1, '#cc8800')
+          ctx.fillStyle = fruitGrad
+          ctx.beginPath()
+          ctx.arc(fx, fy, 2.8, 0, Math.PI * 2)
+          ctx.fill()
+          // 高光
+          ctx.fillStyle = 'rgba(255,255,220,0.6)'
+          ctx.beginPath()
+          ctx.arc(fx - 0.8, fy - 0.8, 1, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      } else {
+        // 小花朵
+        const flowerCount = lv >= 3 ? 4 : 2
+        const flowerPositions = [
+          { dx: -canopyR * 0.35, dy: -canopyR * 0.15 },
+          { dx: canopyR * 0.4, dy: canopyR * 0.1 },
+          { dx: -canopyR * 0.1, dy: canopyR * 0.3 },
+          { dx: canopyR * 0.2, dy: -canopyR * 0.35 }
+        ]
+        for (let i = 0; i < flowerCount; i++) {
+          const fp = flowerPositions[i]
+          const fx = x + fp.dx
+          const fy = canopyY + fp.dy
+          // 花瓣
+          const petalColor = i % 2 === 0 ? 
+            `rgba(255, 180, 200, ${0.7 + Math.sin(ft + i) * 0.2})` : 
+            `rgba(255, 220, 150, ${0.7 + Math.sin(ft + i) * 0.2})`
+          for (let p = 0; p < 4; p++) {
+            const pa = (Math.PI / 2) * p + ft * 0.1
+            ctx.fillStyle = petalColor
+            ctx.beginPath()
+            ctx.ellipse(fx + Math.cos(pa) * 1.5, fy + Math.sin(pa) * 1.5, 1.8, 1, pa, 0, Math.PI * 2)
+            ctx.fill()
+          }
+          // 花心
+          ctx.fillStyle = '#ffee44'
+          ctx.beginPath()
+          ctx.arc(fx, fy, 1, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+
+    // 叶片飘落 (lv2+)
+    if (lv >= 2) {
+      const leafT = Date.now() / 700
+      const leafCount = lv >= 4 ? 3 : 2
+      for (let i = 0; i < leafCount; i++) {
+        const lt = leafT + i * 2.5
+        const lx = x + Math.sin(lt) * (canopyR + 4)
+        const progress = ((lt * 4) % 28)
+        const ly = canopyY - canopyR + progress
+        if (ly < y + 12 && ly > canopyY - canopyR) {
+          ctx.fillStyle = `rgba(100, 240, 60, ${0.6 - progress / 40})`
+          ctx.beginPath()
+          ctx.ellipse(lx, ly, 2.5, 1.2, lt * 0.5, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+
+    // 生命光环 (lv5)
+    if (lv >= 5) {
+      const auraT = Date.now() / 800
+      const auraAlpha = 0.1 + Math.sin(auraT) * 0.06
+      const auraR = canopyR + 8
+      const auraG = ctx.createRadialGradient(x, canopyY, canopyR * 0.5, x, canopyY, auraR)
+      auraG.addColorStop(0, 'rgba(100, 255, 80, 0)')
+      auraG.addColorStop(0.7, `rgba(100, 255, 80, ${auraAlpha})`)
+      auraG.addColorStop(1, 'rgba(100, 255, 80, 0)')
+      ctx.fillStyle = auraG
+      ctx.beginPath()
+      ctx.arc(x, canopyY, auraR, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  },
+
+  // 奥术塔 - 悬浮宝石+底座，等级影响宝石大小和粒子
+  _drawArcaneTower(ctx, x, y, config, level) {
+    const lv = level || 1
+    const scale = 0.9 + lv * 0.05
+    ctx.shadowBlur = 16 + lv * 4
+    ctx.shadowColor = lv >= 4 ? '#cc66ff' : '#aa44ff'
+
+    // 底座石柱
+    const baseGrad = ctx.createLinearGradient(x - 8, y + 10, x + 8, y)
+    baseGrad.addColorStop(0, '#222233')
+    baseGrad.addColorStop(1, lv >= 3 ? '#555577' : '#444466')
+    ctx.fillStyle = baseGrad
+    ctx.beginPath()
+    ctx.moveTo(x - 10 * scale, y + 10)
+    ctx.lineTo(x - 6 * scale, y)
+    ctx.lineTo(x + 6 * scale, y)
+    ctx.lineTo(x + 10 * scale, y + 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = lv >= 3 ? '#8866cc' : '#6644aa'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    // 底座符文（等级3+）
+    if (lv >= 3) {
+      ctx.strokeStyle = `rgba(170, 100, 255, ${0.3 + Math.sin(Date.now() / 400) * 0.15})`
+      ctx.lineWidth = 0.8
+      ctx.beginPath()
+      ctx.moveTo(x - 4, y + 7); ctx.lineTo(x, y + 3); ctx.lineTo(x + 4, y + 7)
+      ctx.stroke()
+    }
+
+    // 悬浮菱形宝石
+    const hover = Math.sin(Date.now() / 400) * 2
+    const gemSize = (10 + lv * 1.5) * scale
+    const gy = y - 10 + hover
+    const gemGrad = ctx.createLinearGradient(x - gemSize, gy - gemSize * 1.2, x + gemSize, gy + gemSize)
+    if (lv >= 4) {
+      gemGrad.addColorStop(0, '#ee99ff')
+      gemGrad.addColorStop(0.5, '#aa44dd')
+      gemGrad.addColorStop(1, '#440088')
+    } else {
+      gemGrad.addColorStop(0, '#dd88ff')
+      gemGrad.addColorStop(0.5, '#8833cc')
+      gemGrad.addColorStop(1, '#330066')
+    }
+    ctx.fillStyle = gemGrad
+    ctx.beginPath()
+    ctx.moveTo(x, gy - gemSize * 1.2)
+    ctx.lineTo(x + gemSize, gy)
+    ctx.lineTo(x, gy + gemSize)
+    ctx.lineTo(x - gemSize, gy)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = lv >= 4 ? '#dd99ff' : '#cc77ff'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    // 宝石内部高光
+    ctx.fillStyle = `rgba(255, 200, 255, ${0.3 + lv * 0.05})`
+    ctx.beginPath()
+    ctx.moveTo(x - 2, gy - gemSize * 0.8)
+    ctx.lineTo(x + gemSize * 0.5, gy - gemSize * 0.2)
+    ctx.lineTo(x - 1, gy + gemSize * 0.2)
+    ctx.closePath()
+    ctx.fill()
+
+    // 能量连接线 - 底座到宝石
+    ctx.strokeStyle = `rgba(170, 68, 255, ${0.4 + Math.sin(Date.now() / 200) * 0.2})`
+    ctx.lineWidth = lv >= 3 ? 1.5 : 1
+    ctx.setLineDash([3, 3])
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(x, gy + gemSize)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // 环绕粒子
+    const pt = Date.now() / 600
+    const particleCount = 2 + lv
+    for (let i = 0; i < particleCount; i++) {
+      const pa = pt + i * (Math.PI * 2 / particleCount)
+      const pr = (10 + lv * 2) * scale
+      const px = x + Math.cos(pa) * pr
+      const py = gy + Math.sin(pa) * pr * 0.5
+      const pSize = 1 + lv * 0.3
+      ctx.fillStyle = `rgba(200, 150, 255, ${0.5 + Math.sin(pa) * 0.3})`
+      ctx.beginPath()
+      ctx.arc(px, py, pSize, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  },
+
+  // 闪电塔 - 能量方尖碑造型，升级后更亮更炫
+  _drawLightningTower(ctx, x, y, config, level) {
+    const lv = level || 1
+    const scale = 0.9 + lv * 0.05
+    // 随等级大幅提升亮度
+    ctx.shadowBlur = 4 + lv * 6
+    ctx.shadowColor = lv >= 5 ? '#ffff88' : lv >= 4 ? '#ffff66' : lv >= 3 ? '#eeee44' : lv >= 2 ? '#dddd22' : '#888800'
+
+    // 底座 - 金属基座，等级越高越亮
+    const baseW = 11 * scale
+    const baseGrad = ctx.createLinearGradient(x - baseW, y + 8, x + baseW, y + 3)
+    if (lv >= 4) {
+      baseGrad.addColorStop(0, '#444430')
+      baseGrad.addColorStop(0.5, '#8a8a50')
+      baseGrad.addColorStop(1, '#444430')
+    } else if (lv >= 2) {
+      baseGrad.addColorStop(0, '#333328')
+      baseGrad.addColorStop(0.5, '#6a6a3a')
+      baseGrad.addColorStop(1, '#333328')
+    } else {
+      baseGrad.addColorStop(0, '#2a2a20')
+      baseGrad.addColorStop(0.5, '#444430')
+      baseGrad.addColorStop(1, '#2a2a20')
+    }
+    ctx.fillStyle = baseGrad
+    ctx.beginPath()
+    ctx.moveTo(x - baseW, y + 10)
+    ctx.lineTo(x - baseW + 3, y + 3)
+    ctx.lineTo(x + baseW - 3, y + 3)
+    ctx.lineTo(x + baseW, y + 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = lv >= 4 ? '#dddd66' : lv >= 3 ? '#bbbb55' : lv >= 2 ? '#999944' : '#777744'
+    ctx.lineWidth = lv >= 4 ? 1.5 : 1
+    ctx.stroke()
+
+    // 底座能量纹 (lv3+)
+    if (lv >= 3) {
+      const runeAlpha = 0.3 + Math.sin(Date.now() / 300) * 0.15
+      ctx.strokeStyle = `rgba(255, 255, 100, ${runeAlpha})`
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(x - baseW + 5, y + 8)
+      ctx.lineTo(x, y + 5)
+      ctx.lineTo(x + baseW - 5, y + 8)
+      ctx.stroke()
+    }
+
+    // 方尖碑主体 - 等级越高越亮
+    const pillarH = (22 + lv * 3) * scale
+    const pillarW = 5 * scale
+    const pg = ctx.createLinearGradient(x, y + 3, x, y + 3 - pillarH)
+    if (lv >= 5) {
+      pg.addColorStop(0, '#555540')
+      pg.addColorStop(0.2, '#888866')
+      pg.addColorStop(0.5, '#aaaa88')
+      pg.addColorStop(0.8, '#ccccaa')
+      pg.addColorStop(1, '#eeeedd')
+    } else if (lv >= 4) {
+      pg.addColorStop(0, '#444435')
+      pg.addColorStop(0.3, '#777755')
+      pg.addColorStop(0.7, '#999977')
+      pg.addColorStop(1, '#ccccaa')
+    } else if (lv >= 3) {
+      pg.addColorStop(0, '#3a3a2e')
+      pg.addColorStop(0.3, '#666648')
+      pg.addColorStop(0.8, '#888866')
+      pg.addColorStop(1, '#bbbb99')
+    } else if (lv >= 2) {
+      pg.addColorStop(0, '#333328')
+      pg.addColorStop(0.5, '#5a5a44')
+      pg.addColorStop(1, '#999977')
+    } else {
+      pg.addColorStop(0, '#2d2d24')
+      pg.addColorStop(0.5, '#4a4a38')
+      pg.addColorStop(1, '#777766')
+    }
+    ctx.fillStyle = pg
+    ctx.beginPath()
+    ctx.moveTo(x, y + 3 - pillarH)
+    ctx.lineTo(x + pillarW, y + 3)
+    ctx.lineTo(x - pillarW, y + 3)
+    ctx.closePath()
+    ctx.fill()
+
+    // 碑身边框 - 越高级越亮
+    ctx.strokeStyle = lv >= 4 ? 'rgba(255, 255, 150, 0.7)' : lv >= 3 ? 'rgba(230, 230, 120, 0.5)' : `rgba(200, 200, 100, ${0.3 + lv * 0.05})`
+    ctx.lineWidth = lv >= 4 ? 1.5 : 1
+    ctx.stroke()
+
+    // 碑身高光
+    ctx.fillStyle = `rgba(255, 255, 200, ${0.1 + lv * 0.04})`
+    ctx.beginPath()
+    ctx.moveTo(x - 1, y + 3 - pillarH + 3)
+    ctx.lineTo(x - pillarW + 1, y + 1)
+    ctx.lineTo(x - 1, y + 1)
+    ctx.closePath()
+    ctx.fill()
+
+    // 碑身能量脉络 (lv3+)
+    if (lv >= 3) {
+      const veins = lv >= 5 ? 3 : 2
+      const veinT = Date.now() / 250
+      for (let i = 0; i < veins; i++) {
+        const vProgress = ((veinT + i * 2) % 6) / 6
+        const vy = y + 3 - pillarH * vProgress
+        const vx = x + (0.5 - vProgress) * pillarW * 0.5
+        const vAlpha = Math.sin(vProgress * Math.PI) * (lv >= 5 ? 0.7 : 0.4)
+        if (vAlpha > 0) {
+          ctx.fillStyle = `rgba(255, 255, 150, ${vAlpha})`
+          ctx.beginPath()
+          ctx.arc(vx, vy, 1.5, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+
+    // 能量环（等级2+）
+    if (lv >= 2) {
+      const ringCount = lv >= 5 ? 4 : lv >= 4 ? 3 : lv >= 3 ? 2 : 1
+      const t = Date.now() / 400
+      for (let i = 0; i < ringCount; i++) {
+        const ringY = y + 3 - pillarH * (0.25 + i * 0.2)
+        const ringR = (6 + i * 1.5) * scale
+        const ringAlpha = lv >= 4 ? 0.5 + Math.sin(t + i * 1.5) * 0.25 : 0.3 + Math.sin(t + i * 1.5) * 0.2
+        const ringBright = lv >= 5 ? '255, 255, 180' : lv >= 4 ? '255, 255, 130' : '255, 255, 100'
+        ctx.strokeStyle = `rgba(${ringBright}, ${ringAlpha})`
+        ctx.lineWidth = lv >= 4 ? 2 : 1.5
+        ctx.beginPath()
+        ctx.ellipse(x, ringY, ringR, ringR * 0.35, 0, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
+
+    // 顶部能量球 - 高等级更大更亮，低等级小巧
+    const topY = y + 3 - pillarH
+    const orbR = (1.5 + lv * 0.8) * scale
+    ctx.shadowBlur = 10 + lv * 6
+    ctx.shadowColor = lv >= 4 ? '#ffff88' : lv >= 2 ? '#ffff44' : '#cccc00'
+    const orbG = ctx.createRadialGradient(x, topY, 0, x, topY, orbR)
+    if (lv >= 5) {
+      orbG.addColorStop(0, '#ffffff')
+      orbG.addColorStop(0.2, '#ffffee')
+      orbG.addColorStop(0.5, '#ffffaa')
+      orbG.addColorStop(0.8, '#eeee44')
+      orbG.addColorStop(1, 'rgba(200, 200, 50, 0)')
+    } else if (lv >= 4) {
+      orbG.addColorStop(0, '#ffffff')
+      orbG.addColorStop(0.25, '#ffffcc')
+      orbG.addColorStop(0.6, '#eecc22')
+      orbG.addColorStop(1, 'rgba(180, 180, 20, 0)')
+    } else if (lv >= 3) {
+      orbG.addColorStop(0, '#ffffff')
+      orbG.addColorStop(0.3, '#ffff88')
+      orbG.addColorStop(0.7, '#ddbb00')
+      orbG.addColorStop(1, 'rgba(160, 160, 0, 0)')
+    } else {
+      orbG.addColorStop(0, '#ffffff')
+      orbG.addColorStop(0.3, '#ffff66')
+      orbG.addColorStop(0.7, '#aaaa00')
+      orbG.addColorStop(1, 'rgba(120, 120, 0, 0)')
+    }
+    ctx.fillStyle = orbG
+    ctx.beginPath()
+    ctx.arc(x, topY, orbR, 0, Math.PI * 2)
+    ctx.fill()
+
+    // 电弧 - 低等级少且短，高等级更亮更粗更多
+    const arcBright = lv >= 5 ? '255, 255, 200' : lv >= 4 ? '255, 255, 180' : '255, 255, 150'
+    ctx.strokeStyle = `rgba(${arcBright}, ${0.6 + Math.random() * 0.4})`
+    ctx.lineWidth = lv >= 5 ? 2 : lv >= 4 ? 1.8 : lv >= 3 ? 1.5 : lv >= 2 ? 1 : 0.8
+    const arcCount = lv >= 5 ? 6 : lv >= 4 ? 5 : lv >= 3 ? 4 : lv >= 2 ? 2 : 1
+    for (let i = 0; i < arcCount; i++) {
+      const angle = (Math.PI * 2 / arcCount) * i + Math.random() * 0.5
+      const dist = (3 + lv * 2.5 + Math.random() * (lv * 1.5)) * scale
+      ctx.beginPath()
+      ctx.moveTo(x, topY)
+      const segments = 2 + Math.floor(Math.random() * 2)
+      for (let s = 1; s <= segments; s++) {
+        const progress = s / segments
+        const tx = x + Math.cos(angle) * dist * progress
+        const ty = topY + Math.sin(angle) * dist * progress
+        const jitter = (1 - progress) * (3 + lv)
+        ctx.lineTo(tx + (Math.random() - 0.5) * jitter, ty + (Math.random() - 0.5) * jitter)
+      }
+      ctx.stroke()
+    }
+
+    // 底部接地电弧（等级3+，比之前更早出现）
+    if (lv >= 3) {
+      const groundBright = lv >= 5 ? 0.6 : lv >= 4 ? 0.4 : 0.25
+      ctx.strokeStyle = `rgba(255, 255, 120, ${groundBright + Math.random() * 0.2})`
+      ctx.lineWidth = lv >= 4 ? 1.2 : 0.8
+      const groundArcs = lv >= 5 ? 3 : 2
+      for (let i = 0; i < groundArcs; i++) {
+        const dir = i === 0 ? -1 : i === 1 ? 1 : (Math.random() > 0.5 ? 1 : -1)
+        const spread = pillarW + 2 + Math.random() * (2 + lv)
+        ctx.beginPath()
+        ctx.moveTo(x + dir * pillarW * 0.5, y + 3)
+        ctx.lineTo(x + dir * spread, y + 6 + Math.random() * 2)
+        ctx.lineTo(x + dir * (spread + 2 + Math.random() * 3), y + 10)
+        ctx.stroke()
+      }
+    }
+
+    // 电场光晕 (lv5)
+    if (lv >= 5) {
+      const haloT = Date.now() / 600
+      const haloAlpha = 0.08 + Math.sin(haloT) * 0.04
+      const haloR = orbR + 12
+      const haloG = ctx.createRadialGradient(x, topY, orbR, x, topY, haloR)
+      haloG.addColorStop(0, `rgba(255, 255, 150, ${haloAlpha * 2})`)
+      haloG.addColorStop(1, 'rgba(255, 255, 100, 0)')
+      ctx.fillStyle = haloG
+      ctx.beginPath()
+      ctx.arc(x, topY, haloR, 0, Math.PI * 2)
+      ctx.fill()
+    }
   },
 
   // 绘制拖动中的塔（跟随手指）
   drawDraggingTower() {
     if (!this.isDragging || !this.draggingTower || !this.hasMoved) return
     
-    // 如果手指在 canvas 外（例如仓库区域），不绘制拖动塔
-    if (this.cachedCanvasRect && 
-        this.lastTouchClientX !== undefined && this.lastTouchClientY !== undefined) {
-      const rect = this.cachedCanvasRect
-      const inCanvas = this.lastTouchClientX >= rect.left &&
-        this.lastTouchClientX <= rect.left + rect.width &&
-        this.lastTouchClientY >= rect.top &&
-        this.lastTouchClientY <= rect.top + rect.height
-      if (!inCanvas) return
-    }
+    // dragX/dragY 是手指相对于 canvas 的坐标
+    // 如果手指在 canvas 区域外（比如在仓库），dragY 会大于 canvasHeight 或小于 0
+    // 给一点余量（20px）让边缘拖动也能显示
+    if (this.dragX < -20 || this.dragX > CONFIG.canvasWidth + 20) return
+    if (this.dragY < -20 || this.dragY > CONFIG.canvasHeight + 20) return
     
-    // 只在 dragX/dragY 在 canvas 范围内时绘制
-    if (this.dragX < 0 || this.dragX > CONFIG.canvasWidth) return
-    if (this.dragY < 0 || this.dragY > CONFIG.canvasHeight) return
+    // 限制绘制坐标在 canvas 范围内
+    const x = Math.max(0, Math.min(CONFIG.canvasWidth, this.dragX))
+    const y = Math.max(0, Math.min(CONFIG.canvasHeight, this.dragY))
     
     const ctx = this.ctx
-    const x = this.dragX
-    const y = this.dragY
     
     // 绘制半透明的塔跟随手指
     this.drawSingleTower(ctx, x, y, this.draggingTower.type, this.draggingTower.level, 0.85)
@@ -2617,10 +3476,11 @@ Page({
   drawProjectiles() {
     this.projectiles.forEach(proj => {
       const ctx = this.ctx
+      const lv = proj.towerLevel || 1
       
       ctx.save()
       
-      // 绘制轨迹
+      // 绘制轨迹 - 等级越高轨迹越明亮
       if (proj.trail.length > 1) {
         ctx.beginPath()
         ctx.moveTo(proj.trail[0].x, proj.trail[0].y)
@@ -2628,253 +3488,339 @@ Page({
           ctx.lineTo(proj.trail[i].x, proj.trail[i].y)
         }
         ctx.strokeStyle = proj.color
-        ctx.globalAlpha = 0.3
-        ctx.lineWidth = proj.size * 0.5
+        ctx.globalAlpha = 0.2 + lv * 0.05
+        ctx.lineWidth = proj.size * (0.4 + lv * 0.08)
         ctx.stroke()
         ctx.globalAlpha = 1
       }
       
-      ctx.shadowBlur = 15
+      ctx.shadowBlur = 10 + lv * 3
       ctx.shadowColor = proj.color
       
       if (proj.towerType === 'fire') {
-        // 火球 - 更强的火焰效果
+        // 火球 - 等级越高越炽热
         ctx.save()
-        ctx.shadowBlur = 25
-        ctx.shadowColor = '#ff6600'
+        ctx.shadowBlur = 15 + lv * 5
+        ctx.shadowColor = lv >= 4 ? '#ffaa00' : '#ff6600'
         
         // 外层火焰光晕
-        const outerGlow = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, proj.size * 2.5)
-        outerGlow.addColorStop(0, 'rgba(255, 255, 200, 0.9)')
-        outerGlow.addColorStop(0.2, 'rgba(255, 200, 50, 0.7)')
-        outerGlow.addColorStop(0.5, 'rgba(255, 100, 0, 0.4)')
-        outerGlow.addColorStop(1, 'rgba(255, 50, 0, 0)')
+        const glowR = proj.size * (2 + lv * 0.2)
+        const outerGlow = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, glowR)
+        if (lv >= 4) {
+          outerGlow.addColorStop(0, 'rgba(255, 255, 240, 0.95)')
+          outerGlow.addColorStop(0.15, 'rgba(255, 240, 100, 0.8)')
+          outerGlow.addColorStop(0.4, 'rgba(255, 140, 0, 0.5)')
+          outerGlow.addColorStop(1, 'rgba(255, 50, 0, 0)')
+        } else if (lv >= 2) {
+          outerGlow.addColorStop(0, 'rgba(255, 255, 210, 0.9)')
+          outerGlow.addColorStop(0.2, 'rgba(255, 210, 60, 0.7)')
+          outerGlow.addColorStop(0.5, 'rgba(255, 110, 0, 0.4)')
+          outerGlow.addColorStop(1, 'rgba(255, 50, 0, 0)')
+        } else {
+          outerGlow.addColorStop(0, 'rgba(255, 230, 180, 0.8)')
+          outerGlow.addColorStop(0.3, 'rgba(255, 160, 30, 0.5)')
+          outerGlow.addColorStop(1, 'rgba(255, 50, 0, 0)')
+        }
         ctx.fillStyle = outerGlow
         ctx.beginPath()
-        ctx.arc(proj.x, proj.y, proj.size * 2.5, 0, Math.PI * 2)
+        ctx.arc(proj.x, proj.y, glowR, 0, Math.PI * 2)
         ctx.fill()
         
         // 核心火球
-        const gradient = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, proj.size * 1.2)
-        gradient.addColorStop(0, '#ffffff')
-        gradient.addColorStop(0.15, '#ffffaa')
-        gradient.addColorStop(0.3, '#ffcc00')
-        gradient.addColorStop(0.6, '#ff6600')
-        gradient.addColorStop(1, '#ff2200')
+        const coreR = proj.size * (0.9 + lv * 0.08)
+        const gradient = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, coreR)
+        if (lv >= 4) {
+          gradient.addColorStop(0, '#ffffff')
+          gradient.addColorStop(0.1, '#ffffd0')
+          gradient.addColorStop(0.25, '#ffee66')
+          gradient.addColorStop(0.5, '#ff8800')
+          gradient.addColorStop(1, '#ff3300')
+        } else {
+          gradient.addColorStop(0, '#ffffff')
+          gradient.addColorStop(0.15, '#ffffaa')
+          gradient.addColorStop(0.3, '#ffcc00')
+          gradient.addColorStop(0.6, '#ff6600')
+          gradient.addColorStop(1, '#ff2200')
+        }
         ctx.fillStyle = gradient
         ctx.beginPath()
-        ctx.arc(proj.x, proj.y, proj.size * 1.2, 0, Math.PI * 2)
+        ctx.arc(proj.x, proj.y, coreR, 0, Math.PI * 2)
         ctx.fill()
         
-        // 火焰尾巴 - 多层火焰
-        for (let i = 0; i < 5; i++) {
-          const tailDist = 6 + i * 7
+        // 火焰尾巴 - 等级越高越长越密
+        const tailCount = 2 + lv
+        for (let i = 0; i < tailCount; i++) {
+          const tailDist = 5 + i * (5 + lv * 0.5)
           const tailX = proj.x - Math.cos(proj.angle) * tailDist
           const tailY = proj.y - Math.sin(proj.angle) * tailDist
-          const flicker = Math.sin(Date.now() * 0.02 + i) * 3
-          const tailSize = proj.size * (0.9 - i * 0.12)
+          const flicker = Math.sin(Date.now() * 0.02 + i) * 2.5
+          const tailSize = proj.size * (0.7 - i * (0.7 / tailCount))
           
-          ctx.globalAlpha = 0.8 - i * 0.15
+          ctx.globalAlpha = 0.7 - i * (0.6 / tailCount)
           
-          // 火焰形状
           const fireGrad = ctx.createRadialGradient(tailX, tailY, 0, tailX, tailY, tailSize * 1.5)
-          fireGrad.addColorStop(0, '#ffff00')
-          fireGrad.addColorStop(0.4, '#ff8800')
-          fireGrad.addColorStop(1, 'rgba(255, 50, 0, 0)')
+          if (lv >= 4) {
+            fireGrad.addColorStop(0, '#ffffff')
+            fireGrad.addColorStop(0.3, '#ffee44')
+            fireGrad.addColorStop(1, 'rgba(255, 80, 0, 0)')
+          } else {
+            fireGrad.addColorStop(0, '#ffff00')
+            fireGrad.addColorStop(0.4, '#ff8800')
+            fireGrad.addColorStop(1, 'rgba(255, 50, 0, 0)')
+          }
           ctx.fillStyle = fireGrad
           ctx.beginPath()
           ctx.arc(tailX + flicker, tailY + flicker * 0.5, tailSize, 0, Math.PI * 2)
           ctx.fill()
         }
         
-        // 火星粒子
-        ctx.fillStyle = '#ffff88'
-        for (let i = 0; i < 3; i++) {
-          const sparkX = proj.x - Math.cos(proj.angle) * (10 + Math.random() * 15) + (Math.random() - 0.5) * 10
-          const sparkY = proj.y - Math.sin(proj.angle) * (10 + Math.random() * 15) + (Math.random() - 0.5) * 10 - Math.random() * 5
-          ctx.globalAlpha = 0.9
+        // 火星粒子 - 等级越高越多
+        ctx.fillStyle = lv >= 4 ? '#ffffff' : '#ffff88'
+        const sparkCount = 1 + lv
+        for (let i = 0; i < sparkCount; i++) {
+          const sparkX = proj.x - Math.cos(proj.angle) * (8 + Math.random() * 12) + (Math.random() - 0.5) * 8
+          const sparkY = proj.y - Math.sin(proj.angle) * (8 + Math.random() * 12) + (Math.random() - 0.5) * 8 - Math.random() * 4
+          ctx.globalAlpha = 0.8
           ctx.beginPath()
-          ctx.arc(sparkX, sparkY, 1 + Math.random() * 2, 0, Math.PI * 2)
+          ctx.arc(sparkX, sparkY, 0.8 + Math.random() * 1.5, 0, Math.PI * 2)
           ctx.fill()
         }
         
         ctx.restore()
       } else if (proj.towerType === 'ice') {
-        // 寒冰球 - 六边形冰晶+寒气轨迹
+        // 寒冰球 - 等级越高冰晶越复杂越亮
         ctx.save()
         ctx.translate(proj.x, proj.y)
-        ctx.rotate(proj.angle + Date.now() * 0.005)
+        ctx.rotate(proj.angle + Date.now() * (0.003 + lv * 0.001))
         
         // 核心冰球
-        const iceGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, proj.size * 1.5)
-        iceGrad.addColorStop(0, '#ffffff')
-        iceGrad.addColorStop(0.3, '#aaeeff')
-        iceGrad.addColorStop(0.6, '#00ccff')
-        iceGrad.addColorStop(1, 'rgba(0, 200, 255, 0.3)')
+        const iceGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, proj.size * 1.3)
+        if (lv >= 4) {
+          iceGrad.addColorStop(0, '#ffffff')
+          iceGrad.addColorStop(0.2, '#ddeeff')
+          iceGrad.addColorStop(0.5, '#66ddff')
+          iceGrad.addColorStop(1, 'rgba(0, 220, 255, 0.4)')
+        } else {
+          iceGrad.addColorStop(0, '#ffffff')
+          iceGrad.addColorStop(0.3, '#aaeeff')
+          iceGrad.addColorStop(0.6, '#00ccff')
+          iceGrad.addColorStop(1, 'rgba(0, 200, 255, 0.3)')
+        }
         ctx.fillStyle = iceGrad
         ctx.beginPath()
         ctx.arc(0, 0, proj.size, 0, Math.PI * 2)
         ctx.fill()
         
         // 六边形冰晶
-        ctx.strokeStyle = '#ffffff'
-        ctx.lineWidth = 2
+        ctx.strokeStyle = lv >= 3 ? '#ffffff' : 'rgba(255,255,255,0.8)'
+        ctx.lineWidth = 1 + lv * 0.2
         ctx.beginPath()
         for (let i = 0; i < 6; i++) {
           const angle = (Math.PI / 3) * i
-          const x1 = Math.cos(angle) * proj.size * 1.8
-          const y1 = Math.sin(angle) * proj.size * 1.8
+          const x1 = Math.cos(angle) * proj.size * (1.4 + lv * 0.1)
+          const y1 = Math.sin(angle) * proj.size * (1.4 + lv * 0.1)
           if (i === 0) ctx.moveTo(x1, y1)
           else ctx.lineTo(x1, y1)
         }
         ctx.closePath()
         ctx.stroke()
         
-        // 冰晶射线
-        ctx.lineWidth = 1.5
+        // 冰晶射线 - 等级越高分叉越多
+        ctx.lineWidth = 1 + lv * 0.1
         for (let i = 0; i < 6; i++) {
           const angle = (Math.PI / 3) * i
           ctx.beginPath()
           ctx.moveTo(0, 0)
-          ctx.lineTo(Math.cos(angle) * proj.size * 2, Math.sin(angle) * proj.size * 2)
+          ctx.lineTo(Math.cos(angle) * proj.size * 1.6, Math.sin(angle) * proj.size * 1.6)
           ctx.stroke()
           // 分叉
-          const bx = Math.cos(angle) * proj.size * 1.2
-          const by = Math.sin(angle) * proj.size * 1.2
+          const bx = Math.cos(angle) * proj.size * 1.0
+          const by = Math.sin(angle) * proj.size * 1.0
           ctx.beginPath()
           ctx.moveTo(bx, by)
-          ctx.lineTo(bx + Math.cos(angle + 0.5) * proj.size * 0.6, by + Math.sin(angle + 0.5) * proj.size * 0.6)
+          ctx.lineTo(bx + Math.cos(angle + 0.5) * proj.size * 0.5, by + Math.sin(angle + 0.5) * proj.size * 0.5)
           ctx.moveTo(bx, by)
-          ctx.lineTo(bx + Math.cos(angle - 0.5) * proj.size * 0.6, by + Math.sin(angle - 0.5) * proj.size * 0.6)
+          ctx.lineTo(bx + Math.cos(angle - 0.5) * proj.size * 0.5, by + Math.sin(angle - 0.5) * proj.size * 0.5)
           ctx.stroke()
+          // 高等级：二级分叉
+          if (lv >= 3) {
+            const b2x = Math.cos(angle) * proj.size * 0.6
+            const b2y = Math.sin(angle) * proj.size * 0.6
+            ctx.beginPath()
+            ctx.moveTo(b2x, b2y)
+            ctx.lineTo(b2x + Math.cos(angle + 0.8) * proj.size * 0.3, b2y + Math.sin(angle + 0.8) * proj.size * 0.3)
+            ctx.stroke()
+          }
         }
         ctx.restore()
         
-        // 寒气尾迹
-        ctx.fillStyle = 'rgba(170, 238, 255, 0.5)'
-        for (let i = 0; i < 4; i++) {
-          const tx = proj.x - Math.cos(proj.angle) * (5 + i * 6) + (Math.random() - 0.5) * 6
-          const ty = proj.y - Math.sin(proj.angle) * (5 + i * 6) + (Math.random() - 0.5) * 6
-          ctx.globalAlpha = 0.5 - i * 0.1
+        // 寒气尾迹 - 等级越高越浓密
+        const frostCount = 2 + lv
+        ctx.fillStyle = lv >= 4 ? 'rgba(200, 240, 255, 0.6)' : 'rgba(170, 238, 255, 0.5)'
+        for (let i = 0; i < frostCount; i++) {
+          const tx = proj.x - Math.cos(proj.angle) * (4 + i * 5) + (Math.random() - 0.5) * 5
+          const ty = proj.y - Math.sin(proj.angle) * (4 + i * 5) + (Math.random() - 0.5) * 5
+          ctx.globalAlpha = 0.4 - i * (0.35 / frostCount)
           ctx.beginPath()
-          ctx.arc(tx, ty, proj.size * (0.5 - i * 0.08), 0, Math.PI * 2)
+          ctx.arc(tx, ty, proj.size * (0.4 - i * (0.3 / frostCount)), 0, Math.PI * 2)
           ctx.fill()
         }
       } else if (proj.towerType === 'nature') {
-        // 藤蔓球 - 带藤蔓缠绕效果
+        // 藤蔓球 - 等级越高藤蔓越多越繁茂
         ctx.save()
         ctx.translate(proj.x, proj.y)
         
-        // 核心种子
-        const vineGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, proj.size * 1.2)
-        vineGrad.addColorStop(0, '#88ff88')
-        vineGrad.addColorStop(0.4, '#44dd44')
-        vineGrad.addColorStop(0.7, '#22aa22')
-        vineGrad.addColorStop(1, 'rgba(34, 170, 34, 0)')
+        // 核心种子 - 高等级偏金色
+        const vineGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, proj.size * 1.1)
+        if (lv >= 4) {
+          vineGrad.addColorStop(0, '#ccff88')
+          vineGrad.addColorStop(0.3, '#88ee44')
+          vineGrad.addColorStop(0.6, '#44bb22')
+          vineGrad.addColorStop(1, 'rgba(68, 187, 34, 0)')
+        } else {
+          vineGrad.addColorStop(0, '#88ff88')
+          vineGrad.addColorStop(0.4, '#44dd44')
+          vineGrad.addColorStop(0.7, '#22aa22')
+          vineGrad.addColorStop(1, 'rgba(34, 170, 34, 0)')
+        }
         ctx.fillStyle = vineGrad
         ctx.beginPath()
-        ctx.arc(0, 0, proj.size * 1.2, 0, Math.PI * 2)
+        ctx.arc(0, 0, proj.size * 1.1, 0, Math.PI * 2)
         ctx.fill()
         
-        // 旋转的藤蔓触手
+        // 旋转的藤蔓触手 - 等级越高越多
         ctx.rotate(Date.now() * 0.008)
-        ctx.strokeStyle = '#33aa33'
-        ctx.lineWidth = 2
-        for (let i = 0; i < 4; i++) {
-          const angle = (Math.PI * 2 / 4) * i
+        const vineCount = 2 + lv
+        ctx.strokeStyle = lv >= 4 ? '#44bb33' : '#33aa33'
+        ctx.lineWidth = 1.5 + lv * 0.15
+        for (let i = 0; i < vineCount; i++) {
+          const angle = (Math.PI * 2 / vineCount) * i
           ctx.beginPath()
-          ctx.moveTo(Math.cos(angle) * proj.size * 0.5, Math.sin(angle) * proj.size * 0.5)
-          // 弯曲的藤蔓
-          const midX = Math.cos(angle) * proj.size * 1.5
-          const midY = Math.sin(angle) * proj.size * 1.5
-          const endX = Math.cos(angle + 0.3) * proj.size * 2
-          const endY = Math.sin(angle + 0.3) * proj.size * 2
+          ctx.moveTo(Math.cos(angle) * proj.size * 0.4, Math.sin(angle) * proj.size * 0.4)
+          const midX = Math.cos(angle) * proj.size * 1.2
+          const midY = Math.sin(angle) * proj.size * 1.2
+          const endX = Math.cos(angle + 0.3) * proj.size * 1.7
+          const endY = Math.sin(angle + 0.3) * proj.size * 1.7
           ctx.quadraticCurveTo(midX, midY, endX, endY)
           ctx.stroke()
-          // 藤蔓上的小叶子
-          ctx.fillStyle = '#66ff66'
+          // 叶子 - 高等级更大
+          ctx.fillStyle = lv >= 4 ? '#88ff44' : '#66ff66'
           ctx.beginPath()
-          ctx.ellipse(endX, endY, 3, 2, angle, 0, Math.PI * 2)
+          ctx.ellipse(endX, endY, 2 + lv * 0.3, 1.5 + lv * 0.2, angle, 0, Math.PI * 2)
           ctx.fill()
+        }
+        
+        // 高等级：小花朵
+        if (lv >= 3) {
+          const flowerCount = lv - 2
+          for (let i = 0; i < flowerCount; i++) {
+            const fa = (Math.PI * 2 / flowerCount) * i + Date.now() * 0.005
+            const fx = Math.cos(fa) * proj.size * 0.8
+            const fy = Math.sin(fa) * proj.size * 0.8
+            ctx.fillStyle = lv >= 5 ? '#ffdd44' : '#ffaacc'
+            ctx.beginPath()
+            ctx.arc(fx, fy, 1.5, 0, Math.PI * 2)
+            ctx.fill()
+          }
         }
         
         ctx.restore()
         
         // 藤蔓尾迹
-        ctx.fillStyle = '#66dd66'
-        for (let i = 0; i < 3; i++) {
-          const tx = proj.x - Math.cos(proj.angle) * (4 + i * 5)
-          const ty = proj.y - Math.sin(proj.angle) * (4 + i * 5)
-          ctx.globalAlpha = 0.6 - i * 0.15
+        const trailCount = 1 + lv
+        ctx.fillStyle = lv >= 4 ? '#88ee44' : '#66dd66'
+        for (let i = 0; i < trailCount; i++) {
+          const tx = proj.x - Math.cos(proj.angle) * (3 + i * 4)
+          const ty = proj.y - Math.sin(proj.angle) * (3 + i * 4)
+          ctx.globalAlpha = 0.5 - i * (0.4 / trailCount)
           ctx.beginPath()
-          ctx.arc(tx, ty, proj.size * (0.4 - i * 0.08), 0, Math.PI * 2)
+          ctx.arc(tx, ty, proj.size * (0.35 - i * (0.25 / trailCount)), 0, Math.PI * 2)
           ctx.fill()
         }
       } else if (proj.towerType === 'arcane') {
-        // 奥术球 - 魔法符文+能量环
+        // 奥术球 - 等级越高符文越多能量越强
         ctx.save()
         ctx.translate(proj.x, proj.y)
         
-        // 外层能量环
-        ctx.rotate(Date.now() * 0.003)
-        ctx.strokeStyle = 'rgba(170, 68, 255, 0.6)'
-        ctx.lineWidth = 2
-        ctx.beginPath()
-        ctx.arc(0, 0, proj.size * 2, 0, Math.PI * 2)
-        ctx.stroke()
-        
-        // 旋转符文
-        ctx.rotate(Date.now() * -0.006)
-        ctx.strokeStyle = '#dd88ff'
-        ctx.lineWidth = 1.5
-        for (let i = 0; i < 3; i++) {
-          const angle = (Math.PI * 2 / 3) * i
-          const rx = Math.cos(angle) * proj.size * 1.5
-          const ry = Math.sin(angle) * proj.size * 1.5
-          // 符文三角
+        // 外层能量环 - 高等级多层
+        const ringCount = Math.ceil(lv / 2)
+        for (let r = 0; r < ringCount; r++) {
+          ctx.save()
+          ctx.rotate(Date.now() * (0.003 + r * 0.002) * (r % 2 === 0 ? 1 : -1))
+          ctx.strokeStyle = `rgba(${170 + lv * 10}, 68, 255, ${0.4 + lv * 0.05})`
+          ctx.lineWidth = 1.5 + lv * 0.1
           ctx.beginPath()
-          ctx.moveTo(rx, ry - 4)
-          ctx.lineTo(rx - 4, ry + 3)
-          ctx.lineTo(rx + 4, ry + 3)
+          ctx.arc(0, 0, proj.size * (1.8 + r * 0.5), 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
+        
+        // 旋转符文 - 等级越高越多
+        ctx.save()
+        ctx.rotate(Date.now() * -0.006)
+        const runeCount = 2 + Math.floor(lv / 2)
+        ctx.strokeStyle = lv >= 4 ? '#eebbff' : '#dd88ff'
+        ctx.lineWidth = 1 + lv * 0.1
+        for (let i = 0; i < runeCount; i++) {
+          const angle = (Math.PI * 2 / runeCount) * i
+          const rx = Math.cos(angle) * proj.size * 1.3
+          const ry = Math.sin(angle) * proj.size * 1.3
+          const rs = 2.5 + lv * 0.3
+          ctx.beginPath()
+          ctx.moveTo(rx, ry - rs)
+          ctx.lineTo(rx - rs, ry + rs * 0.7)
+          ctx.lineTo(rx + rs, ry + rs * 0.7)
           ctx.closePath()
           ctx.stroke()
         }
+        ctx.restore()
         
         ctx.restore()
         
         // 核心能量球
-        const arcaneGrad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, proj.size * 1.8)
-        arcaneGrad.addColorStop(0, '#ffffff')
-        arcaneGrad.addColorStop(0.2, '#ee88ff')
-        arcaneGrad.addColorStop(0.5, '#aa44ff')
-        arcaneGrad.addColorStop(0.8, '#7722cc')
-        arcaneGrad.addColorStop(1, 'rgba(119, 34, 204, 0)')
+        const arcR = proj.size * (1.2 + lv * 0.08)
+        const arcaneGrad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, arcR)
+        if (lv >= 4) {
+          arcaneGrad.addColorStop(0, '#ffffff')
+          arcaneGrad.addColorStop(0.15, '#ffbbff')
+          arcaneGrad.addColorStop(0.4, '#cc66ff')
+          arcaneGrad.addColorStop(0.7, '#8833dd')
+          arcaneGrad.addColorStop(1, 'rgba(136, 51, 221, 0)')
+        } else {
+          arcaneGrad.addColorStop(0, '#ffffff')
+          arcaneGrad.addColorStop(0.2, '#ee88ff')
+          arcaneGrad.addColorStop(0.5, '#aa44ff')
+          arcaneGrad.addColorStop(0.8, '#7722cc')
+          arcaneGrad.addColorStop(1, 'rgba(119, 34, 204, 0)')
+        }
         ctx.fillStyle = arcaneGrad
         ctx.beginPath()
-        ctx.arc(proj.x, proj.y, proj.size * 1.5, 0, Math.PI * 2)
+        ctx.arc(proj.x, proj.y, arcR, 0, Math.PI * 2)
         ctx.fill()
         
-        // 能量尾迹
-        ctx.strokeStyle = '#aa44ff'
-        ctx.lineWidth = 3
-        ctx.globalAlpha = 0.6
+        // 能量尾迹 - 高等级更长更亮
+        const trailLen = 3 + lv
+        ctx.strokeStyle = lv >= 4 ? '#cc66ff' : '#aa44ff'
+        ctx.lineWidth = 2 + lv * 0.3
+        ctx.globalAlpha = 0.5 + lv * 0.05
         ctx.beginPath()
         ctx.moveTo(proj.x, proj.y)
-        for (let i = 1; i <= 5; i++) {
-          const tx = proj.x - Math.cos(proj.angle) * i * 6
-          const ty = proj.y - Math.sin(proj.angle) * i * 6
-          ctx.lineTo(tx + Math.sin(i * 2) * 3, ty + Math.cos(i * 2) * 3)
+        for (let i = 1; i <= trailLen; i++) {
+          const tx = proj.x - Math.cos(proj.angle) * i * 5
+          const ty = proj.y - Math.sin(proj.angle) * i * 5
+          ctx.lineTo(tx + Math.sin(i * 2) * 2.5, ty + Math.cos(i * 2) * 2.5)
         }
         ctx.stroke()
         
-        // 魔法粒子
-        ctx.fillStyle = '#dd88ff'
-        for (let i = 0; i < 4; i++) {
-          const px = proj.x + (Math.random() - 0.5) * proj.size * 3
-          const py = proj.y + (Math.random() - 0.5) * proj.size * 3
-          ctx.globalAlpha = 0.8
+        // 魔法粒子 - 等级越高越多
+        ctx.fillStyle = lv >= 4 ? '#eebbff' : '#dd88ff'
+        const particleCount = 2 + lv
+        for (let i = 0; i < particleCount; i++) {
+          const px = proj.x + (Math.random() - 0.5) * proj.size * 2.5
+          const py = proj.y + (Math.random() - 0.5) * proj.size * 2.5
+          ctx.globalAlpha = 0.7
           ctx.beginPath()
-          ctx.arc(px, py, 2, 0, Math.PI * 2)
+          ctx.arc(px, py, 1 + Math.random() * 1.5, 0, Math.PI * 2)
           ctx.fill()
         }
       }
@@ -3165,6 +4111,8 @@ Page({
     
     const touch = e.touches[0]
     const tower = this.inventory[index]
+    const startClientX = touch.clientX
+    const startClientY = touch.clientY
     
     // 同步获取 canvasRect 和 inventoryRect（使用回调确保获取后再设置拖动状态）
     wx.createSelectorQuery().selectAll('#gameCanvas, .inventory-grid').boundingClientRect((rects) => {
@@ -3183,19 +4131,31 @@ Page({
       this.hasMoved = false
       this.isDragging = true
       this.draggingTower = { ...tower }
-      this.dragStartClientX = touch.clientX
-      this.dragStartClientY = touch.clientY
+      this.dragStartClientX = startClientX
+      this.dragStartClientY = startClientY
+      this.lastTouchClientX = startClientX
+      this.lastTouchClientY = startClientY
       
-      // 初始拖动位置设为手指位置（相对于canvas）
+      // 初始拖动位置设为手指位置（相对于canvas逻辑坐标）
       if (this.cachedCanvasRect) {
-        this.dragX = touch.clientX - this.cachedCanvasRect.left
-        this.dragY = touch.clientY - this.cachedCanvasRect.top
+        const cssX = startClientX - this.cachedCanvasRect.left
+        const cssY = startClientY - this.cachedCanvasRect.top
+        const scaleX = CONFIG.canvasWidth / this.cachedCanvasRect.width
+        const scaleY = CONFIG.canvasHeight / this.cachedCanvasRect.height
+        this.dragX = cssX * scaleX
+        this.dragY = cssY * scaleY
       } else {
         this.dragX = -100
         this.dragY = -100
       }
       
-      this.setData({ draggingSlotIndex: index })
+      this.setData({ 
+        draggingSlotIndex: index,
+        dragFloatingEmoji: TOWER_TYPES[tower.type].emoji,
+        dragFloatingColor: TOWER_TYPES[tower.type].color,
+        dragFloatingLevel: tower.level,
+        dragFloatingType: tower.type
+      })
     }).exec()
   },
 
@@ -3205,56 +4165,49 @@ Page({
     
     const touch = e.touches[0]
     
-    const tryStartDrag = (x, y, rect) => {
-      if (x === undefined || y === undefined) return false
-      
-      // 检查是否点击了场上的塔
-      for (const tower of this.towers) {
-        const dx = x - tower.x
-        const dy = y - tower.y
-        if (Math.sqrt(dx * dx + dy * dy) < 24) {
-          if (rect) {
-            this.cachedCanvasRect = rect
-            this.setData({ canvasRect: rect })
-          }
-          
-          // 复制塔数据作为拖动对象
-          this.pendingDragTower = { ...tower }
-          this.draggingTower = { ...tower }
-          this.draggingFromInventory = false
-          this.draggingInventoryIndex = -1
-          this.draggingTowerId = tower.id  // 记录正在拖动的塔ID
-          this.hasMoved = false
-          this.isDragging = true
-          this.dragStartX = x
-          this.dragStartY = y
-          this.dragX = x
-          this.dragY = y
-          // 同时保存 clientX/Y 用于后续计算
-          this.lastTouchClientX = touch.clientX
-          this.lastTouchClientY = touch.clientY
-          return true
-        }
+    // 用 clientX/Y 换算 canvas 逻辑坐标
+    let x, y
+    if (this.cachedCanvasRect) {
+      const cssX = touch.clientX - this.cachedCanvasRect.left
+      const cssY = touch.clientY - this.cachedCanvasRect.top
+      const scaleX = CONFIG.canvasWidth / this.cachedCanvasRect.width
+      const scaleY = CONFIG.canvasHeight / this.cachedCanvasRect.height
+      x = cssX * scaleX
+      y = cssY * scaleY
+    } else if (touch.x !== undefined && touch.y !== undefined) {
+      x = touch.x
+      y = touch.y
+    } else {
+      return
+    }
+    
+    // 检查是否点击了场上的塔
+    for (const tower of this.towers) {
+      const dx = x - tower.x
+      const dy = y - tower.y
+      if (Math.sqrt(dx * dx + dy * dy) < 24) {
+        this.pendingDragTower = { ...tower }
+        this.draggingTower = { ...tower }
+        this.draggingFromInventory = false
+        this.draggingInventoryIndex = -1
+        this.draggingTowerId = tower.id
+        this.hasMoved = false
+        this.isDragging = true
+        this.dragStartX = x
+        this.dragStartY = y
+        this.dragX = x
+        this.dragY = y
+        this.lastTouchClientX = touch.clientX
+        this.lastTouchClientY = touch.clientY
+        this.setData({
+          dragFloatingEmoji: TOWER_TYPES[tower.type].emoji,
+          dragFloatingColor: TOWER_TYPES[tower.type].color,
+          dragFloatingLevel: tower.level,
+          dragFloatingType: tower.type
+        })
+        return
       }
-      return false
     }
-    
-    // 优先使用 touch.x/y（canvas 事件），否则用 cachedCanvasRect 换算
-    if (touch.x !== undefined && touch.y !== undefined) {
-      if (tryStartDrag(touch.x, touch.y)) return
-    } else if (this.cachedCanvasRect) {
-      const x = touch.clientX - this.cachedCanvasRect.left
-      const y = touch.clientY - this.cachedCanvasRect.top
-      if (tryStartDrag(x, y)) return
-    }
-    
-    // 如果没有 rect 或未命中，重新获取 rect 再尝试
-    wx.createSelectorQuery().select('#gameCanvas').boundingClientRect((rect) => {
-      if (!rect) return
-      const x = touch.clientX - rect.left
-      const y = touch.clientY - rect.top
-      tryStartDrag(x, y, rect)
-    }).exec()
   },
 
   onTouchMove(e) {
@@ -3285,11 +4238,23 @@ Page({
     this.lastTouchClientY = touch.clientY
     
     // 统一使用 clientX/Y 计算 canvas 内坐标
-    // 这样无论是 canvas 触摸还是全局触摸，都能正确跟随手指
+    // 注意：需要将 CSS 像素坐标换算为 canvas 逻辑坐标
     if (this.cachedCanvasRect) {
-      this.dragX = touch.clientX - this.cachedCanvasRect.left
-      this.dragY = touch.clientY - this.cachedCanvasRect.top
+      const cssX = touch.clientX - this.cachedCanvasRect.left
+      const cssY = touch.clientY - this.cachedCanvasRect.top
+      // CSS 坐标 -> canvas 逻辑坐标（CONFIG.canvasWidth/Height 可能与 CSS 尺寸不同）
+      const scaleX = CONFIG.canvasWidth / this.cachedCanvasRect.width
+      const scaleY = CONFIG.canvasHeight / this.cachedCanvasRect.height
+      this.dragX = cssX * scaleX
+      this.dragY = cssY * scaleY
     }
+    
+    // 更新浮层位置（始终跟随手指，不受 canvas 坐标系影响）
+    this.setData({
+      dragFloating: true,
+      dragFloatingX: touch.clientX,
+      dragFloatingY: touch.clientY
+    })
     
     // 检查合成目标
     this.checkMergeTarget(touch)
@@ -3544,7 +4509,8 @@ Page({
     this.setData({ 
       showMergeHint: false, 
       draggingSlotIndex: -1,
-      mergeTargetSlotIndex: -1
+      mergeTargetSlotIndex: -1,
+      dragFloating: false
     })
   },
 

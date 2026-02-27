@@ -262,17 +262,189 @@
 }
 
 .slot-tower {
-  width: 48rpx;
-  height: 48rpx;
-  border-radius: 50%;
+  width: 56rpx;
+  height: 56rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  position: relative;
 }
 
-.tower-emoji {
-  font-size: 24rpx;
+.tower-shape {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== 火焰塔 - 熔岩石塔 ===== */
+.fire-shape {
+  position: relative;
+}
+.fire-body {
+  width: 24rpx;
+  height: 30rpx;
+  background: linear-gradient(0deg, #441100 0%, #883311 40%, #aa5533 100%);
+  clip-path: polygon(10% 100%, 25% 10%, 38% 0%, 62% 0%, 75% 10%, 90% 100%);
+  position: absolute;
+  bottom: 0rpx;
+  border-radius: 2rpx 2rpx 0 0;
+}
+.fire-flame {
+  width: 20rpx;
+  height: 24rpx;
+  position: absolute;
+  top: -2rpx;
+  background: radial-gradient(ellipse at 50% 90%, #ffffff 0%, #ffff44 15%, #ff8800 40%, #ff4400 65%, rgba(255, 30, 0, 0) 100%);
+  clip-path: polygon(50% 0%, 85% 30%, 75% 60%, 90% 75%, 50% 100%, 10% 75%, 25% 60%, 15% 30%);
+  animation: flameFlicker 0.3s ease-in-out infinite alternate;
+  filter: brightness(1.1);
+}
+@keyframes flameFlicker {
+  0% { transform: scaleX(0.92) scaleY(1.06); opacity: 0.9; }
+  100% { transform: scaleX(1.08) scaleY(0.94); opacity: 1; }
+}
+
+/* ===== 寒冰塔 - 冰锥尖塔 ===== */
+.ice-shape {
+  position: relative;
+}
+.ice-crystal {
+  width: 12rpx;
+  height: 10rpx;
+  background: linear-gradient(135deg, #003344 0%, #006688 100%);
+  position: absolute;
+  bottom: 0rpx;
+  clip-path: polygon(0% 100%, 15% 0%, 85% 0%, 100% 100%);
+}
+.ice-shine {
+  position: absolute;
+  bottom: 8rpx;
+  width: 0;
+  height: 0;
+  border-left: 8rpx solid transparent;
+  border-right: 8rpx solid transparent;
+  border-bottom: 36rpx solid #33bbdd;
+  filter: brightness(1.1);
+}
+.ice-shine::after {
+  content: '';
+  position: absolute;
+  top: 6rpx;
+  left: -4rpx;
+  width: 0;
+  height: 0;
+  border-left: 4rpx solid transparent;
+  border-right: 4rpx solid transparent;
+  border-bottom: 26rpx solid rgba(200, 240, 255, 0.4);
+}
+
+/* ===== 自然塔 - 生命之树 ===== */
+.nature-shape {
+  position: relative;
+}
+.nature-trunk {
+  width: 8rpx;
+  height: 22rpx;
+  background: linear-gradient(90deg, #2a1500 0%, #5a3000 50%, #3d2200 100%);
+  position: absolute;
+  bottom: 0rpx;
+  border-radius: 2rpx;
+}
+.nature-canopy {
+  width: 34rpx;
+  height: 30rpx;
+  position: absolute;
+  top: 0rpx;
+  background: radial-gradient(circle at 40% 35%, #66ee44 0%, #33aa22 50%, #116600 100%);
+  border-radius: 50% 50% 45% 45%;
+  box-shadow: inset -4rpx -4rpx 8rpx rgba(0, 40, 0, 0.3), inset 4rpx 4rpx 6rpx rgba(150, 255, 100, 0.15);
+}
+.nature-canopy::before {
+  content: '';
+  position: absolute;
+  width: 10rpx;
+  height: 8rpx;
+  background: rgba(180, 255, 120, 0.4);
+  border-radius: 50%;
+  top: 6rpx;
+  left: 8rpx;
+}
+
+/* ===== 奥术塔 - 悬浮宝石 ===== */
+.arcane-shape {
+  position: relative;
+}
+.arcane-base {
+  width: 18rpx;
+  height: 14rpx;
+  background: linear-gradient(135deg, #555577, #333355, #222233);
+  clip-path: polygon(15% 100%, 0% 0%, 100% 0%, 85% 100%);
+  position: absolute;
+  bottom: 0rpx;
+}
+.arcane-gem {
+  width: 24rpx;
+  height: 28rpx;
+  background: linear-gradient(135deg, #ee99ff 0%, #aa44dd 40%, #6622aa 70%, #330066 100%);
+  clip-path: polygon(50% 0%, 100% 40%, 50% 100%, 0% 40%);
+  position: absolute;
+  top: 0rpx;
+  animation: gemFloat 1.5s ease-in-out infinite alternate;
+}
+.arcane-gem::after {
+  content: '';
+  position: absolute;
+  width: 8rpx;
+  height: 10rpx;
+  background: rgba(255, 200, 255, 0.4);
+  clip-path: polygon(0% 0%, 100% 50%, 30% 100%);
+  top: 6rpx;
+  left: 4rpx;
+}
+@keyframes gemFloat {
+  0% { transform: translateY(1rpx); }
+  100% { transform: translateY(-3rpx); }
+}
+
+/* ===== 闪电塔 - 能量方尖碑 ===== */
+.lightning-shape {
+  position: relative;
+}
+.lightning-coil {
+  width: 0;
+  height: 0;
+  border-left: 7rpx solid transparent;
+  border-right: 7rpx solid transparent;
+  border-bottom: 34rpx solid #555540;
+  position: absolute;
+  bottom: 0rpx;
+}
+.lightning-coil::after {
+  content: '';
+  position: absolute;
+  bottom: -34rpx;
+  left: -10rpx;
+  width: 20rpx;
+  height: 10rpx;
+  background: linear-gradient(135deg, #2a2a20 0%, #4a4a30 50%, #2a2a20 100%);
+  clip-path: polygon(0% 100%, 10% 0%, 90% 0%, 100% 100%);
+}
+.lightning-orb {
+  width: 14rpx;
+  height: 14rpx;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #ffff88 30%, #ddcc00 70%, rgba(180, 180, 0, 0) 100%);
+  border-radius: 50%;
+  position: absolute;
+  top: 2rpx;
+  box-shadow: 0 0 10rpx rgba(255, 255, 0, 0.9), 0 0 20rpx rgba(255, 255, 0, 0.4);
+  animation: orbPulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes orbPulse {
+  0% { box-shadow: 0 0 6rpx rgba(255, 255, 0, 0.6); transform: scale(0.95); }
+  100% { box-shadow: 0 0 16rpx rgba(255, 255, 0, 1); transform: scale(1.05); }
 }
 
 .tower-level-badge {
@@ -303,6 +475,53 @@
 .empty-slot {
   font-size: 36rpx;
   color: rgba(80, 255, 80, 0.25);
+}
+
+/* 拖动浮层 */
+.drag-floating-tower {
+  position: fixed;
+  width: 90rpx;
+  height: 90rpx;
+  margin-left: -45rpx;
+  margin-top: -45rpx;
+  z-index: 999;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 3rpx solid;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0.9;
+}
+
+.drag-float-body {
+  width: 54rpx;
+  height: 54rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.drag-float-emoji {
+  font-size: 28rpx;
+}
+
+.drag-float-level {
+  position: absolute;
+  bottom: -4rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ff9500 100%);
+  padding: 0 10rpx;
+  border-radius: 8rpx;
+}
+
+.drag-float-level text {
+  font-size: 16rpx;
+  color: #1a1a00;
+  font-weight: bold;
 }
 
 /* 遮罩和面板 */

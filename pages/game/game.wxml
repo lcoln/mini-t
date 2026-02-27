@@ -29,8 +29,6 @@
     id="gameCanvas" 
     class="game-canvas"
     bindtouchstart="onCanvasTouchStart"
-    bindtouchmove="onTouchMove"
-    bindtouchend="onTouchEnd"
   ></canvas>
 
   <!-- 合成提示 -->
@@ -60,12 +58,34 @@
         wx:key="index"
         data-index="{{index}}"
         catchtouchstart="onInventoryTouchStart"
-        catchtouchmove="onTouchMove"
-        catchtouchend="onTouchEnd"
       >
         <block wx:if="{{item}}">
-          <view class="slot-tower" style="background: radial-gradient(circle at 30% 30%, #fff, {{item.color}}); box-shadow: 0 0 15px {{item.color}}, inset 0 -3px 8px rgba(0,0,0,0.3);">
-            <text class="tower-emoji">{{item.emoji}}</text>
+          <view class="slot-tower slot-tower-{{item.type}}">
+            <!-- 火焰塔 -->
+            <view wx:if="{{item.type === 'fire'}}" class="tower-shape fire-shape">
+              <view class="fire-body"></view>
+              <view class="fire-flame"></view>
+            </view>
+            <!-- 寒冰塔 -->
+            <view wx:elif="{{item.type === 'ice'}}" class="tower-shape ice-shape">
+              <view class="ice-crystal"></view>
+              <view class="ice-shine"></view>
+            </view>
+            <!-- 自然塔 -->
+            <view wx:elif="{{item.type === 'nature'}}" class="tower-shape nature-shape">
+              <view class="nature-trunk"></view>
+              <view class="nature-canopy"></view>
+            </view>
+            <!-- 奥术塔 -->
+            <view wx:elif="{{item.type === 'arcane'}}" class="tower-shape arcane-shape">
+              <view class="arcane-base"></view>
+              <view class="arcane-gem"></view>
+            </view>
+            <!-- 闪电塔 -->
+            <view wx:elif="{{item.type === 'lightning'}}" class="tower-shape lightning-shape">
+              <view class="lightning-coil"></view>
+              <view class="lightning-orb"></view>
+            </view>
           </view>
           <view class="tower-level-badge">
             <text class="tower-level">Lv.{{item.level}}</text>
@@ -78,6 +98,20 @@
           <text class="empty-slot">+</text>
         </block>
       </view>
+    </view>
+  </view>
+
+  <!-- 拖动浮层（跟随手指，用于仓库区域拖动时的视觉反馈） -->
+  <view 
+    class="drag-floating-tower" 
+    wx:if="{{dragFloating}}"
+    style="left:{{dragFloatingX}}px; top:{{dragFloatingY}}px; border-color:{{dragFloatingColor}};"
+  >
+    <view class="drag-float-body slot-tower-{{dragFloatingType}}" style="background: radial-gradient(circle at 30% 30%, #fff, {{dragFloatingColor}}); box-shadow: 0 0 15px {{dragFloatingColor}}, inset 0 -3px 8px rgba(0,0,0,0.3);">
+      <text class="drag-float-emoji">{{dragFloatingEmoji}}</text>
+    </view>
+    <view class="drag-float-level">
+      <text>Lv.{{dragFloatingLevel}}</text>
     </view>
   </view>
 
