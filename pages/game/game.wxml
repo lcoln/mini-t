@@ -2,9 +2,9 @@
   <!-- 顶部状态栏 -->
   <view class="status-bar">
     <view class="status-item wave">
-      <text class="status-icon">🌊</text>
-      <text class="status-value">{{wave}}</text>
-      <text class="status-label">波</text>
+      <text class="status-icon">🏰</text>
+      <text class="status-value">{{level}}-{{waveInLevel}}</text>
+      <text class="status-label">关</text>
     </view>
     <view class="status-item gold">
       <text class="status-icon">💰</text>
@@ -121,8 +121,8 @@
       <text class="panel-title">游戏暂停</text>
       <view class="panel-stats">
         <view class="panel-stat">
-          <text class="panel-stat-label">当前波数</text>
-          <text class="panel-stat-value">{{wave}}</text>
+          <text class="panel-stat-label">当前关卡</text>
+          <text class="panel-stat-value">第{{level}}关 第{{waveInLevel}}/{{totalWavesInLevel}}波</text>
         </view>
         <view class="panel-stat">
           <text class="panel-stat-label">当前金币</text>

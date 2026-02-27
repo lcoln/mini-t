@@ -183,6 +183,45 @@ const MONSTER_TYPES = {
     isBoss: true,
     shape: 'dragon',
     unlockWave: 5
+  },
+  treant: {
+    name: '树人王',
+    emoji: '🌳',
+    bodyColor: '#3a6622',
+    outlineColor: '#1a4400',
+    eyeColor: '#ffff00',
+    baseHp: 1000,
+    speed: 0.35,
+    goldDrop: 120,
+    isBoss: true,
+    shape: 'treant',
+    unlockWave: 10
+  },
+  lich: {
+    name: '巫妖',
+    emoji: '💀',
+    bodyColor: '#5522aa',
+    outlineColor: '#330066',
+    eyeColor: '#00ffff',
+    baseHp: 900,
+    speed: 0.55,
+    goldDrop: 130,
+    isBoss: true,
+    shape: 'lich',
+    unlockWave: 15
+  },
+  phoenix: {
+    name: '凤凰',
+    emoji: '🔥',
+    bodyColor: '#ff8800',
+    outlineColor: '#cc4400',
+    eyeColor: '#ffffff',
+    baseHp: 750,
+    speed: 0.7,
+    goldDrop: 140,
+    isBoss: true,
+    shape: 'phoenix',
+    unlockWave: 20
   }
 }
 
@@ -269,6 +308,10 @@ Page({
     isNewRecord: false,
     gridOffsetX: 0,
     gridOffsetY: 60,
+    // 关卡与波次信息
+    level: 1,           // 当前关卡（每10波一关）
+    waveInLevel: 1,     // 当前关卡内第几波
+    totalWavesInLevel: 10, // 每关总波数
     // 底部仓库
     inventorySlots: [],
     summonCost: 15,
@@ -417,7 +460,10 @@ Page({
       score: 0,
       gold: 100,
       lives: 20,
-      gameState: 'playing'
+      gameState: 'playing',
+      level: 1,
+      waveInLevel: 1,
+      totalWavesInLevel: 10
     })
   },
 
@@ -547,13 +593,25 @@ Page({
     // 根据主题生成装饰物
     this.generateMapDecorations(themeKey)
     
-    // 预生成背景纹理点
+    // 预生成背景纹理点 - 更丰富
     this.grassDots = []
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
       this.grassDots.push({
         x: Math.random() * CONFIG.canvasWidth,
         y: Math.random() * CONFIG.canvasHeight,
-        size: 1 + Math.random() * 2
+        size: 0.8 + Math.random() * 2.5
+      })
+    }
+    
+    // 小草丛
+    this.grassTufts = []
+    for (let i = 0; i < 40; i++) {
+      this.grassTufts.push({
+        x: Math.random() * CONFIG.canvasWidth,
+        y: Math.random() * CONFIG.canvasHeight,
+        blades: 3 + Math.floor(Math.random() * 4),
+        height: 4 + Math.random() * 6,
+        sway: Math.random() * Math.PI * 2
       })
     }
   },
@@ -562,7 +620,7 @@ Page({
     const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
     this.mapDecorations = []
     
-    // 边缘装饰
+    // 边缘装饰 - 更丰富
     const edgePositions = [
       { x: 15, y: 40 }, { x: 12, y: 100 }, { x: 20, y: 160 },
       { x: 10, y: 220 }, { x: 18, y: 280 }, { x: 25, y: 340 },
@@ -570,7 +628,13 @@ Page({
       { x: CONFIG.canvasWidth - 22, y: 150 }, { x: CONFIG.canvasWidth - 12, y: 210 },
       { x: CONFIG.canvasWidth - 20, y: 270 }, { x: CONFIG.canvasWidth - 25, y: 330 },
       { x: CONFIG.canvasWidth / 2 - 60, y: 20 }, { x: CONFIG.canvasWidth / 2 + 50, y: 15 },
-      { x: CONFIG.canvasWidth / 2, y: CONFIG.canvasHeight - 40 }
+      { x: CONFIG.canvasWidth / 2, y: CONFIG.canvasHeight - 40 },
+      // 额外装饰点
+      { x: 30, y: 400 }, { x: CONFIG.canvasWidth - 30, y: 400 },
+      { x: 50, y: 60 }, { x: CONFIG.canvasWidth - 50, y: 60 },
+      { x: CONFIG.canvasWidth / 2 - 100, y: CONFIG.canvasHeight - 25 },
+      { x: CONFIG.canvasWidth / 2 + 100, y: CONFIG.canvasHeight - 30 },
+      { x: 8, y: 460 }, { x: CONFIG.canvasWidth - 10, y: 470 }
     ]
     
     edgePositions.forEach((pos, i) => {
@@ -636,12 +700,15 @@ Page({
       })
     }
     
-    // 每5波出Boss
+    // 每5波出Boss - 不同关卡不同Boss
     if (wave % 5 === 0) {
-      const bossConfig = MONSTER_TYPES.dragon
+      const level = Math.ceil(wave / 10)
+      const bossTypes = ['dragon', 'treant', 'lich', 'phoenix']
+      const bossType = bossTypes[(level - 1) % bossTypes.length]
+      const bossConfig = MONSTER_TYPES[bossType]
       const bossHpMultiplier = 1 + (wave - 1) * 0.3
       this.waveMonsters.push({
-        type: 'dragon',
+        type: bossType,
         ...bossConfig,
         hp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
         maxHp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
@@ -1112,7 +1179,106 @@ Page({
           })
         }
         break
+      
+      case 'treant':
+        // 树人王：叶片风暴+木块飞散
+        for (let i = 0; i < 25; i++) {
+          const angle = Math.random() * Math.PI * 2
+          this.particles.push({
+            x: monster.x, y: monster.y,
+            vx: Math.cos(angle) * (2 + Math.random() * 3),
+            vy: Math.sin(angle) * (2 + Math.random() * 3) - 2,
+            size: 4 + Math.random() * 6,
+            color: Math.random() > 0.5 ? '#44aa22' : '#88dd44',
+            life: 50, maxLife: 50, alpha: 1
+          })
+        }
+        for (let i = 0; i < 8; i++) {
+          this.particles.push({
+            x: monster.x + (Math.random() - 0.5) * 20, y: monster.y,
+            vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2,
+            size: 3 + Math.random() * 4,
+            color: '#5a3520', life: 40, maxLife: 40, alpha: 1
+          })
+        }
+        this.floatingTexts.push({
+          x: monster.x, y: monster.y - 20,
+          text: '🌳', color: '#44aa22', life: 80, maxLife: 80,
+          vy: -1.5, vx: 0, scale: 2
+        })
+        this.floatingTexts.push({
+          x: monster.x, y: monster.y + 10,
+          text: '💥 BOSS DOWN! 💥', color: '#88dd44', life: 100, maxLife: 100,
+          vy: -1, vx: 0, scale: 1.2, isBold: true
+        })
+        break
         
+      case 'lich':
+        // 巫妖：暗能量爆炸+灵魂消散
+        for (let i = 0; i < 20; i++) {
+          const angle = (Math.PI * 2 / 20) * i
+          this.arcaneEffects.push({
+            x: monster.x, y: monster.y,
+            size: 5 + Math.random() * 5,
+            life: 30, maxLife: 30,
+            angle: angle, dist: 0, speed: 3
+          })
+        }
+        for (let i = 0; i < 15; i++) {
+          this.particles.push({
+            x: monster.x + (Math.random() - 0.5) * 30,
+            y: monster.y + (Math.random() - 0.5) * 30,
+            vx: (Math.random() - 0.5) * 3, vy: -2 - Math.random() * 2,
+            size: 4 + Math.random() * 5,
+            color: '#8844ff', life: 45, maxLife: 45, alpha: 0.8
+          })
+        }
+        this.floatingTexts.push({
+          x: monster.x, y: monster.y - 20,
+          text: '💀', color: '#aa66ff', life: 80, maxLife: 80,
+          vy: -1.5, vx: 0, scale: 2
+        })
+        this.floatingTexts.push({
+          x: monster.x, y: monster.y + 10,
+          text: '💥 BOSS DOWN! 💥', color: '#aa66ff', life: 100, maxLife: 100,
+          vy: -1, vx: 0, scale: 1.2, isBold: true
+        })
+        break
+        
+      case 'phoenix':
+        // 凤凰：火焰重生爆炸+羽毛飞散
+        for (let i = 0; i < 30; i++) {
+          const angle = (Math.PI * 2 / 30) * i
+          const dist = 5 + Math.random() * 10
+          this.fireEffects.push({
+            x: monster.x + Math.cos(angle) * dist,
+            y: monster.y + Math.sin(angle) * dist,
+            size: 12 + Math.random() * 12,
+            life: 35, maxLife: 35,
+            vx: Math.cos(angle) * 2.5,
+            vy: Math.sin(angle) * 2.5 - 1.5
+          })
+        }
+        for (let i = 0; i < 10; i++) {
+          this.floatingTexts.push({
+            x: monster.x + (Math.random() - 0.5) * 40,
+            y: monster.y + (Math.random() - 0.5) * 30,
+            text: '🪶', color: '#ff8800', life: 50, maxLife: 50,
+            vy: -1 + Math.random(), vx: (Math.random() - 0.5) * 2, scale: 0.8
+          })
+        }
+        this.floatingTexts.push({
+          x: monster.x, y: monster.y - 20,
+          text: '🔥', color: '#ff6600', life: 80, maxLife: 80,
+          vy: -1.5, vx: 0, scale: 2
+        })
+        this.floatingTexts.push({
+          x: monster.x, y: monster.y + 10,
+          text: '💥 BOSS DOWN! 💥', color: '#ffaa00', life: 100, maxLife: 100,
+          vy: -1, vx: 0, scale: 1.2, isBold: true
+        })
+        break
+      
       default:
         // 默认死亡特效
         this.createParticles(monster.x, monster.y, monster.bodyColor, 20)
@@ -1631,13 +1797,14 @@ Page({
     this.drawParticles()
     this.drawFloatingTexts()
     this.drawDraggingTower()
+    this.drawWaveHUD()
   },
 
   drawDecorations() {
     const ctx = this.ctx
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
     
-    // 背景纹理点（使用预生成的）
+    // 背景纹理点
     ctx.fillStyle = theme.grassColor
     if (this.grassDots) {
       this.grassDots.forEach(dot => {
@@ -1647,7 +1814,32 @@ Page({
       })
     }
     
-    // 装饰物（使用预生成的）
+    // 小草丛绘制
+    if (this.grassTufts) {
+      const time = Date.now() * 0.002
+      this.grassTufts.forEach(tuft => {
+        ctx.save()
+        ctx.strokeStyle = theme.grassColor.replace('0.15', '0.35').replace('0.1', '0.3').replace('0.08', '0.25')
+        ctx.lineWidth = 1.2
+        ctx.lineCap = 'round'
+        for (let i = 0; i < tuft.blades; i++) {
+          const angle = -Math.PI / 2 + (i - tuft.blades / 2) * 0.25
+          const sway = Math.sin(time + tuft.sway + i * 0.5) * 2
+          ctx.beginPath()
+          ctx.moveTo(tuft.x, tuft.y)
+          ctx.quadraticCurveTo(
+            tuft.x + Math.cos(angle) * tuft.height * 0.5 + sway,
+            tuft.y + Math.sin(angle) * tuft.height * 0.5,
+            tuft.x + Math.cos(angle) * tuft.height + sway * 1.5,
+            tuft.y + Math.sin(angle) * tuft.height
+          )
+          ctx.stroke()
+        }
+        ctx.restore()
+      })
+    }
+    
+    // 装饰物
     if (this.mapDecorations) {
       this.mapDecorations.forEach(d => {
         this.drawDecoration(ctx, d)
@@ -2958,6 +3150,55 @@ Page({
     }
   },
 
+  drawWaveHUD() {
+    const ctx = this.ctx
+    const level = this.data.level
+    const waveInLevel = this.data.waveInLevel
+    const totalWaves = this.data.totalWavesInLevel
+    const remaining = totalWaves - waveInLevel
+    
+    ctx.save()
+    
+    // 右上角波次信息面板
+    const panelX = CONFIG.canvasWidth - 8
+    const panelY = 6
+    const panelW = 95
+    const panelH = 38
+    
+    // 半透明背景
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
+    ctx.beginPath()
+    drawRoundRect(ctx, panelX - panelW, panelY, panelW, panelH, 6)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    
+    // 关卡标题
+    ctx.fillStyle = '#ffcc44'
+    ctx.font = 'bold 11px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(`第${level}关`, panelX - panelW / 2, panelY + 3)
+    
+    // 波次进度
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+    ctx.font = '9px Arial'
+    ctx.fillText(`${waveInLevel}/${totalWaves}波  剩${remaining}波`, panelX - panelW / 2, panelY + 18)
+    
+    // 波次进度条
+    const barX = panelX - panelW + 6
+    const barY = panelY + 30
+    const barW = panelW - 12
+    const barH = 3
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'
+    ctx.fillRect(barX, barY, barW, barH)
+    ctx.fillStyle = '#ffcc44'
+    ctx.fillRect(barX, barY, barW * (waveInLevel / totalWaves), barH)
+    
+    ctx.restore()
+  },
+
   drawMonsters() {
     this.monsters.forEach(monster => {
       const ctx = this.ctx
@@ -3152,30 +3393,92 @@ Page({
     
     switch (monster.type) {
       case 'slime':
-        // 史莱姆 - 弹性球体
-        ctx.fillStyle = config.bodyColor
+        // 史莱姆 - 果冻质感水滴体
+        const slimeSquash = Math.sin(monster.animFrame * 0.5)
+        const sw = size + slimeSquash * 2
+        const sh = size - slimeSquash * 1.5
+        
+        // 身体 - 水滴形+渐变
+        ctx.save()
+        const slimeGrad = ctx.createRadialGradient(
+          monster.x - 3, monster.y - 4, 0, 
+          monster.x, monster.y, sw
+        )
+        slimeGrad.addColorStop(0, '#aaffaa')
+        slimeGrad.addColorStop(0.4, '#55ee55')
+        slimeGrad.addColorStop(0.7, '#33bb33')
+        slimeGrad.addColorStop(1, '#228822')
+        ctx.fillStyle = slimeGrad
         ctx.beginPath()
-        ctx.ellipse(monster.x, monster.y + bounce, size, size - bounce * 0.3, 0, 0, Math.PI * 2)
+        // 水滴形底部更宽
+        ctx.moveTo(monster.x, monster.y - sh)
+        ctx.bezierCurveTo(
+          monster.x + sw * 0.8, monster.y - sh * 0.7,
+          monster.x + sw * 1.1, monster.y + sh * 0.2,
+          monster.x + sw * 0.6, monster.y + sh * 0.7
+        )
+        ctx.quadraticCurveTo(monster.x, monster.y + sh + 2, monster.x - sw * 0.6, monster.y + sh * 0.7)
+        ctx.bezierCurveTo(
+          monster.x - sw * 1.1, monster.y + sh * 0.2,
+          monster.x - sw * 0.8, monster.y - sh * 0.7,
+          monster.x, monster.y - sh
+        )
+        ctx.closePath()
         ctx.fill()
-        ctx.strokeStyle = config.outlineColor
-        ctx.lineWidth = 2
+        ctx.strokeStyle = '#228822'
+        ctx.lineWidth = 1.5
         ctx.stroke()
-        // 眼睛
+        
+        // 内部气泡
+        const bubbleT = Date.now() * 0.003
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'
+        ctx.beginPath()
+        ctx.arc(monster.x + 3 + Math.sin(bubbleT) * 2, monster.y + 2, 3, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(monster.x - 4 + Math.sin(bubbleT + 1) * 1.5, monster.y + 5, 2, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // 大高光
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'
+        ctx.beginPath()
+        ctx.ellipse(monster.x - 4, monster.y - 5, 4.5, 3, -0.4, 0, Math.PI * 2)
+        ctx.fill()
+        // 小高光
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+        ctx.beginPath()
+        ctx.arc(monster.x - 3, monster.y - 6, 1.8, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // 眼睛 - 可爱的大眼
         ctx.fillStyle = '#fff'
         ctx.beginPath()
-        ctx.arc(monster.x - 4, monster.y - 3, 4, 0, Math.PI * 2)
-        ctx.arc(monster.x + 4, monster.y - 3, 4, 0, Math.PI * 2)
+        ctx.ellipse(monster.x - 4, monster.y - 2, 4.5, 5, 0, 0, Math.PI * 2)
         ctx.fill()
-        ctx.fillStyle = '#000'
         ctx.beginPath()
-        ctx.arc(monster.x - 3, monster.y - 3, 2, 0, Math.PI * 2)
-        ctx.arc(monster.x + 5, monster.y - 3, 2, 0, Math.PI * 2)
+        ctx.ellipse(monster.x + 4, monster.y - 2, 4.5, 5, 0, 0, Math.PI * 2)
         ctx.fill()
-        // 高光
-        ctx.fillStyle = 'rgba(255,255,255,0.5)'
+        // 瞳孔
+        ctx.fillStyle = '#114411'
         ctx.beginPath()
-        ctx.ellipse(monster.x - 5, monster.y - 6, 3, 2, -0.5, 0, Math.PI * 2)
+        ctx.arc(monster.x - 3, monster.y - 1, 2.5, 0, Math.PI * 2)
+        ctx.arc(monster.x + 5, monster.y - 1, 2.5, 0, Math.PI * 2)
         ctx.fill()
+        // 眼睛高光
+        ctx.fillStyle = '#fff'
+        ctx.beginPath()
+        ctx.arc(monster.x - 2, monster.y - 2.5, 1, 0, Math.PI * 2)
+        ctx.arc(monster.x + 6, monster.y - 2.5, 1, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // 小嘴
+        ctx.strokeStyle = '#226622'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.arc(monster.x + 0.5, monster.y + 4, 3, 0.1, Math.PI - 0.1)
+        ctx.stroke()
+        
+        ctx.restore()
         break
       
       case 'bat':
@@ -3459,7 +3762,303 @@ Page({
           ctx.fill()
         }
         break
+      
+      case 'treant':
+        // 树人王 - Boss
+        const treantSize = size * 1.2
+        // 树干身体
+        ctx.fillStyle = '#5a3520'
+        ctx.beginPath()
+        ctx.moveTo(monster.x - treantSize * 0.5, monster.y + treantSize)
+        ctx.lineTo(monster.x - treantSize * 0.6, monster.y - treantSize * 0.1)
+        ctx.quadraticCurveTo(monster.x - treantSize * 0.7, monster.y - treantSize * 0.5, monster.x - treantSize * 0.3, monster.y - treantSize * 0.6)
+        ctx.lineTo(monster.x + treantSize * 0.3, monster.y - treantSize * 0.6)
+        ctx.quadraticCurveTo(monster.x + treantSize * 0.7, monster.y - treantSize * 0.5, monster.x + treantSize * 0.6, monster.y - treantSize * 0.1)
+        ctx.lineTo(monster.x + treantSize * 0.5, monster.y + treantSize)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = config.outlineColor
+        ctx.lineWidth = 2.5
+        ctx.stroke()
+        // 树纹理
+        ctx.strokeStyle = '#3a2010'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(monster.x - 3, monster.y - treantSize * 0.3)
+        ctx.lineTo(monster.x - 5, monster.y + treantSize * 0.5)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(monster.x + 4, monster.y - treantSize * 0.2)
+        ctx.lineTo(monster.x + 2, monster.y + treantSize * 0.6)
+        ctx.stroke()
+        // 树冠
+        const leafSway = Math.sin(monster.animFrame * 0.3) * 2
+        ctx.fillStyle = config.bodyColor
+        ctx.beginPath()
+        ctx.arc(monster.x + leafSway, monster.y - treantSize * 0.7, treantSize * 0.8, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#4a8822'
+        ctx.beginPath()
+        ctx.arc(monster.x - treantSize * 0.4 + leafSway, monster.y - treantSize * 0.5, treantSize * 0.5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(monster.x + treantSize * 0.4 + leafSway, monster.y - treantSize * 0.5, treantSize * 0.5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = config.outlineColor
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.arc(monster.x + leafSway, monster.y - treantSize * 0.7, treantSize * 0.8, 0, Math.PI * 2)
+        ctx.stroke()
+        // 眼睛 - 在树干上
+        ctx.fillStyle = config.eyeColor
+        ctx.shadowBlur = 6
+        ctx.shadowColor = config.eyeColor
+        ctx.beginPath()
+        ctx.arc(monster.x - 7, monster.y - treantSize * 0.15, 4, 0, Math.PI * 2)
+        ctx.arc(monster.x + 7, monster.y - treantSize * 0.15, 4, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.shadowBlur = 0
+        // 瞳孔
+        ctx.fillStyle = '#114400'
+        ctx.beginPath()
+        ctx.arc(monster.x - 6, monster.y - treantSize * 0.15, 2, 0, Math.PI * 2)
+        ctx.arc(monster.x + 8, monster.y - treantSize * 0.15, 2, 0, Math.PI * 2)
+        ctx.fill()
+        // 树枝手臂
+        ctx.strokeStyle = '#5a3520'
+        ctx.lineWidth = 3
+        const armSway = Math.sin(monster.animFrame * 0.4) * 0.15
+        ctx.beginPath()
+        ctx.moveTo(monster.x - treantSize * 0.6, monster.y)
+        ctx.quadraticCurveTo(monster.x - treantSize * 1.2, monster.y - treantSize * 0.3 + armSway * 20, monster.x - treantSize * 1.0, monster.y + treantSize * 0.2)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(monster.x + treantSize * 0.6, monster.y)
+        ctx.quadraticCurveTo(monster.x + treantSize * 1.2, monster.y - treantSize * 0.3 - armSway * 20, monster.x + treantSize * 1.0, monster.y + treantSize * 0.2)
+        ctx.stroke()
+        // 根部
+        ctx.strokeStyle = '#4a2a15'
+        ctx.lineWidth = 2.5
+        ctx.beginPath()
+        ctx.moveTo(monster.x - treantSize * 0.4, monster.y + treantSize)
+        ctx.quadraticCurveTo(monster.x - treantSize * 0.7, monster.y + treantSize * 1.2, monster.x - treantSize * 0.9, monster.y + treantSize * 1.0)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(monster.x + treantSize * 0.4, monster.y + treantSize)
+        ctx.quadraticCurveTo(monster.x + treantSize * 0.7, monster.y + treantSize * 1.2, monster.x + treantSize * 0.9, monster.y + treantSize * 1.0)
+        ctx.stroke()
+        break
         
+      case 'lich':
+        // 巫妖 - Boss
+        const lichSize = size * 1.15
+        // 暗影光环
+        ctx.save()
+        ctx.globalAlpha = 0.3 + Math.sin(monster.animFrame * 0.3) * 0.1
+        const lichAura = ctx.createRadialGradient(monster.x, monster.y, lichSize * 0.3, monster.x, monster.y, lichSize * 1.5)
+        lichAura.addColorStop(0, 'rgba(85, 34, 170, 0.4)')
+        lichAura.addColorStop(1, 'rgba(85, 34, 170, 0)')
+        ctx.fillStyle = lichAura
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y, lichSize * 1.5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+        // 飘动的斗篷身体
+        const lichFloat = Math.sin(monster.animFrame * 0.4) * 3
+        ctx.fillStyle = config.bodyColor
+        ctx.beginPath()
+        ctx.moveTo(monster.x - lichSize * 0.6, monster.y - lichSize * 0.3 + lichFloat)
+        ctx.quadraticCurveTo(monster.x - lichSize * 0.8, monster.y + lichSize * 0.6, monster.x - lichSize * 0.5, monster.y + lichSize + lichFloat)
+        // 底部波浪
+        ctx.quadraticCurveTo(monster.x - lichSize * 0.2, monster.y + lichSize * 1.2 + lichFloat, monster.x, monster.y + lichSize * 0.9 + lichFloat)
+        ctx.quadraticCurveTo(monster.x + lichSize * 0.2, monster.y + lichSize * 1.2 + lichFloat, monster.x + lichSize * 0.5, monster.y + lichSize + lichFloat)
+        ctx.quadraticCurveTo(monster.x + lichSize * 0.8, monster.y + lichSize * 0.6, monster.x + lichSize * 0.6, monster.y - lichSize * 0.3 + lichFloat)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = config.outlineColor
+        ctx.lineWidth = 2
+        ctx.stroke()
+        // 头部 - 骷髅形
+        ctx.fillStyle = '#ccbbdd'
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y - lichSize * 0.4 + lichFloat, lichSize * 0.55, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = config.outlineColor
+        ctx.lineWidth = 2
+        ctx.stroke()
+        // 兜帽
+        ctx.fillStyle = '#3a1166'
+        ctx.beginPath()
+        ctx.moveTo(monster.x - lichSize * 0.65, monster.y - lichSize * 0.2 + lichFloat)
+        ctx.quadraticCurveTo(monster.x, monster.y - lichSize * 1.4 + lichFloat, monster.x + lichSize * 0.65, monster.y - lichSize * 0.2 + lichFloat)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = config.outlineColor
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+        // 眼睛 - 发光的青色眼窝
+        ctx.fillStyle = config.eyeColor
+        ctx.shadowBlur = 10
+        ctx.shadowColor = config.eyeColor
+        ctx.beginPath()
+        ctx.arc(monster.x - 6, monster.y - lichSize * 0.45 + lichFloat, 4, 0, Math.PI * 2)
+        ctx.arc(monster.x + 6, monster.y - lichSize * 0.45 + lichFloat, 4, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.shadowBlur = 0
+        // 眼内瞳
+        ctx.fillStyle = '#ffffff'
+        ctx.beginPath()
+        ctx.arc(monster.x - 5, monster.y - lichSize * 0.47 + lichFloat, 1.5, 0, Math.PI * 2)
+        ctx.arc(monster.x + 7, monster.y - lichSize * 0.47 + lichFloat, 1.5, 0, Math.PI * 2)
+        ctx.fill()
+        // 法杖
+        ctx.strokeStyle = '#6644aa'
+        ctx.lineWidth = 3
+        ctx.beginPath()
+        ctx.moveTo(monster.x + lichSize * 0.7, monster.y - lichSize * 0.5 + lichFloat)
+        ctx.lineTo(monster.x + lichSize * 0.5, monster.y + lichSize * 0.9 + lichFloat)
+        ctx.stroke()
+        // 法杖顶端宝珠
+        ctx.fillStyle = '#aa66ff'
+        ctx.shadowBlur = 12
+        ctx.shadowColor = '#aa66ff'
+        ctx.beginPath()
+        ctx.arc(monster.x + lichSize * 0.7, monster.y - lichSize * 0.55 + lichFloat, 5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.shadowBlur = 0
+        // 漂浮的灵魂粒子
+        const soulT = Date.now() * 0.002
+        for (let i = 0; i < 3; i++) {
+          const sAngle = soulT + i * Math.PI * 2 / 3
+          const sx = monster.x + Math.cos(sAngle) * lichSize * 1.0
+          const sy = monster.y + Math.sin(sAngle) * lichSize * 0.6 + lichFloat
+          ctx.globalAlpha = 0.4 + Math.sin(soulT + i) * 0.2
+          ctx.fillStyle = '#bb88ff'
+          ctx.beginPath()
+          ctx.arc(sx, sy, 3, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.globalAlpha = 1
+        break
+        
+      case 'phoenix':
+        // 凤凰 - Boss
+        const phSize = size * 1.2
+        // 火焰光环
+        ctx.save()
+        const fireAura = ctx.createRadialGradient(monster.x, monster.y, phSize * 0.3, monster.x, monster.y, phSize * 1.6)
+        fireAura.addColorStop(0, 'rgba(255, 136, 0, 0.3)')
+        fireAura.addColorStop(0.5, 'rgba(255, 68, 0, 0.15)')
+        fireAura.addColorStop(1, 'rgba(255, 0, 0, 0)')
+        ctx.fillStyle = fireAura
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y, phSize * 1.6, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+        // 身体
+        ctx.fillStyle = config.bodyColor
+        ctx.beginPath()
+        ctx.ellipse(monster.x, monster.y, phSize * 0.7, phSize * 0.55, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = config.outlineColor
+        ctx.lineWidth = 2.5
+        ctx.stroke()
+        // 渐变覆盖
+        const phGrad = ctx.createRadialGradient(monster.x - 3, monster.y - 3, 0, monster.x, monster.y, phSize * 0.7)
+        phGrad.addColorStop(0, 'rgba(255, 255, 100, 0.4)')
+        phGrad.addColorStop(0.5, 'rgba(255, 200, 0, 0.2)')
+        phGrad.addColorStop(1, 'rgba(255, 100, 0, 0)')
+        ctx.fillStyle = phGrad
+        ctx.beginPath()
+        ctx.ellipse(monster.x, monster.y, phSize * 0.7, phSize * 0.55, 0, 0, Math.PI * 2)
+        ctx.fill()
+        // 翅膀 - 火焰状展开
+        const wingFlap2 = Math.sin(monster.animFrame * 0.6) * 0.3
+        ctx.fillStyle = '#ffaa00'
+        // 左翅
+        ctx.beginPath()
+        ctx.moveTo(monster.x - phSize * 0.5, monster.y)
+        ctx.quadraticCurveTo(monster.x - phSize * 1.5, monster.y - phSize * (0.8 + wingFlap2), monster.x - phSize * 1.8, monster.y - phSize * 0.2)
+        ctx.quadraticCurveTo(monster.x - phSize * 1.6, monster.y - phSize * (1.0 + wingFlap2), monster.x - phSize * 1.2, monster.y + phSize * 0.1)
+        ctx.quadraticCurveTo(monster.x - phSize * 0.9, monster.y + phSize * 0.3, monster.x - phSize * 0.4, monster.y + phSize * 0.2)
+        ctx.closePath()
+        ctx.fill()
+        // 右翅
+        ctx.beginPath()
+        ctx.moveTo(monster.x + phSize * 0.5, monster.y)
+        ctx.quadraticCurveTo(monster.x + phSize * 1.5, monster.y - phSize * (0.8 + wingFlap2), monster.x + phSize * 1.8, monster.y - phSize * 0.2)
+        ctx.quadraticCurveTo(monster.x + phSize * 1.6, monster.y - phSize * (1.0 + wingFlap2), monster.x + phSize * 1.2, monster.y + phSize * 0.1)
+        ctx.quadraticCurveTo(monster.x + phSize * 0.9, monster.y + phSize * 0.3, monster.x + phSize * 0.4, monster.y + phSize * 0.2)
+        ctx.closePath()
+        ctx.fill()
+        // 翅膀火焰尖端
+        ctx.fillStyle = '#ff4400'
+        ctx.beginPath()
+        ctx.moveTo(monster.x - phSize * 1.6, monster.y - phSize * 0.1)
+        ctx.lineTo(monster.x - phSize * 2.0, monster.y - phSize * (0.5 + wingFlap2 * 0.5))
+        ctx.lineTo(monster.x - phSize * 1.4, monster.y - phSize * 0.3)
+        ctx.closePath()
+        ctx.fill()
+        ctx.beginPath()
+        ctx.moveTo(monster.x + phSize * 1.6, monster.y - phSize * 0.1)
+        ctx.lineTo(monster.x + phSize * 2.0, monster.y - phSize * (0.5 + wingFlap2 * 0.5))
+        ctx.lineTo(monster.x + phSize * 1.4, monster.y - phSize * 0.3)
+        ctx.closePath()
+        ctx.fill()
+        // 头部
+        ctx.fillStyle = config.bodyColor
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y - phSize * 0.45, phSize * 0.4, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = config.outlineColor
+        ctx.lineWidth = 2
+        ctx.stroke()
+        // 头冠火焰
+        ctx.fillStyle = '#ffcc00'
+        ctx.beginPath()
+        ctx.moveTo(monster.x - 5, monster.y - phSize * 0.7)
+        ctx.lineTo(monster.x - 3, monster.y - phSize * 1.1)
+        ctx.lineTo(monster.x, monster.y - phSize * 0.75)
+        ctx.lineTo(monster.x + 3, monster.y - phSize * 1.2)
+        ctx.lineTo(monster.x + 5, monster.y - phSize * 0.7)
+        ctx.closePath()
+        ctx.fill()
+        // 眼睛
+        ctx.fillStyle = config.eyeColor
+        ctx.shadowBlur = 8
+        ctx.shadowColor = '#ffffff'
+        ctx.beginPath()
+        ctx.arc(monster.x - 5, monster.y - phSize * 0.5, 3.5, 0, Math.PI * 2)
+        ctx.arc(monster.x + 5, monster.y - phSize * 0.5, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.shadowBlur = 0
+        // 喙
+        ctx.fillStyle = '#cc6600'
+        ctx.beginPath()
+        ctx.moveTo(monster.x - 2, monster.y - phSize * 0.35)
+        ctx.lineTo(monster.x, monster.y - phSize * 0.2)
+        ctx.lineTo(monster.x + 2, monster.y - phSize * 0.35)
+        ctx.closePath()
+        ctx.fill()
+        // 尾巴火焰
+        const tailWave = Math.sin(monster.animFrame * 0.5) * 3
+        ctx.fillStyle = '#ff6600'
+        ctx.beginPath()
+        ctx.moveTo(monster.x, monster.y + phSize * 0.4)
+        ctx.quadraticCurveTo(monster.x + tailWave, monster.y + phSize * 1.2, monster.x - 5 + tailWave, monster.y + phSize * 1.6)
+        ctx.quadraticCurveTo(monster.x + tailWave * 0.5, monster.y + phSize * 1.0, monster.x + 5 + tailWave, monster.y + phSize * 1.5)
+        ctx.quadraticCurveTo(monster.x - tailWave * 0.5, monster.y + phSize * 0.8, monster.x, monster.y + phSize * 0.4)
+        ctx.closePath()
+        ctx.fill()
+        ctx.fillStyle = '#ffcc00'
+        ctx.beginPath()
+        ctx.moveTo(monster.x, monster.y + phSize * 0.45)
+        ctx.quadraticCurveTo(monster.x + tailWave * 0.5, monster.y + phSize * 0.9, monster.x + tailWave, monster.y + phSize * 1.2)
+        ctx.quadraticCurveTo(monster.x, monster.y + phSize * 0.7, monster.x, monster.y + phSize * 0.45)
+        ctx.closePath()
+        ctx.fill()
+        break
+      
       default:
         // 默认绘制 - 圆形
         ctx.fillStyle = config.bodyColor || '#888'
@@ -4273,7 +4872,7 @@ Page({
       
       const dx = this.dragX - tower.x
       const dy = this.dragY - tower.y
-      if (Math.sqrt(dx * dx + dy * dy) < 35) {
+      if (Math.sqrt(dx * dx + dy * dy) < 45) {
         if (tower.type === this.draggingTower.type && 
             tower.level === this.draggingTower.level && 
             tower.level < 5) {
@@ -4310,19 +4909,21 @@ Page({
 
   // 获取仓库格子索引
   getInventorySlotIndex(clientX, clientY) {
-    // 使用缓存的仓库位置，如果没有则尝试获取
+    // 每次拖动开始时刷新缓存
     if (!this.inventoryRect) {
       wx.createSelectorQuery().select('.inventory-grid').boundingClientRect((rect) => {
         if (rect) this.inventoryRect = rect
       }).exec()
-      return null  // 第一次调用时返回null，等待获取
+      return null
     }
     
     const rect = this.inventoryRect
-    const relX = clientX - rect.left
-    const relY = clientY - rect.top
+    // 加大容差范围
+    const tolerance = 8
+    const relX = clientX - rect.left + tolerance
+    const relY = clientY - rect.top + tolerance
     
-    if (relX < 0 || relY < 0 || relX > rect.width || relY > rect.height) {
+    if (relX < -tolerance || relY < -tolerance || relX > rect.width + tolerance * 2 || relY > rect.height + tolerance * 2) {
       return null
     }
     
@@ -4331,9 +4932,10 @@ Page({
     const scale = windowWidth / 375
     const slotSize = 50 * scale  // 100rpx
     const gap = 3 * scale        // 6rpx
+    const cellTotal = slotSize + gap
     
-    const col = Math.floor(relX / (slotSize + gap))
-    const row = Math.floor(relY / (slotSize + gap))
+    const col = Math.floor(relX / cellTotal)
+    const row = Math.floor(relY / cellTotal)
     
     if (col < 0 || col >= INVENTORY_COLS || row < 0 || row >= INVENTORY_ROWS) {
       return null
@@ -4598,6 +5200,10 @@ Page({
     const newWave = this.data.wave + 1
     const waveBonus = 30 + newWave * 15
     
+    // 计算关卡和关内波次
+    const newLevel = Math.ceil(newWave / 10)
+    const newWaveInLevel = ((newWave - 1) % 10) + 1
+    
     this.setData({ 
       gold: this.data.gold + waveBonus,
       score: this.data.score + waveBonus * 5
@@ -4656,7 +5262,12 @@ Page({
     }
     
     setTimeout(() => {
-      this.setData({ wave: newWave })
+      this.setData({ 
+        wave: newWave,
+        level: newLevel,
+        waveInLevel: newWaveInLevel,
+        totalWavesInLevel: 10
+      })
       this.generateWave(newWave)
     }, 3500)
   },
