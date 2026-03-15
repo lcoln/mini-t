@@ -23,13 +23,74 @@
     </view>
   </view>
 
+  <view class="battle-banner" wx:if="{{gameState !== 'prep'}}">
+    <view class="banner-chip {{selectedBlessingKey ? 'active' : ''}}">
+      <text>{{selectedBlessingIcon}} {{selectedBlessingName}}</text>
+    </view>
+    <view class="banner-chip banner-chip-subtle">
+      <text>强化 {{runBuffSummary}}</text>
+    </view>
+    <text class="banner-tip">拖动同塔合成升级 · 第{{nextSupplyWave}}波补给</text>
+  </view>
+
+  <!-- 战前准备条 -->
+  <view class="prep-hud" wx:if="{{gameState === 'prep'}}">
+    <view class="prep-hud-top">
+      <view class="prep-copy">
+        <text class="prep-hud-eyebrow">开波准备</text>
+        <text class="prep-hud-title">{{selectedBlessingKey ? '继续放 1 座塔，然后开第一波' : '先选 1 个战术祝福'}}</text>
+      </view>
+      <view class="prep-progress {{fieldTowerCount > 0 ? 'ready' : ''}}">
+        <text>{{fieldTowerCount > 0 ? '已布阵 1/1' : '待布阵 0/1'}}</text>
+      </view>
+    </view>
+
+    <view class="prep-step-line">
+      <text class="prep-step {{selectedBlessingKey ? 'done' : 'active'}}">1 选祝福</text>
+      <text class="prep-step {{selectedBlessingKey && fieldTowerCount === 0 ? 'active' : (fieldTowerCount > 0 ? 'done' : '')}}">2 放塔</text>
+      <text class="prep-step {{canStartBattle ? 'active ready' : ''}}">3 开波</text>
+    </view>
+
+    <view class="blessing-quick-list {{selectedBlessingKey ? 'compact' : ''}}">
+      <view
+        class="blessing-quick-card {{selectedBlessingKey === item.key ? 'selected' : ''}}"
+        wx:for="{{blessingOptions}}"
+        wx:key="key"
+        data-key="{{item.key}}"
+        bindtap="selectBlessing"
+      >
+        <text class="blessing-quick-icon">{{item.icon}}</text>
+        <text class="blessing-quick-name">{{item.name}}</text>
+        <text class="blessing-quick-subtitle" wx:if="{{!selectedBlessingKey}}">{{item.subtitle}}</text>
+      </view>
+    </view>
+
+    <view class="prep-footer compact">
+      <text class="prep-footnote {{canStartBattle ? 'ready' : ''}}">{{canStartBattle ? '已准备好，直接开第一波' : prepActionHint}}</text>
+      <button class="btn primary prep-start-btn {{canStartBattle ? '' : 'disabled'}}" bindtap="startBattle" disabled="{{!canStartBattle}}">开始第一波</button>
+    </view>
+  </view>
+
   <!-- 游戏Canvas -->
-  <canvas 
-    type="2d" 
-    id="gameCanvas" 
-    class="game-canvas"
-    bindtouchstart="onCanvasTouchStart"
-  ></canvas>
+  <view class="battlefield-wrap {{gameState === 'prep' ? 'prep-mode' : ''}}">
+    <canvas 
+      type="2d" 
+      id="gameCanvas" 
+      class="game-canvas {{gameState === 'prep' ? 'prep-canvas' : ''}}"
+      bindtouchstart="onCanvasTouchStart"
+    ></canvas>
+    <view class="prep-slot-layer" wx:if="{{gameState === 'prep'}}">
+      <view
+        class="prep-slot {{item.occupied ? 'occupied' : ''}} {{selectedInventoryIndex !== -1 && !item.occupied ? 'selectable' : ''}}"
+        wx:for="{{prepTowerSlots}}"
+        wx:key="key"
+        data-row="{{item.row}}"
+        data-col="{{item.col}}"
+        bindtap="handlePrepSlotTap"
+        style="left: {{item.left}}px; top: {{item.top}}px;"
+      ></view>
+    </view>
+  </view>
 
   <!-- 合成提示 -->
   <view class="merge-hint" wx:if="{{showMergeHint}}">
@@ -48,40 +109,36 @@
     </view>
     
     <view class="inventory-hint">
-      <text>拖动塔到上方格子放置 | 相同塔合成升级</text>
+      <text>点选或拖拽放置，相同塔可合成</text>
     </view>
     
     <view class="inventory-grid">
       <view 
-        class="inventory-slot {{item ? 'has-tower tower-' + item.type : 'empty'}} {{draggingSlotIndex === index ? 'dragging' : ''}} {{mergeTargetSlotIndex === index ? 'merge-target' : ''}}"
+        class="inventory-slot {{item ? 'has-tower tower-' + item.type : 'empty'}} {{draggingSlotIndex === index ? 'dragging' : ''}} {{mergeTargetSlotIndex === index ? 'merge-target' : ''}} {{selectedInventoryIndex === index ? 'selected' : ''}}"
         wx:for="{{inventorySlots}}"
         wx:key="index"
         data-index="{{index}}"
         catchtouchstart="onInventoryTouchStart"
+        bindtap="handleInventorySlotTap"
       >
         <block wx:if="{{item}}">
           <view class="slot-tower slot-tower-{{item.type}}">
-            <!-- 火焰塔 -->
             <view wx:if="{{item.type === 'fire'}}" class="tower-shape fire-shape">
               <view class="fire-body"></view>
               <view class="fire-flame"></view>
             </view>
-            <!-- 寒冰塔 -->
             <view wx:elif="{{item.type === 'ice'}}" class="tower-shape ice-shape">
               <view class="ice-crystal"></view>
               <view class="ice-shine"></view>
             </view>
-            <!-- 自然塔 -->
             <view wx:elif="{{item.type === 'nature'}}" class="tower-shape nature-shape">
               <view class="nature-trunk"></view>
               <view class="nature-canopy"></view>
             </view>
-            <!-- 奥术塔 -->
             <view wx:elif="{{item.type === 'arcane'}}" class="tower-shape arcane-shape">
               <view class="arcane-base"></view>
               <view class="arcane-gem"></view>
             </view>
-            <!-- 闪电塔 -->
             <view wx:elif="{{item.type === 'lightning'}}" class="tower-shape lightning-shape">
               <view class="lightning-coil"></view>
               <view class="lightning-orb"></view>
@@ -101,7 +158,7 @@
     </view>
   </view>
 
-  <!-- 拖动浮层（跟随手指，用于仓库区域拖动时的视觉反馈） -->
+  <!-- 拖动浮层 -->
   <view 
     class="drag-floating-tower" 
     wx:if="{{dragFloating}}"
@@ -112,6 +169,26 @@
     </view>
     <view class="drag-float-level">
       <text>Lv.{{dragFloatingLevel}}</text>
+    </view>
+  </view>
+
+  <view class="overlay" wx:if="{{showWaveChoice}}">
+    <view class="panel supply-panel">
+      <text class="panel-title">战术补给</text>
+      <text class="supply-subtitle">{{waveChoiceTitle}}</text>
+      <view class="supply-list">
+        <view
+          class="supply-card"
+          wx:for="{{waveChoiceOptions}}"
+          wx:key="key"
+          data-key="{{item.key}}"
+          bindtap="applyWaveChoice"
+        >
+          <text class="supply-icon">{{item.icon}}</text>
+          <text class="supply-name">{{item.title}}</text>
+          <text class="supply-desc">{{item.description}}</text>
+        </view>
+      </view>
     </view>
   </view>
 

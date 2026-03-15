@@ -1,44 +1,69 @@
 <view class="container">
+  <view class="orb orb-1"></view>
+  <view class="orb orb-2"></view>
+  <view class="grid-overlay"></view>
+
   <view class="title-section">
+    <view class="badge-row">
+      <text class="hero-badge">3分钟一局</text>
+      <text class="hero-badge">拖拽合成</text>
+      <text class="hero-badge">每3波补给</text>
+    </view>
     <text class="main-title">元素守护者</text>
     <text class="sub-title">ELEMENT GUARDIAN</text>
-    <view class="title-glow"></view>
+    <text class="hero-desc">选祝福、摆防线、每3波选强化，三分钟一局。</text>
   </view>
 
   <view class="menu-section">
     <button class="game-btn start-btn" bindtap="startGame">
-      <text class="btn-text">开始游戏</text>
+      <text class="btn-text">开始守护</text>
       <text class="btn-icon">⚔️</text>
     </button>
-    
+
     <view class="stats-panel">
       <view class="stat-item">
-        <text class="stat-label">最高分数</text>
+        <view>
+          <text class="stat-label">最高分数</text>
+          <text class="stat-caption">累计击破与奖励分</text>
+        </view>
         <text class="stat-value">{{highScore}}</text>
       </view>
       <view class="stat-item">
-        <text class="stat-label">最高波数</text>
+        <view>
+          <text class="stat-label">最高波数</text>
+          <text class="stat-caption">你曾守到第几波</text>
+        </view>
         <text class="stat-value">{{maxWave}}</text>
       </view>
     </view>
 
-    <view class="feature-list">
-      <view class="feature-item">
-        <text class="feature-icon">🏰</text>
-        <text class="feature-text">放置防御塔抵御怪物</text>
+    <view class="feature-section-head compact">
+      <view>
+        <text class="feature-section-title">3步上手</text>
+        <text class="feature-section-desc">不是模式选择，开局就按这三步打。</text>
       </view>
-      <view class="feature-item">
-        <text class="feature-icon">✨</text>
-        <text class="feature-text">合成相同塔获得更强塔</text>
+    </view>
+
+    <view class="feature-grid compact tutorial-grid">
+      <view class="feature-card compact tutorial-card">
+        <text class="tutorial-step-no">1</text>
+        <text class="feature-title">先选祝福</text>
+        <text class="feature-text">定本局流派。</text>
       </view>
-      <view class="feature-item">
-        <text class="feature-icon">🔮</text>
-        <text class="feature-text">多种元素塔属性克制</text>
+      <view class="feature-card compact tutorial-card">
+        <text class="tutorial-step-no">2</text>
+        <text class="feature-title">再摆塔合成</text>
+        <text class="feature-text">同塔升级。</text>
+      </view>
+      <view class="feature-card compact tutorial-card">
+        <text class="tutorial-step-no">3</text>
+        <text class="feature-title">清波选强化</text>
+        <text class="feature-text">每3波二选一补给。</text>
       </view>
     </view>
   </view>
 
   <view class="footer">
-    <text class="version">v1.0 · Tower Defense & Merge</text>
+    <text class="version">v1.1 · Tactical Merge Tower Defense</text>
   </view>
 </view>

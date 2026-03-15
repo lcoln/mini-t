@@ -21,6 +21,22 @@ const CONFIG = {
   spawnInterval: 1800
 }
 
+const PERFORMANCE_LIMITS = {
+  particles: 110,
+  floatingTexts: 26,
+  lightningEffects: 70,
+  fireEffects: 90,
+  iceEffects: 60,
+  poisonEffects: 70,
+  arcaneEffects: 70,
+  mergeEffects: 24,
+  trailPoints: 5
+}
+
+const DRAG_UI_INTERVAL = 32
+const IDLE_RENDER_INTERVAL = 120
+const MIN_SUMMON_COST = 8
+
 // 塔类型配置
 const TOWER_TYPES = {
   fire: {
@@ -83,6 +99,109 @@ const TOWER_TYPES = {
     description: '连锁：电击周围3个敌人',
     projectileType: 'lightning'
   }
+}
+
+const BLESSINGS = {
+  ember: {
+    key: 'ember',
+    icon: '🔥',
+    name: '烈焰纹章',
+    subtitle: '高爆发开局',
+    description: '额外获得 1 座火焰塔，所有火焰塔伤害 +2，开局金币 +20。',
+    towerType: 'fire',
+    extraTowerType: 'fire',
+    damageBonus: 2,
+    bonusGold: 20,
+    color: '#ff8a3d'
+  },
+  storm: {
+    key: 'storm',
+    icon: '⚡',
+    name: '风暴线圈',
+    subtitle: '快节奏清场',
+    description: '额外获得 1 座闪电塔，所有闪电塔攻速提升，开局金币 +15。',
+    towerType: 'lightning',
+    extraTowerType: 'lightning',
+    attackSpeedBonus: 180,
+    bonusGold: 15,
+    color: '#ffe066'
+  },
+  grove: {
+    key: 'grove',
+    icon: '🌿',
+    name: '森灵古种',
+    subtitle: '稳健续航开局',
+    description: '额外获得 1 座自然塔，所有自然塔射程 +12，生命 +4。',
+    towerType: 'nature',
+    extraTowerType: 'nature',
+    rangeBonus: 12,
+    bonusLives: 4,
+    color: '#69f0ae'
+  }
+}
+
+const SUPPLY_REWARDS = {
+  forge: {
+    key: 'forge',
+    icon: '🔧',
+    title: '火力铸造',
+    description: '全塔伤害 +1，本局持续生效。',
+    type: 'damage',
+    amount: 1
+  },
+  overclock: {
+    key: 'overclock',
+    icon: '⚙️',
+    title: '超频线圈',
+    description: '全塔攻速提升，攻击间隔 -90ms。',
+    type: 'attackSpeed',
+    amount: 90
+  },
+  radar: {
+    key: 'radar',
+    icon: '📡',
+    title: '追猎雷达',
+    description: '全塔射程 +8，补足压线能力。',
+    type: 'range',
+    amount: 8
+  },
+  cache: {
+    key: 'cache',
+    icon: '💰',
+    title: '金币补给',
+    description: '立刻获得 80 金币，快速补经济。',
+    type: 'gold',
+    amount: 80
+  },
+  repair: {
+    key: 'repair',
+    icon: '❤️',
+    title: '紧急修复',
+    description: '立刻恢复 3 点生命。',
+    type: 'lives',
+    amount: 3
+  },
+  airdrop: {
+    key: 'airdrop',
+    icon: '📦',
+    title: '元素空投',
+    description: '获得 1 座与当前祝福同流派的塔。',
+    type: 'tower'
+  },
+  discount: {
+    key: 'discount',
+    icon: '🛒',
+    title: '招募折扣',
+    description: '召唤价格 -2，最低 8 金币。',
+    type: 'summonCost',
+    amount: 2
+  }
+}
+
+const SUPPLY_SYNERGY = {
+  ember: 'forge',
+  storm: 'overclock',
+  grove: 'radar'
 }
 
 // 怪物类型配置 - 添加独特外观
@@ -303,7 +422,7 @@ Page({
     score: 0,
     gold: 100,
     lives: 20,
-    gameState: 'playing',
+    gameState: 'prep',
     showMergeHint: false,
     isNewRecord: false,
     gridOffsetX: 0,
@@ -320,7 +439,21 @@ Page({
     draggingSlotIndex: -1,
     mergeTargetSlotIndex: -1,
     // 当前地形主题
-    currentTheme: 'forest'
+    currentTheme: 'forest',
+    selectedBlessingKey: '',
+    selectedBlessingName: '尚未选择战术祝福',
+    selectedBlessingIcon: '✨',
+    blessingOptions: Object.values(BLESSINGS),
+    fieldTowerCount: 0,
+    canStartBattle: false,
+    selectedInventoryIndex: -1,
+    prepTowerSlots: [],
+    prepActionHint: '先选祝福',
+    runBuffSummary: '未激活',
+    nextSupplyWave: 3,
+    showWaveChoice: false,
+    waveChoiceTitle: '',
+    waveChoiceOptions: []
   },
 
   canvas: null,
@@ -350,6 +483,19 @@ Page({
   spawnIndex: 0,
   lastSpawnTime: 0,
   waveComplete: false,
+  blessingApplied: false,
+  scheduledTimeouts: [],
+  pendingWaveAdvance: null,
+  runDamageBonus: 0,
+  runRangeBonus: 0,
+  runAttackSpeedBonus: 0,
+  needsRender: true,
+  lastIdleRenderAt: 0,
+  lastDragUiUpdateAt: 0,
+  lastMergeHintVisible: false,
+  lastMergeHintSlotIndex: -1,
+  inventoryRect: null,
+  windowWidth: 375,
   
   // 拖动 - 优化
   draggingTower: null,
@@ -376,6 +522,17 @@ Page({
     this.initCanvas()
   },
 
+  onShow() {
+    if (this.canvas && !this.gameLoop) {
+      this.startGame()
+      this.requestRender()
+    }
+  },
+
+  onHide() {
+    this.stopGame()
+  },
+
   onUnload() {
     this.stopGame()
   },
@@ -392,34 +549,252 @@ Page({
         
         const systemInfo = wx.getWindowInfo()
         const dpr = systemInfo.pixelRatio || 2
+        this.windowWidth = systemInfo.windowWidth || 375
         canvas.width = res[0].width * dpr
         canvas.height = res[0].height * dpr
         ctx.scale(dpr, dpr)
         
         this.canvas = canvas
         this.ctx = ctx
-        CONFIG.canvasWidth = res[0].width
-        CONFIG.canvasHeight = res[0].height
-        
-        const gridWidth = CONFIG.gridCols * CONFIG.cellSize
-        const gridHeight = CONFIG.gridRows * CONFIG.cellSize
-        this.setData({
-          gridOffsetX: (CONFIG.canvasWidth - gridWidth) / 2,
-          gridOffsetY: (CONFIG.canvasHeight - gridHeight) / 2  // 垂直居中
-        })
-        
-        // 获取canvas在页面中的位置
-        wx.createSelectorQuery().select('#gameCanvas').boundingClientRect((rect) => {
-          this.setData({ canvasRect: rect })
-          this.cachedCanvasRect = rect  // 缓存供拖动使用
-        }).exec()
+        this.updateCanvasMetrics(res[0].width, res[0].height)
+        this.refreshCanvasRect()
+        this.refreshInventoryRect()
         
         this.initGame()
         this.startGame()
       })
   },
 
+  updateCanvasMetrics(width, height) {
+    CONFIG.canvasWidth = width
+    CONFIG.canvasHeight = height
+
+    const horizontalPadding = 14
+    const verticalPadding = 10
+    CONFIG.cellSize = Math.max(28, Math.floor(Math.min(
+      (CONFIG.canvasWidth - horizontalPadding * 2) / CONFIG.gridCols,
+      (CONFIG.canvasHeight - verticalPadding * 2) / CONFIG.gridRows
+    )))
+
+    const gridWidth = CONFIG.gridCols * CONFIG.cellSize
+    const gridHeight = CONFIG.gridRows * CONFIG.cellSize
+    this.setData({
+      gridOffsetX: (CONFIG.canvasWidth - gridWidth) / 2,
+      gridOffsetY: (CONFIG.canvasHeight - gridHeight) / 2
+    })
+    this.requestRender()
+  },
+
+  requestRender() {
+    this.needsRender = true
+  },
+
+  refreshCanvasRect() {
+    wx.nextTick(() => {
+      wx.createSelectorQuery().select('#gameCanvas').boundingClientRect((rect) => {
+        if (!rect) return
+        this.cachedCanvasRect = rect
+        this.setData({ canvasRect: rect })
+      }).exec()
+    })
+  },
+
+  refreshInventoryRect() {
+    wx.nextTick(() => {
+      wx.createSelectorQuery().select('.inventory-grid').boundingClientRect((rect) => {
+        if (!rect) return
+        this.inventoryRect = rect
+      }).exec()
+    })
+  },
+
+  scheduleTimeout(callback, delay) {
+    const timeoutId = setTimeout(() => {
+      this.scheduledTimeouts = this.scheduledTimeouts.filter((id) => id !== timeoutId)
+      callback()
+    }, delay)
+    this.scheduledTimeouts.push(timeoutId)
+    return timeoutId
+  },
+
+  clearScheduledTimeouts() {
+    this.scheduledTimeouts.forEach((timeoutId) => clearTimeout(timeoutId))
+    this.scheduledTimeouts = []
+    this.pendingWaveAdvance = null
+  },
+
+  trimEffectQueue(queueName, limit) {
+    if (!this[queueName] || this[queueName].length <= limit) return
+    this[queueName].splice(0, this[queueName].length - limit)
+  },
+
+  enforcePerformanceCaps() {
+    this.trimEffectQueue('particles', PERFORMANCE_LIMITS.particles)
+    this.trimEffectQueue('floatingTexts', PERFORMANCE_LIMITS.floatingTexts)
+    this.trimEffectQueue('lightningEffects', PERFORMANCE_LIMITS.lightningEffects)
+    this.trimEffectQueue('fireEffects', PERFORMANCE_LIMITS.fireEffects)
+    this.trimEffectQueue('iceEffects', PERFORMANCE_LIMITS.iceEffects)
+    this.trimEffectQueue('poisonEffects', PERFORMANCE_LIMITS.poisonEffects)
+    this.trimEffectQueue('arcaneEffects', PERFORMANCE_LIMITS.arcaneEffects)
+    this.trimEffectQueue('mergeEffects', PERFORMANCE_LIMITS.mergeEffects)
+
+    this.projectiles.forEach((proj) => {
+      if (proj.trail.length > PERFORMANCE_LIMITS.trailPoints) {
+        proj.trail.splice(0, proj.trail.length - PERFORMANCE_LIMITS.trailPoints)
+      }
+    })
+  },
+
+  getNextSupplyWave(baseWave = this.data.wave) {
+    return Math.ceil(baseWave / 3) * 3
+  },
+
+  updateRunBuffSummary(baseWave = this.data.wave) {
+    const summaryParts = []
+    if (this.runDamageBonus > 0) summaryParts.push(`伤害+${this.runDamageBonus}`)
+    if (this.runAttackSpeedBonus > 0) summaryParts.push(`攻速+${this.runAttackSpeedBonus}ms`)
+    if (this.runRangeBonus > 0) summaryParts.push(`射程+${this.runRangeBonus}`)
+
+    this.setData({
+      runBuffSummary: summaryParts.length ? summaryParts.join(' / ') : '未激活',
+      nextSupplyWave: this.getNextSupplyWave(baseWave)
+    })
+  },
+
+  refreshAllTowerStats(blessingKey = this.data.selectedBlessingKey) {
+    this.inventory = this.inventory.map((tower) => ({
+      ...tower,
+      ...this.getTowerStatsForLevel(tower.type, tower.level, 'inventory', blessingKey)
+    }))
+
+    this.towers = this.towers.map((tower) => ({
+      ...tower,
+      ...this.getTowerStatsForLevel(tower.type, tower.level, 'field', blessingKey),
+      lastAttack: tower.lastAttack || 0
+    }))
+
+    this.updateInventoryDisplay()
+    this.requestRender()
+  },
+
+  buildWaveChoiceOptions() {
+    const selectedBlessingKey = this.data.selectedBlessingKey
+    const synergyKey = SUPPLY_SYNERGY[selectedBlessingKey]
+    const pool = Object.values(SUPPLY_REWARDS)
+      .filter((reward) => reward.key !== synergyKey)
+      .sort(() => Math.random() - 0.5)
+
+    const options = []
+    if (synergyKey && SUPPLY_REWARDS[synergyKey]) {
+      options.push(SUPPLY_REWARDS[synergyKey])
+    }
+
+    pool.forEach((reward) => {
+      if (options.length >= 2) return
+      options.push(reward)
+    })
+
+    return options.slice(0, 2)
+  },
+
+  applySupplyReward(rewardKey) {
+    const reward = SUPPLY_REWARDS[rewardKey]
+    if (!reward) return
+
+    const nextData = {}
+    let rewardLabel = reward.title
+
+    switch (reward.type) {
+      case 'damage':
+        this.runDamageBonus += reward.amount
+        this.refreshAllTowerStats()
+        rewardLabel = `全塔伤害 +${reward.amount}`
+        break
+      case 'attackSpeed':
+        this.runAttackSpeedBonus += reward.amount
+        this.refreshAllTowerStats()
+        rewardLabel = `全塔攻速 +${reward.amount}ms`
+        break
+      case 'range':
+        this.runRangeBonus += reward.amount
+        this.refreshAllTowerStats()
+        rewardLabel = `全塔射程 +${reward.amount}`
+        break
+      case 'gold':
+        nextData.gold = this.data.gold + reward.amount
+        rewardLabel = `金币 +${reward.amount}`
+        break
+      case 'lives':
+        nextData.lives = this.data.lives + reward.amount
+        rewardLabel = `生命 +${reward.amount}`
+        break
+      case 'tower': {
+        const blessing = BLESSINGS[this.data.selectedBlessingKey]
+        const towerType = blessing?.towerType || Object.keys(TOWER_TYPES)[Math.floor(Math.random() * Object.keys(TOWER_TYPES).length)]
+        if (this.inventory.length < INVENTORY_COLS * INVENTORY_ROWS) {
+          this.inventory.unshift(this.createTowerData(towerType))
+          this.updateInventoryDisplay()
+          rewardLabel = `获得 ${TOWER_TYPES[towerType].name}`
+        } else {
+          nextData.gold = this.data.gold + 45
+          rewardLabel = '仓库满，改为金币 +45'
+        }
+        break
+      }
+      case 'summonCost':
+        nextData.summonCost = Math.max(MIN_SUMMON_COST, this.data.summonCost - reward.amount)
+        rewardLabel = `召唤价格 -${reward.amount}`
+        break
+      default:
+        break
+    }
+
+    if (Object.keys(nextData).length > 0) {
+      this.setData(nextData)
+    }
+
+    this.floatingTexts.push({
+      x: CONFIG.canvasWidth / 2,
+      y: CONFIG.canvasHeight / 2 - 30,
+      text: `${reward.icon} ${rewardLabel}`,
+      color: '#ffe79a',
+      life: 90,
+      maxLife: 90,
+      vy: -0.4,
+      vx: 0,
+      scale: 1.35,
+      isBold: true
+    })
+
+    this.requestRender()
+  },
+
+  applyWaveChoice(e) {
+    const rewardKey = e.currentTarget.dataset.key
+    const pendingWave = this.pendingWaveAdvance
+    if (!rewardKey || !pendingWave) return
+
+    this.applySupplyReward(rewardKey)
+    this.pendingWaveAdvance = null
+    this.setData({
+      showWaveChoice: false,
+      waveChoiceTitle: '',
+      waveChoiceOptions: [],
+      wave: pendingWave.wave,
+      level: pendingWave.level,
+      waveInLevel: pendingWave.waveInLevel,
+      totalWavesInLevel: 10,
+      gameState: 'playing'
+    }, () => {
+      this.updateRunBuffSummary(pendingWave.wave)
+      this.generateWave(pendingWave.wave)
+      this.lastSpawnTime = Date.now() + 300
+      this.requestRender()
+    })
+  },
+
   initGame() {
+    this.clearScheduledTimeouts()
     this.grid = []
     for (let row = 0; row < CONFIG.gridRows; row++) {
       this.grid[row] = []
@@ -441,13 +816,21 @@ Page({
     this.poisonEffects = []
     this.arcaneEffects = []
     this.mergeEffects = []
+    this.blessingApplied = false
+    this.runDamageBonus = 0
+    this.runRangeBonus = 0
+    this.runAttackSpeedBonus = 0
+    this.lastIdleRenderAt = 0
+    this.lastDragUiUpdateAt = 0
+    this.lastMergeHintVisible = false
+    this.lastMergeHintSlotIndex = -1
     
     // 初始化仓库 - 给5个随机塔
     this.inventory = []
     const types = Object.keys(TOWER_TYPES)
     for (let i = 0; i < 5; i++) {
       const type = types[Math.floor(Math.random() * types.length)]
-      this.inventory.push(this.createTowerData(type))
+      this.inventory.push(this.createTowerData(type, ''))
     }
     this.updateInventoryDisplay()
     
@@ -460,24 +843,277 @@ Page({
       score: 0,
       gold: 100,
       lives: 20,
-      gameState: 'playing',
+      gameState: 'prep',
       level: 1,
       waveInLevel: 1,
-      totalWavesInLevel: 10
+      totalWavesInLevel: 10,
+      currentTheme: 'forest',
+      selectedBlessingKey: '',
+      selectedBlessingName: '尚未选择战术祝福',
+      selectedBlessingIcon: '✨',
+      fieldTowerCount: 0,
+      canStartBattle: false,
+      selectedInventoryIndex: -1,
+      prepTowerSlots: [],
+      prepActionHint: '先选祝福',
+      runBuffSummary: '未激活',
+      nextSupplyWave: 3,
+      showWaveChoice: false,
+      waveChoiceTitle: '',
+      waveChoiceOptions: [],
+      summonCost: 15
+    })
+    this.syncPrepTowerSlots('forest')
+    this.refreshInventoryRect()
+    this.requestRender()
+  },
+
+  createTowerData(type, blessingKey = this.data.selectedBlessingKey) {
+    const stats = this.getTowerStatsForLevel(type, 1, 'inventory', blessingKey)
+    return {
+      id: Date.now() + Math.random(),
+      type,
+      level: 1,
+      damage: stats.damage,
+      range: stats.range,
+      attackSpeed: stats.attackSpeed,
+      lastAttack: 0
+    }
+  },
+
+  applyBlessingToTower(tower, blessingKey = this.data.selectedBlessingKey) {
+    const blessing = BLESSINGS[blessingKey]
+    if (!blessing || blessing.towerType !== tower.type) {
+      return tower
+    }
+
+    return {
+      ...tower,
+      damage: tower.damage + (blessing.damageBonus || 0),
+      range: tower.range + (blessing.rangeBonus || 0),
+      attackSpeed: Math.max(450, tower.attackSpeed - (blessing.attackSpeedBonus || 0))
+    }
+  },
+
+  getTowerStatsForLevel(type, level, mode = 'field', blessingKey = this.data.selectedBlessingKey) {
+    const config = TOWER_TYPES[type]
+    let damage = config.baseDamage
+    let range = config.baseRange
+    let attackSpeed = config.baseAttackSpeed
+
+    if (level > 1) {
+      if (mode === 'inventory') {
+        damage = Math.floor(config.baseDamage * Math.pow(1.8, level - 1))
+        range = config.baseRange + (level - 1) * 12
+        attackSpeed = Math.max(300, config.baseAttackSpeed - (level - 1) * 100)
+      } else {
+        damage = Math.floor(config.baseDamage * Math.pow(1.5, level - 1))
+        range = config.baseRange + (level - 1) * 8
+        attackSpeed = Math.max(400, config.baseAttackSpeed - (level - 1) * 80)
+      }
+    }
+
+    damage += this.runDamageBonus
+    range += this.runRangeBonus
+    attackSpeed = Math.max(300, attackSpeed - this.runAttackSpeedBonus)
+
+    return this.applyBlessingToTower({
+      type,
+      level,
+      damage,
+      range,
+      attackSpeed
+    }, blessingKey)
+  },
+
+  getPrepActionHint(selectedBlessingKey = this.data.selectedBlessingKey, fieldTowerCount = this.data.fieldTowerCount) {
+    if (!selectedBlessingKey) {
+      return '先选祝福'
+    }
+
+    if (fieldTowerCount === 0) {
+      return '点仓库塔，再点发光塔位'
+    }
+
+    return '已可开始第一波'
+  },
+
+  updatePrepStatus(extraData = {}) {
+    const hasSelectedBlessing = Object.prototype.hasOwnProperty.call(extraData, 'selectedBlessingKey')
+      ? !!extraData.selectedBlessingKey
+      : !!this.data.selectedBlessingKey
+    const fieldTowerCount = Object.prototype.hasOwnProperty.call(extraData, 'fieldTowerCount')
+      ? extraData.fieldTowerCount
+      : this.data.fieldTowerCount
+
+    this.setData({
+      ...extraData,
+      canStartBattle: hasSelectedBlessing && fieldTowerCount > 0,
+      prepActionHint: this.getPrepActionHint(
+        Object.prototype.hasOwnProperty.call(extraData, 'selectedBlessingKey')
+          ? extraData.selectedBlessingKey
+          : this.data.selectedBlessingKey,
+        fieldTowerCount
+      )
+    }, () => {
+      this.refreshCanvasRect()
+      this.refreshInventoryRect()
+      this.requestRender()
     })
   },
 
-  createTowerData(type) {
-    const config = TOWER_TYPES[type]
-    return {
-      id: Date.now() + Math.random(),
-      type: type,
-      level: 1,
-      damage: config.baseDamage,
-      range: config.baseRange,
-      attackSpeed: config.baseAttackSpeed,
-      lastAttack: 0
+  syncFieldTowerCount() {
+    this.updatePrepStatus({ fieldTowerCount: this.towers.length })
+    this.syncPrepTowerSlots()
+  },
+
+  syncPrepTowerSlots(themeKey = this.data.currentTheme) {
+    const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
+    const prepTowerSlots = theme.towerSlots.map((slot) => ({
+      key: `${slot.row}-${slot.col}`,
+      row: slot.row,
+      col: slot.col,
+      left: this.data.gridOffsetX + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
+      top: this.data.gridOffsetY + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
+      occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
+    }))
+    this.setData({ prepTowerSlots })
+  },
+
+  getNextSelectedInventoryIndex(removedIndex) {
+    if (this.data.selectedInventoryIndex === -1) {
+      return -1
     }
+    if (this.data.selectedInventoryIndex === removedIndex) {
+      return -1
+    }
+    if (this.data.selectedInventoryIndex > removedIndex) {
+      return this.data.selectedInventoryIndex - 1
+    }
+    return this.data.selectedInventoryIndex
+  },
+
+  canEditBattlefield() {
+    return this.data.gameState === 'prep' || this.data.gameState === 'playing'
+  },
+
+  selectBlessing(e) {
+    const key = e.currentTarget.dataset.key
+    const blessing = BLESSINGS[key]
+    if (!blessing) return
+
+    this.updatePrepStatus({
+      selectedBlessingKey: key,
+      selectedBlessingName: blessing.name,
+      selectedBlessingIcon: blessing.icon
+    })
+  },
+
+  handleInventorySlotTap(e) {
+    if (this.data.gameState !== 'prep') return
+
+    const index = Number(e.currentTarget.dataset.index)
+    if (Number.isNaN(index) || index < 0 || index >= this.inventory.length) {
+      return
+    }
+
+    this.setData({ selectedInventoryIndex: index }, () => {
+      this.refreshCanvasRect()
+    })
+  },
+
+  handlePrepSlotTap(e) {
+    if (this.data.gameState !== 'prep') return
+
+    if (!this.data.selectedBlessingKey) {
+      wx.showToast({ title: '先选祝福', icon: 'none' })
+      return
+    }
+
+    const inventoryIndex = this.data.selectedInventoryIndex
+    if (inventoryIndex < 0 || inventoryIndex >= this.inventory.length) {
+      wx.showToast({ title: '先点下方一座塔', icon: 'none' })
+      return
+    }
+
+    const row = Number(e.currentTarget.dataset.row)
+    const col = Number(e.currentTarget.dataset.col)
+    if (Number.isNaN(row) || Number.isNaN(col)) {
+      return
+    }
+
+    if (!this.isTowerSlot(row, col)) {
+      return
+    }
+
+    if (this.grid[row][col]) {
+      wx.showToast({ title: '该塔位已有防御塔', icon: 'none' })
+      return
+    }
+
+    this.placeTowerFromInventory(row, col, inventoryIndex)
+  },
+
+  applySelectedBlessing() {
+    if (this.blessingApplied || !this.data.selectedBlessingKey) return
+
+    const blessing = BLESSINGS[this.data.selectedBlessingKey]
+    if (!blessing) return
+
+    if (blessing.extraTowerType && this.inventory.length < INVENTORY_COLS * INVENTORY_ROWS) {
+      this.inventory.unshift(this.createTowerData(blessing.extraTowerType, blessing.key))
+    }
+
+    const nextData = {
+      selectedBlessingName: blessing.name,
+      selectedBlessingIcon: blessing.icon,
+      nextSupplyWave: this.getNextSupplyWave(1)
+    }
+
+    if (blessing.bonusGold) {
+      nextData.gold = this.data.gold + blessing.bonusGold
+    }
+
+    if (blessing.bonusLives) {
+      nextData.lives = this.data.lives + blessing.bonusLives
+    }
+
+    this.blessingApplied = true
+    this.refreshAllTowerStats(blessing.key)
+    this.updateRunBuffSummary()
+    this.setData(nextData)
+  },
+
+  startBattle() {
+    if (!this.data.selectedBlessingKey) {
+      wx.showToast({ title: '先选择一个战术祝福', icon: 'none' })
+      return
+    }
+
+    if (this.towers.length === 0) {
+      wx.showToast({ title: '先拖一座塔到发光塔位', icon: 'none' })
+      return
+    }
+
+    this.applySelectedBlessing()
+    this.lastSpawnTime = Date.now()
+    this.setData({ gameState: 'playing' }, () => {
+      this.refreshCanvasRect()
+      this.refreshInventoryRect()
+      this.requestRender()
+    })
+    this.floatingTexts.push({
+      x: CONFIG.canvasWidth / 2,
+      y: CONFIG.canvasHeight / 2 - 40,
+      text: `${this.data.selectedBlessingIcon} ${this.data.selectedBlessingName}`,
+      color: BLESSINGS[this.data.selectedBlessingKey].color,
+      life: 100,
+      maxLife: 100,
+      vy: -0.35,
+      vx: 0,
+      scale: 1.4,
+      isBold: true
+    })
   },
 
   updateInventoryDisplay() {
@@ -496,9 +1132,20 @@ Page({
         slots.push(null)
       }
     }
+
+    const currentSelectedInventoryIndex = Number.isInteger(this.data.selectedInventoryIndex)
+      ? this.data.selectedInventoryIndex
+      : -1
+    const selectedInventoryIndex = currentSelectedInventoryIndex >= this.inventory.length
+      ? -1
+      : currentSelectedInventoryIndex
+
     this.setData({ 
       inventorySlots: slots,
-      inventoryFull: this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS
+      inventoryFull: this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS,
+      selectedInventoryIndex
+    }, () => {
+      this.refreshInventoryRect()
     })
   },
 
@@ -593,24 +1240,24 @@ Page({
     // 根据主题生成装饰物
     this.generateMapDecorations(themeKey)
     
-    // 预生成背景纹理点 - 更丰富
+    // 预生成背景纹理点 - 控制密度，减少持续绘制负担
     this.grassDots = []
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 110; i++) {
       this.grassDots.push({
         x: Math.random() * CONFIG.canvasWidth,
         y: Math.random() * CONFIG.canvasHeight,
-        size: 0.8 + Math.random() * 2.5
+        size: 0.8 + Math.random() * 2.1
       })
     }
     
     // 小草丛
     this.grassTufts = []
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 18; i++) {
       this.grassTufts.push({
         x: Math.random() * CONFIG.canvasWidth,
         y: Math.random() * CONFIG.canvasHeight,
-        blades: 3 + Math.floor(Math.random() * 4),
-        height: 4 + Math.random() * 6,
+        blades: 3 + Math.floor(Math.random() * 3),
+        height: 4 + Math.random() * 5,
         sway: Math.random() * Math.PI * 2
       })
     }
@@ -725,9 +1372,23 @@ Page({
   },
 
   startGame() {
+    if (this.gameLoop) {
+      clearInterval(this.gameLoop)
+    }
+
     this.gameLoop = setInterval(() => {
-      this.update()
-      this.render()
+      if (this.data.gameState === 'playing') {
+        this.update()
+        this.render()
+        return
+      }
+
+      const now = Date.now()
+      if (this.needsRender || now - this.lastIdleRenderAt >= IDLE_RENDER_INTERVAL) {
+        this.render()
+        this.needsRender = false
+        this.lastIdleRenderAt = now
+      }
     }, 1000 / 60)
   },
 
@@ -736,6 +1397,7 @@ Page({
       clearInterval(this.gameLoop)
       this.gameLoop = null
     }
+    this.clearScheduledTimeouts()
   },
 
   update() {
@@ -762,6 +1424,7 @@ Page({
     this.updatePoisonEffects()
     this.updateArcaneEffects()
     this.updateMergeEffects()
+    this.enforcePerformanceCaps()
     
     if (this.spawnIndex >= this.waveMonsters.length && this.monsters.length === 0 && !this.waveComplete) {
       this.waveComplete = true
@@ -889,19 +1552,19 @@ Page({
       score: this.data.score + gold * 10
     })
     
-    // 金币飘字动画 - 多个金币图标散开
-    for (let i = 0; i < 5; i++) {
-      const angle = (Math.PI * 2 / 5) * i + Math.random() * 0.5
+    // 金币飘字动画 - 缩减数量，避免击杀密集时文字洪峰
+    for (let i = 0; i < 3; i++) {
+      const angle = (Math.PI * 2 / 3) * i + Math.random() * 0.35
       this.floatingTexts.push({
         x: monster.x,
         y: monster.y,
         text: '💰',
         color: '#ffd700',
-        life: 45 + i * 5,
-        maxLife: 45 + i * 5,
-        vy: -2 - Math.random(),
-        vx: Math.cos(angle) * 2,
-        scale: 1.0
+        life: 36 + i * 5,
+        maxLife: 36 + i * 5,
+        vy: -1.8 - Math.random() * 0.5,
+        vx: Math.cos(angle) * 1.6,
+        scale: 0.9
       })
     }
     
@@ -1333,12 +1996,12 @@ Page({
       })
     }
     
-    this.createParticles(tower.x, tower.y - 15, config.color, 4)
+    this.createParticles(tower.x, tower.y - 15, config.color, 2)
   },
 
   lightningAttack(tower, target) {
     const lv = tower.level || 1
-    const chainCount = 1 + lv  // lv1=2链, lv5=6链
+    const chainCount = Math.min(3, 1 + Math.floor((lv + 1) / 2))  // 高等级仍有连锁，但不再指数堆特效
     
     this.applyDamage(target, tower.damage, 'lightning')
     
@@ -1402,8 +2065,8 @@ Page({
 
   createElectricBurst(x, y, level) {
     const lv = level || 1
-    const burstCount = 3 + lv  // lv1=4, lv5=8
-    const burstDist = 8 + lv * 2.5
+    const burstCount = Math.min(4, 2 + Math.floor(lv / 2))
+    const burstDist = 8 + lv * 2.2
     for (let i = 0; i < burstCount; i++) {
       const angle = (Math.PI * 2 / burstCount) * i
       this.lightningEffects.push({
@@ -1712,15 +2375,19 @@ Page({
   },
 
   createParticles(x, y, color, count) {
-    for (let i = 0; i < count; i++) {
+    const remaining = Math.max(0, PERFORMANCE_LIMITS.particles - this.particles.length)
+    if (remaining <= 0) return
+
+    const particleCount = Math.min(remaining, Math.max(1, Math.ceil(count * 0.55)))
+    for (let i = 0; i < particleCount; i++) {
       this.particles.push({
         x, y,
-        vx: (Math.random() - 0.5) * 6,
-        vy: (Math.random() - 0.5) * 6 - 2,
-        size: Math.random() * 6 + 3,
+        vx: (Math.random() - 0.5) * 5,
+        vy: (Math.random() - 0.5) * 5 - 1.6,
+        size: Math.random() * 4 + 2.4,
         color,
-        life: 35,
-        maxLife: 35,
+        life: 26,
+        maxLife: 26,
         alpha: 1
       })
     }
@@ -1771,6 +2438,7 @@ Page({
   render() {
     const ctx = this.ctx
     if (!ctx) return
+    this.needsRender = false
     
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
     
@@ -4703,7 +5371,7 @@ Page({
 
   // 从仓库开始拖动
   onInventoryTouchStart(e) {
-    if (this.data.gameState !== 'playing') return
+    if (!this.canEditBattlefield()) return
     
     const index = e.currentTarget.dataset.index
     if (index === undefined || index >= this.inventory.length) return
@@ -4712,55 +5380,53 @@ Page({
     const tower = this.inventory[index]
     const startClientX = touch.clientX
     const startClientY = touch.clientY
+
+    if (!this.cachedCanvasRect) {
+      this.refreshCanvasRect()
+    }
+    if (!this.inventoryRect) {
+      this.refreshInventoryRect()
+    }
     
-    // 同步获取 canvasRect 和 inventoryRect（使用回调确保获取后再设置拖动状态）
-    wx.createSelectorQuery().selectAll('#gameCanvas, .inventory-grid').boundingClientRect((rects) => {
-      if (rects && rects[0]) {
-        this.cachedCanvasRect = rects[0]
-        this.setData({ canvasRect: rects[0] })
-      }
-      if (rects && rects[1]) {
-        this.inventoryRect = rects[1]
-      }
-      
-      // 记录触摸信息
-      this.pendingDragTower = { ...tower }
-      this.draggingInventoryIndex = index
-      this.draggingFromInventory = true
-      this.hasMoved = false
-      this.isDragging = true
-      this.draggingTower = { ...tower }
-      this.dragStartClientX = startClientX
-      this.dragStartClientY = startClientY
-      this.lastTouchClientX = startClientX
-      this.lastTouchClientY = startClientY
-      
-      // 初始拖动位置设为手指位置（相对于canvas逻辑坐标）
-      if (this.cachedCanvasRect) {
-        const cssX = startClientX - this.cachedCanvasRect.left
-        const cssY = startClientY - this.cachedCanvasRect.top
-        const scaleX = CONFIG.canvasWidth / this.cachedCanvasRect.width
-        const scaleY = CONFIG.canvasHeight / this.cachedCanvasRect.height
-        this.dragX = cssX * scaleX
-        this.dragY = cssY * scaleY
-      } else {
-        this.dragX = -100
-        this.dragY = -100
-      }
-      
-      this.setData({ 
-        draggingSlotIndex: index,
-        dragFloatingEmoji: TOWER_TYPES[tower.type].emoji,
-        dragFloatingColor: TOWER_TYPES[tower.type].color,
-        dragFloatingLevel: tower.level,
-        dragFloatingType: tower.type
-      })
-    }).exec()
+    // 记录触摸信息
+    this.pendingDragTower = { ...tower }
+    this.draggingInventoryIndex = index
+    this.draggingFromInventory = true
+    this.hasMoved = false
+    this.isDragging = true
+    this.draggingTower = { ...tower }
+    this.dragStartClientX = startClientX
+    this.dragStartClientY = startClientY
+    this.lastTouchClientX = startClientX
+    this.lastTouchClientY = startClientY
+    this.lastDragUiUpdateAt = 0
+    
+    // 初始拖动位置设为手指位置（相对于canvas逻辑坐标）
+    if (this.cachedCanvasRect) {
+      const cssX = startClientX - this.cachedCanvasRect.left
+      const cssY = startClientY - this.cachedCanvasRect.top
+      const scaleX = CONFIG.canvasWidth / this.cachedCanvasRect.width
+      const scaleY = CONFIG.canvasHeight / this.cachedCanvasRect.height
+      this.dragX = cssX * scaleX
+      this.dragY = cssY * scaleY
+    } else {
+      this.dragX = -100
+      this.dragY = -100
+    }
+    
+    this.setData({ 
+      draggingSlotIndex: index,
+      selectedInventoryIndex: index,
+      dragFloatingEmoji: TOWER_TYPES[tower.type].emoji,
+      dragFloatingColor: TOWER_TYPES[tower.type].color,
+      dragFloatingLevel: tower.level,
+      dragFloatingType: tower.type
+    })
   },
 
   // 从场上塔开始拖动
   onCanvasTouchStart(e) {
-    if (this.data.gameState !== 'playing') return
+    if (!this.canEditBattlefield()) return
     
     const touch = e.touches[0]
     
@@ -4837,23 +5503,25 @@ Page({
     this.lastTouchClientY = touch.clientY
     
     // 统一使用 clientX/Y 计算 canvas 内坐标
-    // 注意：需要将 CSS 像素坐标换算为 canvas 逻辑坐标
     if (this.cachedCanvasRect) {
       const cssX = touch.clientX - this.cachedCanvasRect.left
       const cssY = touch.clientY - this.cachedCanvasRect.top
-      // CSS 坐标 -> canvas 逻辑坐标（CONFIG.canvasWidth/Height 可能与 CSS 尺寸不同）
       const scaleX = CONFIG.canvasWidth / this.cachedCanvasRect.width
       const scaleY = CONFIG.canvasHeight / this.cachedCanvasRect.height
       this.dragX = cssX * scaleX
       this.dragY = cssY * scaleY
     }
     
-    // 更新浮层位置（始终跟随手指，不受 canvas 坐标系影响）
-    this.setData({
-      dragFloating: true,
-      dragFloatingX: touch.clientX,
-      dragFloatingY: touch.clientY
-    })
+    // 更新浮层位置（节流，避免 touchmove 期间疯狂 setData）
+    const now = Date.now()
+    if (now - this.lastDragUiUpdateAt >= DRAG_UI_INTERVAL) {
+      this.lastDragUiUpdateAt = now
+      this.setData({
+        dragFloating: true,
+        dragFloatingX: touch.clientX,
+        dragFloatingY: touch.clientY
+      })
+    }
     
     // 检查合成目标
     this.checkMergeTarget(touch)
@@ -4901,24 +5569,25 @@ Page({
       }
     }
     
-    this.setData({ 
-      showMergeHint: !!this.mergeTarget,
-      mergeTargetSlotIndex: this.mergeTargetInventoryIndex
-    })
+    const showMergeHint = !!this.mergeTarget
+    if (showMergeHint !== this.lastMergeHintVisible || this.mergeTargetInventoryIndex !== this.lastMergeHintSlotIndex) {
+      this.lastMergeHintVisible = showMergeHint
+      this.lastMergeHintSlotIndex = this.mergeTargetInventoryIndex
+      this.setData({ 
+        showMergeHint,
+        mergeTargetSlotIndex: this.mergeTargetInventoryIndex
+      })
+    }
   },
 
   // 获取仓库格子索引
   getInventorySlotIndex(clientX, clientY) {
-    // 每次拖动开始时刷新缓存
     if (!this.inventoryRect) {
-      wx.createSelectorQuery().select('.inventory-grid').boundingClientRect((rect) => {
-        if (rect) this.inventoryRect = rect
-      }).exec()
+      this.refreshInventoryRect()
       return null
     }
     
     const rect = this.inventoryRect
-    // 加大容差范围
     const tolerance = 8
     const relX = clientX - rect.left + tolerance
     const relY = clientY - rect.top + tolerance
@@ -4927,9 +5596,7 @@ Page({
       return null
     }
     
-    // 根据 wxss 样式计算：slot 100rpx = 50px@375, gap 6rpx = 3px@375
-    const windowWidth = wx.getWindowInfo().windowWidth
-    const scale = windowWidth / 375
+    const scale = this.windowWidth / 375
     const slotSize = 50 * scale  // 100rpx
     const gap = 3 * scale        // 6rpx
     const cellTotal = slotSize + gap
@@ -5037,9 +5704,7 @@ Page({
     
     // 升级tower2
     tower2.level++
-    tower2.damage = Math.floor(config.baseDamage * Math.pow(1.8, tower2.level - 1))
-    tower2.range = config.baseRange + (tower2.level - 1) * 12
-    tower2.attackSpeed = Math.max(300, config.baseAttackSpeed - (tower2.level - 1) * 100)
+    Object.assign(tower2, this.getTowerStatsForLevel(tower1.type, tower2.level, 'inventory'))
     
     // 移除tower1（注意：如果fromIndex > toIndex，删除后toIndex不变；否则toIndex要-1）
     if (fromIndex > toIndex) {
@@ -5074,14 +5739,13 @@ Page({
     
     // 升级仓库塔
     invTower.level++
-    invTower.damage = Math.floor(config.baseDamage * Math.pow(1.8, invTower.level - 1))
-    invTower.range = config.baseRange + (invTower.level - 1) * 12
-    invTower.attackSpeed = Math.max(300, config.baseAttackSpeed - (invTower.level - 1) * 100)
+    Object.assign(invTower, this.getTowerStatsForLevel(invTower.type, invTower.level, 'inventory'))
     
     // 移除场上塔
     const towerIndex = this.towers.indexOf(fieldTower)
     if (towerIndex !== -1) {
       this.towers.splice(towerIndex, 1)
+      this.syncFieldTowerCount()
     }
     // 清除格子
     if (fieldTower.row !== undefined && fieldTower.col !== undefined) {
@@ -5108,6 +5772,9 @@ Page({
     this.mergeTargetType = null
     this.mergeTargetInventoryIndex = -1
     this.hasMoved = false
+    this.lastDragUiUpdateAt = 0
+    this.lastMergeHintVisible = false
+    this.lastMergeHintSlotIndex = -1
     this.setData({ 
       showMergeHint: false, 
       draggingSlotIndex: -1,
@@ -5116,8 +5783,10 @@ Page({
     })
   },
 
-  placeTowerFromInventory(row, col) {
-    const towerData = this.inventory[this.draggingInventoryIndex]
+  placeTowerFromInventory(row, col, inventoryIndex = this.draggingInventoryIndex) {
+    const towerData = this.inventory[inventoryIndex]
+    if (!towerData) return
+
     const config = TOWER_TYPES[towerData.type]
     
     const placedTower = {
@@ -5131,9 +5800,13 @@ Page({
     this.towers.push(placedTower)
     this.grid[row][col] = placedTower
     
+    const nextSelectedInventoryIndex = this.getNextSelectedInventoryIndex(inventoryIndex)
+
     // 从仓库移除
-    this.inventory.splice(this.draggingInventoryIndex, 1)
+    this.inventory.splice(inventoryIndex, 1)
+    this.setData({ selectedInventoryIndex: nextSelectedInventoryIndex })
     this.updateInventoryDisplay()
+    this.syncFieldTowerCount()
     
     this.createParticles(placedTower.x, placedTower.y, config.color, 15)
     
@@ -5155,9 +5828,7 @@ Page({
     
     // 升级目标塔
     actualTarget.level++
-    actualTarget.damage = Math.floor(config.baseDamage * Math.pow(1.5, actualTarget.level - 1))
-    actualTarget.range = config.baseRange + (actualTarget.level - 1) * 8
-    actualTarget.attackSpeed = Math.max(400, config.baseAttackSpeed - (actualTarget.level - 1) * 80)
+    Object.assign(actualTarget, this.getTowerStatsForLevel(tower1.type, actualTarget.level, 'field'))
     
     // 移除tower1
     if (this.draggingFromInventory) {
@@ -5170,6 +5841,7 @@ Page({
         this.grid[sourceTower.row][sourceTower.col] = null
       }
       this.towers = this.towers.filter(t => t.id !== tower1.id)
+      this.syncFieldTowerCount()
     }
     
     // 合成特效
@@ -5197,8 +5869,10 @@ Page({
   },
 
   nextWave() {
-    const newWave = this.data.wave + 1
+    const completedWave = this.data.wave
+    const newWave = completedWave + 1
     const waveBonus = 30 + newWave * 15
+    const shouldOfferSupply = completedWave % 3 === 0
     
     // 计算关卡和关内波次
     const newLevel = Math.ceil(newWave / 10)
@@ -5212,7 +5886,7 @@ Page({
     this.floatingTexts.push({
       x: CONFIG.canvasWidth / 2,
       y: CONFIG.canvasHeight / 2 - 30,
-      text: `🎉 第${this.data.wave}波完成!`,
+      text: `🎉 第${completedWave}波完成!`,
       color: '#50ff50',
       life: 100,
       maxLife: 100,
@@ -5241,8 +5915,7 @@ Page({
       const currentIndex = themes.indexOf(this.data.currentTheme)
       const nextTheme = themes[(currentIndex + 1) % themes.length]
       
-      // 显示地形切换提示
-      setTimeout(() => {
+      this.scheduleTimeout(() => {
         this.floatingTexts.push({
           x: CONFIG.canvasWidth / 2,
           y: CONFIG.canvasHeight / 2 - 60,
@@ -5256,19 +5929,40 @@ Page({
           isBold: true
         })
         
-        // 切换地形（保留塔的位置）
         this.changeTheme(nextTheme)
+        this.requestRender()
       }, 1500)
     }
     
-    setTimeout(() => {
+    if (shouldOfferSupply) {
+      this.pendingWaveAdvance = {
+        wave: newWave,
+        level: newLevel,
+        waveInLevel: newWaveInLevel
+      }
+
+      this.scheduleTimeout(() => {
+        this.setData({
+          gameState: 'choice',
+          showWaveChoice: true,
+          waveChoiceTitle: `第${newWave}波前，选 1 个战术补给`,
+          waveChoiceOptions: this.buildWaveChoiceOptions()
+        })
+        this.requestRender()
+      }, 1300)
+      return
+    }
+    
+    this.scheduleTimeout(() => {
       this.setData({ 
         wave: newWave,
         level: newLevel,
         waveInLevel: newWaveInLevel,
-        totalWavesInLevel: 10
+        totalWavesInLevel: 10,
+        nextSupplyWave: this.getNextSupplyWave(newWave)
       })
       this.generateWave(newWave)
+      this.requestRender()
     }, 3500)
   },
 
@@ -5295,6 +5989,7 @@ Page({
     
     // 重新生成路径和装饰
     this.generatePath(themeKey)
+    this.syncPrepTowerSlots(themeKey)
     
     // 重新放置塔（检查新位置是否是有效塔位）
     this.towers = []
@@ -5340,6 +6035,7 @@ Page({
         }
       }
     })
+    this.syncFieldTowerCount()
     
     // 地形切换特效
     for (let i = 0; i < 50; i++) {
@@ -5357,6 +6053,8 @@ Page({
         alpha: 0.8
       })
     }
+    this.enforcePerformanceCaps()
+    this.requestRender()
   },
 
   gameOver() {
@@ -5373,14 +6071,34 @@ Page({
   },
 
   togglePause() {
-    this.setData({ gameState: 'paused' })
+    if (this.data.gameState === 'prep') {
+      wx.showToast({ title: '布阵阶段无需暂停', icon: 'none' })
+      return
+    }
+
+    if (this.data.gameState === 'choice') {
+      wx.showToast({ title: '先选 1 个战术补给', icon: 'none' })
+      return
+    }
+
+    if (this.data.gameState === 'playing') {
+      this.setData({ gameState: 'paused' })
+      this.requestRender()
+      return
+    }
+
+    if (this.data.gameState === 'paused') {
+      this.resumeGame()
+    }
   },
 
   resumeGame() {
     this.setData({ gameState: 'playing' })
+    this.requestRender()
   },
 
   restartGame() {
+    this.stopGame()
     this.initGame()
     this.startGame()
   },

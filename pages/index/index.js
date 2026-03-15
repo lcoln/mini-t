@@ -17,6 +17,7 @@ Page({
     this.setData({ highScore, maxWave })
   },
 
+
   startGame() {
     wx.navigateTo({
       url: '/pages/game/game'
