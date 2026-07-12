@@ -2757,35 +2757,21 @@ Page({
         break
         
       case 'dragon':
-        // 巨龙Boss：大型火焰爆炸 + 龙鳞飞散
-        for (let i = 0; i < 30; i++) {
-          const angle = (Math.PI * 2 / 30) * i
-          const dist = 5 + Math.random() * 15
-          this.fireEffects.push({
-            x: monster.x + Math.cos(angle) * dist,
-            y: monster.y + Math.sin(angle) * dist,
-            size: 15 + Math.random() * 15,
-            life: 40,
-            maxLife: 40,
-            vx: Math.cos(angle) * 3,
-            vy: Math.sin(angle) * 3 - 1
-          })
-        }
-        // 龙鳞
-        for (let i = 0; i < 15; i++) {
-          const angle = Math.random() * Math.PI * 2
+        // 巨龙Boss击杀特效（真机限制：粒子数大幅削减，避免 40 个全屏金色粒子导致整张地图变色+卡顿）
+        this.fireEffects.push({
+          x: monster.x, y: monster.y,
+          size: 30, life: 28, maxLife: 28
+        })
+        for (let i = 0; i < 8; i++) {
+          const angle = (Math.PI * 2 / 8) * i
           this.particles.push({
-            x: monster.x, y: monster.y,
-            vx: Math.cos(angle) * (3 + Math.random() * 3),
-            vy: Math.sin(angle) * (3 + Math.random() * 3) - 2,
-            size: 5 + Math.random() * 5,
-            color: Math.random() > 0.5 ? '#ff4400' : '#aa2200',
-            life: 50,
-            maxLife: 50,
-            alpha: 1
+            x: monster.x + Math.cos(angle) * 10,
+            y: monster.y + Math.sin(angle) * 10,
+            vx: Math.cos(angle) * 2, vy: Math.sin(angle) * 2 - 1,
+            size: 6 + Math.random() * 4,
+            color: '#ff6600', life: 30, maxLife: 30, alpha: 0.8
           })
         }
-        // Boss击杀特效
         this.floatingTexts.push({
           x: monster.x, y: monster.y - 20,
           text: '🐉', color: '#ff6600', life: 80, maxLife: 80,
@@ -2793,44 +2779,21 @@ Page({
         })
         this.floatingTexts.push({
           x: monster.x, y: monster.y + 10,
-          text: '💥 BOSS DOWN! 💥', color: '#ffaa00', life: 100, maxLife: 100,
+          text: '💥 BOSS DOWN! 💥', color: '#ffaa00', life: 80, maxLife: 80,
           vy: -1, vx: 0, scale: 1.2, isBold: true
         })
-        // 屏幕震动效果（通过大量粒子模拟）
-        for (let i = 0; i < 40; i++) {
-          this.particles.push({
-            x: Math.random() * CONFIG.canvasWidth,
-            y: Math.random() * CONFIG.canvasHeight,
-            vx: (Math.random() - 0.5) * 2,
-            vy: (Math.random() - 0.5) * 2,
-            size: 2 + Math.random() * 3,
-            color: '#ffd700',
-            life: 20,
-            maxLife: 20,
-            alpha: 0.5
-          })
-        }
         break
       
       case 'treant':
-        // 树人王：叶片风暴+木块飞散
-        for (let i = 0; i < 25; i++) {
+        // 树人王击杀特效（真机削减）
+        for (let i = 0; i < 8; i++) {
           const angle = Math.random() * Math.PI * 2
           this.particles.push({
             x: monster.x, y: monster.y,
-            vx: Math.cos(angle) * (2 + Math.random() * 3),
-            vy: Math.sin(angle) * (2 + Math.random() * 3) - 2,
-            size: 4 + Math.random() * 6,
-            color: Math.random() > 0.5 ? '#44aa22' : '#88dd44',
-            life: 50, maxLife: 50, alpha: 1
-          })
-        }
-        for (let i = 0; i < 8; i++) {
-          this.particles.push({
-            x: monster.x + (Math.random() - 0.5) * 20, y: monster.y,
-            vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2,
-            size: 3 + Math.random() * 4,
-            color: '#5a3520', life: 40, maxLife: 40, alpha: 1
+            vx: Math.cos(angle) * 2, vy: Math.sin(angle) * 2 - 1,
+            size: 5 + Math.random() * 4,
+            color: '#44aa22',
+            life: 35, maxLife: 35, alpha: 0.8
           })
         }
         this.floatingTexts.push({
@@ -2846,23 +2809,23 @@ Page({
         break
         
       case 'lich':
-        // 巫妖：暗能量爆炸+灵魂消散
-        for (let i = 0; i < 20; i++) {
-          const angle = (Math.PI * 2 / 20) * i
+        // 巫妖击杀特效（真机削减）
+        for (let i = 0; i < 6; i++) {
+          const angle = (Math.PI * 2 / 6) * i
           this.arcaneEffects.push({
             x: monster.x, y: monster.y,
-            size: 5 + Math.random() * 5,
-            life: 30, maxLife: 30,
-            angle: angle, dist: 0, speed: 3
+            size: 5 + Math.random() * 4,
+            life: 25, maxLife: 25,
+            angle: angle, dist: 0, speed: 2
           })
         }
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 5; i++) {
           this.particles.push({
-            x: monster.x + (Math.random() - 0.5) * 30,
-            y: monster.y + (Math.random() - 0.5) * 30,
-            vx: (Math.random() - 0.5) * 3, vy: -2 - Math.random() * 2,
-            size: 4 + Math.random() * 5,
-            color: '#8844ff', life: 45, maxLife: 45, alpha: 0.8
+            x: monster.x + (Math.random() - 0.5) * 20,
+            y: monster.y + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2,
+            size: 4 + Math.random() * 4,
+            color: '#8844ff', life: 30, maxLife: 30, alpha: 0.7
           })
         }
         this.floatingTexts.push({
@@ -2878,25 +2841,16 @@ Page({
         break
         
       case 'phoenix':
-        // 凤凰：火焰重生爆炸+羽毛飞散
-        for (let i = 0; i < 30; i++) {
-          const angle = (Math.PI * 2 / 30) * i
-          const dist = 5 + Math.random() * 10
+        // 凤凰击杀特效（真机削减）
+        for (let i = 0; i < 8; i++) {
+          const angle = (Math.PI * 2 / 8) * i
           this.fireEffects.push({
-            x: monster.x + Math.cos(angle) * dist,
-            y: monster.y + Math.sin(angle) * dist,
-            size: 12 + Math.random() * 12,
-            life: 35, maxLife: 35,
-            vx: Math.cos(angle) * 2.5,
-            vy: Math.sin(angle) * 2.5 - 1.5
-          })
-        }
-        for (let i = 0; i < 10; i++) {
-          this.floatingTexts.push({
-            x: monster.x + (Math.random() - 0.5) * 40,
-            y: monster.y + (Math.random() - 0.5) * 30,
-            text: '🪶', color: '#ff8800', life: 50, maxLife: 50,
-            vy: -1 + Math.random(), vx: (Math.random() - 0.5) * 2, scale: 0.8
+            x: monster.x + Math.cos(angle) * 10,
+            y: monster.y + Math.sin(angle) * 10,
+            size: 10 + Math.random() * 8,
+            life: 28, maxLife: 28,
+            vx: Math.cos(angle) * 1.5,
+            vy: Math.sin(angle) * 1.5 - 1
           })
         }
         this.floatingTexts.push({
@@ -3495,7 +3449,11 @@ Page({
       this.needsRender = false
       this.renderFrameCount += 1
 
-      // 关键：每帧重置 shadowBlur / globalAlpha / lineDash，防止某个 draw 启用后残留导致后续 draw 全部模糊/变色
+      // 真机 Canvas 跨帧残留清除：上一帧的 createRadialGradient 如果崩坏，
+      // 不 clearRect 的话显存残留整屏 -> 变色 + 卡顿（iOS/Android 均存在）
+      ctx.clearRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight)
+
+      // 重置 ctx 状态避免泄漏
       ctx.shadowBlur = 0
       ctx.globalAlpha = 1
       ctx.setLineDash([])
@@ -3842,6 +3800,13 @@ Page({
   drawPath() {
     const ctx = this.ctx
     ctx.save()
+    // 防御：save 之后立即硬重置所有 ctx 状态——防止前帧 drawFireEffects/Boss 燃烧等泄漏的 globalAlpha/shadow
+    // 残留导致路径变半透明 + 叠加下一帧时显黄色（alpha 0.3 棕色路径 × 绿色背景 = 黄绿）
+    ctx.globalAlpha = 1
+    ctx.shadowBlur = 0
+    ctx.shadowColor = 'rgba(0,0,0,0)'
+    ctx.setLineDash([])
+
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
     const pathColors = theme.pathColors
 
