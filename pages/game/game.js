@@ -1583,6 +1583,19 @@ Page({
       this.lastBossSeenAt = now
     }
 
+    // Boss 离场后超过 grace period，强制回归 relaxed
+    // 原因：Boss 击杀后残留的怪物/弹丸/特效仍把 pressure 推在 72+（intenseExit），
+    // profile 永远退不出 intense → drawPath/drawDecorations 永远简化 → 路径一直变色 + 卡顿
+    const bossGraceActive = hasBoss || (
+      this.lastBossSeenAt > 0 && now - this.lastBossSeenAt <= BOSS_PROFILE_GRACE_MS
+    )
+    const wasBossProfile = this.performanceProfileKey === 'intense' || this.performanceProfileKey === 'busy'
+    if (!bossGraceActive && wasBossProfile) {
+      this.setPerformanceProfile('relaxed')
+      this.lastPerformanceProfileCheckAt = now
+      return
+    }
+
     const checkInterval = hasBoss || this.performanceProfileKey !== 'relaxed' || pressure >= 48
       ? PERFORMANCE_PROFILE_INTERVALS.elevated
       : PERFORMANCE_PROFILE_INTERVALS.relaxed
@@ -3828,71 +3841,40 @@ Page({
 
   drawPath() {
     const ctx = this.ctx
+    ctx.save()
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
     const pathColors = theme.pathColors
 
-    // 性能档位 + Boss 在场判定：bypass 3 层重描边和装饰绘制，1 层中等宽度即可
-    // 真机上 3 层 stroke + 100+ 石子装饰 + Boss 火/雷/奥/毒特效叠加 = 整屏卡顿发热主因
-    const profile = this.getActivePerformanceProfile()
-    const hasBoss = this.hasBossOnField()
-    const simplified = hasBoss || profile.effectRenderStride >= 2
-
+    // 路径 3 层描边（线宽从 38/32/24 收紧到 30/26/20，overdraw 少 40%）
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
 
-    if (simplified) {
-      // 单层描边 + 略窄线宽，减少 overdraw
-      ctx.strokeStyle = pathColors[1]
-      ctx.lineWidth = 30
-      ctx.beginPath()
-      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
-      for (let i = 1; i < this.pathPoints.length; i++) {
-        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
-      }
-      ctx.stroke()
-    } else {
-      // 路径外边框（深色）
-      ctx.strokeStyle = pathColors[0]
-      ctx.lineWidth = 38
-      ctx.beginPath()
-      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
-      for (let i = 1; i < this.pathPoints.length; i++) {
-        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
-      }
-      ctx.stroke()
-
-      // 路径主体
-      ctx.strokeStyle = pathColors[1]
-      ctx.lineWidth = 32
-      ctx.beginPath()
-      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
-      for (let i = 1; i < this.pathPoints.length; i++) {
-        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
-      }
-      ctx.stroke()
-
-      // 路径内部（浅色）
-      ctx.strokeStyle = pathColors[2]
-      ctx.lineWidth = 24
-      ctx.beginPath()
-      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
-      for (let i = 1; i < this.pathPoints.length; i++) {
-        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
-      }
-      ctx.stroke()
+    ctx.strokeStyle = pathColors[0]
+    ctx.lineWidth = 30
+    ctx.beginPath()
+    ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
+    for (let i = 1; i < this.pathPoints.length; i++) {
+      ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
     }
+    ctx.stroke()
 
-    // 路径装饰：小石子（非简化档才画）
-    if (!simplified) {
-      ctx.fillStyle = pathColors[1]
-      if (this.pathDecorations) {
-        this.pathDecorations.forEach(stone => {
-          ctx.beginPath()
-          ctx.arc(stone.x, stone.y, stone.size, 0, Math.PI * 2)
-          ctx.fill()
-        })
-      }
+    ctx.strokeStyle = pathColors[1]
+    ctx.lineWidth = 26
+    ctx.beginPath()
+    ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
+    for (let i = 1; i < this.pathPoints.length; i++) {
+      ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
     }
+    ctx.stroke()
+
+    ctx.strokeStyle = pathColors[2]
+    ctx.lineWidth = 20
+    ctx.beginPath()
+    ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
+    for (let i = 1; i < this.pathPoints.length; i++) {
+      ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
+    }
+    ctx.stroke()
 
     // 路径中心线（虚线）
     ctx.strokeStyle = pathColors[2]
@@ -3925,7 +3907,7 @@ Page({
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText('👾', startX, startY)
-    
+
     // 终点标记 - 城堡
     const endPoint = this.pathPoints[this.pathPoints.length - 1]
     const endX = endPoint.x - 15
@@ -3944,6 +3926,7 @@ Page({
     for (let i = -2; i <= 2; i++) {
       ctx.fillRect(endX + i * 8 - 3, endY - 14, 6, 8)
     }
+    ctx.restore()
     ctx.restore()
   },
 
@@ -4927,6 +4910,7 @@ Page({
 
   drawWaveHUD() {
     const ctx = this.ctx
+    ctx.save()
     const level = this.data.level
     const waveInLevel = this.data.waveInLevel
     const totalWaves = this.data.totalWavesInLevel
@@ -4971,6 +4955,7 @@ Page({
     ctx.fillStyle = '#ffcc44'
     ctx.fillRect(barX, barY, barW * (waveInLevel / totalWaves), barH)
     
+    ctx.restore()
     ctx.restore()
   },
 
@@ -6381,14 +6366,12 @@ Page({
   },
 
   drawFireEffects() {
+    const ctx = this.ctx
+    ctx.save()
     const stride = this.getEffectRenderStride()
     for (let index = 0; index < this.fireEffects.length; index += stride) {
       const f = this.fireEffects[index]
-      const ctx = this.ctx
       const r = f.size
-      // 真机 Canvas 2D 兼容：3 层实色叠加模拟径向渐变
-      // 原因：createRadialGradient + addColorStop + rgba 模板每帧每个粒子创建渐变对象，
-      // boss 周围累积几十个 fireEffect 时 GPU 吃满 + 真机 rgba parse 失败 → 整屏金黄
       ctx.globalAlpha = f.alpha * 0.4
       ctx.fillStyle = '#ff4400'
       ctx.beginPath()
@@ -6405,6 +6388,7 @@ Page({
       ctx.arc(f.x, f.y, r * 0.3, 0, Math.PI * 2)
       ctx.fill()
     }
+    ctx.restore()
   },
 
   drawIceEffects() {
