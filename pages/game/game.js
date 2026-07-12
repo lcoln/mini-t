@@ -491,6 +491,32 @@ const MONSTER_TYPES = {
     shape: 'demon',
     unlockWave: 9
   },
+  wraith: {
+    name: '幽影',
+    emoji: '👤',
+    bodyColor: '#6644aa',
+    outlineColor: '#332266',
+    eyeColor: '#ff66ff',
+    baseHp: 90,
+    speed: 1.7,
+    goldDrop: 20,
+    shape: 'wraith',
+    unlockWave: 12,
+    evasionChance: 0.3
+  },
+  troll: {
+    name: '巨魔',
+    emoji: '🧌',
+    bodyColor: '#556644',
+    outlineColor: '#334422',
+    eyeColor: '#ffaa00',
+    baseHp: 600,
+    speed: 0.7,
+    goldDrop: 45,
+    shape: 'troll',
+    unlockWave: 15,
+    regenPerSec: 14
+  },
   dragon: { 
     name: '巨龙', 
     emoji: '🐉',
@@ -1620,27 +1646,44 @@ Page({
 
   generateWave(wave) {
     this.waveMonsters = []
-    
-    // 基础怪物数量随波次增加
-    const baseCount = 5 + Math.floor(wave * 1.5)
-    
+
+    const threat = this.resolveWaveThreat ? this.resolveWaveThreat(wave) : {}
+    const waveModifier = this.pendingNextWaveModifier && this.pendingNextWaveModifier.targetWave === wave
+      ? this.pendingNextWaveModifier
+      : null
+    if (waveModifier) {
+      this.pendingNextWaveModifier = null
+    }
+
+    // 基础怪物数量随波次增加，并受威胁类型调节
+    const rawBaseCount = 5 + Math.floor(wave * 1.5)
+    const baseCount = Math.max(
+      5,
+      Math.min(
+        70,
+        Math.round(rawBaseCount * (threat.countMultiplier || 1) * (waveModifier?.countMultiplier || 1))
+      )
+    )
+
     // 获取当前波次可用的怪物类型
-    const availableTypes = Object.keys(MONSTER_TYPES).filter(t => {
+    const availableTypes = Object.keys(MONSTER_TYPES).filter((t) => {
       const config = MONSTER_TYPES[t]
       return !config.isBoss && config.unlockWave <= wave
     })
-    
-    // 怪物生命值倍率：每波增加20%
-    const hpMultiplier = 1 + (wave - 1) * 0.2
-    
+
+    // 怪物生命值倍率：每波+35%、每关+30%，让中后期能跟上塔的指数输出；护甲按波次/关卡累加
+    const level = Math.ceil(wave / 10)
+    const baseArmor = Math.min(0.55, (wave - 1) * 0.016 + (level - 1) * 0.07)
+    const hpMultiplier = (1 + (wave - 1) * 0.35) * (1 + (level - 1) * 0.3) * (threat.hpMultiplier || 1) * (waveModifier?.hpMultiplier || 1)
+    const speedMultiplier = (threat.speedMultiplier || 1) * (waveModifier?.speedMultiplier || 1)
+    const goldMultiplier = waveModifier?.goldMultiplier || 1
+
     for (let i = 0; i < baseCount; i++) {
-      // 高级怪物出现概率随波次增加
       let type
       if (availableTypes.length === 1) {
         type = availableTypes[0]
       } else {
-        // 优先生成较新解锁的怪物
-        const weights = availableTypes.map(t => {
+        const weights = availableTypes.map((t) => {
           const unlockWave = MONSTER_TYPES[t].unlockWave
           return Math.max(1, wave - unlockWave + 2)
         })
@@ -1656,36 +1699,39 @@ Page({
         }
         type = availableTypes[typeIndex]
       }
-      
+
       const config = MONSTER_TYPES[type]
       this.waveMonsters.push({
         type,
         ...config,
         hp: Math.floor(config.baseHp * hpMultiplier),
         maxHp: Math.floor(config.baseHp * hpMultiplier),
-        goldDrop: Math.floor(config.goldDrop * (1 + (wave - 1) * 0.1))
+        speed: Number((config.speed * speedMultiplier).toFixed(2)),
+        goldDrop: Math.floor(config.goldDrop * (1 + (wave - 1) * 0.06) * goldMultiplier),
+        armor: Math.min(0.55, baseArmor + (config.armor || 0))
       })
     }
-    
+
     // 每5波出Boss - 不同关卡不同Boss
     if (wave % 5 === 0) {
-      const level = Math.ceil(wave / 10)
       const bossTypes = ['dragon', 'treant', 'lich', 'phoenix']
       const bossType = bossTypes[(level - 1) % bossTypes.length]
       const bossConfig = MONSTER_TYPES[bossType]
-      const bossHpMultiplier = 1 + (wave - 1) * 0.3
+      const bossHpMultiplier = (1 + (wave - 1) * 0.3) * (threat.bossHpMultiplier || 1)
       this.waveMonsters.push({
         type: bossType,
         ...bossConfig,
         hp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
         maxHp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
-        goldDrop: bossConfig.goldDrop * Math.ceil(wave / 5)
+        speed: Number((bossConfig.speed * speedMultiplier).toFixed(2)),
+        goldDrop: bossConfig.goldDrop * Math.ceil(wave / 5) + (threat.bossGoldBonus || 0),
+        armor: Math.min(0.55, baseArmor + 0.4)
       })
     }
-    
+
     // 随机打乱顺序
     this.waveMonsters.sort(() => Math.random() - 0.5)
-    
+
     this.spawnIndex = 0
     this.waveComplete = false
     this.lastSpawnTime = Date.now()
@@ -1839,7 +1885,12 @@ Page({
         monster.animTimer = 0
         monster.animFrame = (monster.animFrame + 1) % 4
       }
-      
+
+      // 生命回复（巨魔等坦克怪）
+      if (monster.regenPerSec && monster.regenPerSec > 0) {
+        monster.hp = Math.min(monster.maxHp, monster.hp + monster.regenPerSec / 60)
+      }
+
       // 灼烧效果
       if (monster.burnTimer > 0) {
         monster.hp -= monster.burnDamage
@@ -2460,36 +2511,69 @@ Page({
   },
 
   applyDamage(monster, damage, type) {
-    // 藤蔓易伤效果：增加受到的伤害
-    let finalDamage = damage
-    if (monster.vineVulnerability > 0) {
-      finalDamage = damage * (1 + monster.vineVulnerability)
+    monster.lastHitTowerType = type
+
+    // 闪避判定（高机动怪：幽影等）—— 完全不受伤害
+    if (monster.evasionChance && Math.random() < monster.evasionChance) {
+      this.floatingTexts.push({
+        x: monster.x + (Math.random() - 0.5) * 18,
+        y: monster.y - 22,
+        text: '闪避',
+        color: '#aaaaff',
+        life: 18,
+        maxLife: 18,
+        vy: -1.2,
+        vx: (Math.random() - 0.5) * 0.6,
+        scale: 0.85
+      })
+      return
     }
-    
+
+    // 暴击判定（暴击先于抗性减伤，保证暴击能部分穿透高护甲）
+    let isCrit = false
+    const critRate = this.runCritBonus || 0
+    if (critRate > 0 && Math.random() < critRate) {
+      damage = Math.floor(damage * 2)
+      isCrit = true
+    }
+
+    // 护甲/抗性减伤（精英/Boss/中后期怪自带 armor）
+    let armoredDamage = damage
+    if (monster.armor && monster.armor > 0) {
+      armoredDamage = Math.floor(damage * (1 - monster.armor))
+    }
+
+    // 藤蔓易伤效果：增加受到的伤害
+    let finalDamage = armoredDamage
+    if (monster.vineVulnerability > 0) {
+      finalDamage = armoredDamage * (1 + monster.vineVulnerability)
+    }
+
     monster.hp -= finalDamage
-    
+
     const colors = {
       fire: '#ff4400',
       ice: '#00ccff',
       nature: '#44ff44',
       arcane: '#aa44ff',
-      lightning: '#ffff00'
+      lightning: '#ffff00',
+      commander: '#9ee6ff'
     }
-    
-    // 如果有易伤加成，显示额外伤害
+
     const displayDamage = Math.floor(finalDamage)
-    const text = monster.vineVulnerability > 0 ? `-${displayDamage}!` : `-${displayDamage}`
-    
+    const critPrefix = isCrit ? '暴击! ' : ''
+    const text = isCrit ? `${critPrefix}-${displayDamage}💥` : (monster.vineVulnerability > 0 ? `-${displayDamage}!` : `-${displayDamage}`)
+
     this.floatingTexts.push({
-      x: monster.x + (Math.random() - 0.5) * 20,
-      y: monster.y - 20,
+      x: monster.x + (Math.random() - 0.5) * (monster.isBoss ? 12 : 20),
+      y: monster.y - (monster.isBoss ? 26 : 20),
       text: text,
       color: colors[type] || '#fff',
-      life: 30,
-      maxLife: 30,
+      life: monster.isBoss ? 20 : 30,
+      maxLife: monster.isBoss ? 20 : 30,
       vy: -1.5,
-      vx: (Math.random() - 0.5) * 1,
-      scale: monster.vineVulnerability > 0 ? 1.1 : 0.9  // 易伤伤害显示更大
+      vx: (Math.random() - 0.5) * (monster.isBoss ? 0.6 : 1),
+      scale: monster.vineVulnerability > 0 ? 1.1 : 0.9
     })
   },
 
@@ -4329,86 +4413,138 @@ Page({
     ctx.restore()
   },
 
+  getActivePerformanceProfile() {
+    return PERFORMANCE_PROFILES ? PERFORMANCE_PROFILES.relaxed : {
+      renderInterval: 16, simplifyTowers: false, simplifyMonsters: false,
+      simplifyBosses: false, simplifyProjectiles: false, skipDecorations: false,
+      decorStride: 1, animatedDecorations: true, effectRenderStride: 1,
+      projectileTrailPoints: 5, damageTextStride: 1, compactBossHp: false, bossDamageTextCooldown: 0
+    }
+  },
+
   drawMonsters() {
+    const profile = this.getActivePerformanceProfile()
+
     this.monsters.forEach(monster => {
       const ctx = this.ctx
       const config = MONSTER_TYPES[monster.type]
       const size = monster.isBoss ? 22 : 14
-      
+      const useCompactMonster = profile.simplifyMonsters && !monster.isBoss
+
       // 阴影
       ctx.fillStyle = 'rgba(0,0,0,0.4)'
       ctx.beginPath()
       ctx.ellipse(monster.x, monster.y + size + 4, size * 0.8, size * 0.3, 0, 0, Math.PI * 2)
       ctx.fill()
-      
-      // 状态光环
-      if (monster.slowTimer > 0) {
-        ctx.save()
-        ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
-        ctx.lineWidth = 3
-        ctx.shadowBlur = 15
-        ctx.shadowColor = '#00ccff'
-        ctx.beginPath()
-        ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.restore()
-      }
-      if (monster.vineTimer > 0) {
-        // 藤蔓缠绕效果 - 绿色藤蔓环绕
-        ctx.save()
-        ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
-        ctx.lineWidth = 2
-        ctx.shadowBlur = 10
-        ctx.shadowColor = '#44ff44'
-        // 绘制缠绕的藤蔓
-        const time = Date.now()
-        for (let i = 0; i < 3; i++) {
-          const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
-          const waveOffset = Math.sin(time * 0.005 + i) * 2
+
+      if (useCompactMonster) {
+        this.drawCompactMonster(ctx, monster, size, config)
+      } else {
+        // 状态光环
+        if (monster.slowTimer > 0) {
+          ctx.save()
+          ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
+          ctx.lineWidth = 3
+          ctx.shadowBlur = 15
+          ctx.shadowColor = '#00ccff'
           ctx.beginPath()
-          ctx.arc(monster.x, monster.y, size + 3 + waveOffset, angle, angle + Math.PI * 0.6)
+          ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
           ctx.stroke()
+          ctx.restore()
         }
-        // 易伤标记
-        ctx.fillStyle = '#ffff00'
-        ctx.font = 'bold 10px Arial'
-        ctx.textAlign = 'center'
-        ctx.fillText('⬇️', monster.x, monster.y - size - 8)
-        ctx.restore()
+        if (monster.vineTimer > 0) {
+          // 藤蔓缠绕效果 - 绿色藤蔓环绕
+          ctx.save()
+          ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
+          ctx.lineWidth = 2
+          ctx.shadowBlur = 10
+          ctx.shadowColor = '#44ff44'
+          // 绘制缠绕的藤蔓
+          const time = Date.now()
+          for (let i = 0; i < 3; i++) {
+            const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
+            const waveOffset = Math.sin(time * 0.005 + i) * 2
+            ctx.beginPath()
+            ctx.arc(monster.x, monster.y, size + 3 + waveOffset, angle, angle + Math.PI * 0.6)
+            ctx.stroke()
+          }
+          // 易伤标记
+          ctx.fillStyle = '#ffff00'
+          ctx.font = 'bold 10px Arial'
+          ctx.textAlign = 'center'
+          ctx.fillText('⬇️', monster.x, monster.y - size - 8)
+          ctx.restore()
+        }
+
+        // 根据怪物类型绘制不同外观
+        this.drawMonsterByType(ctx, monster, size)
+
+        // 燃烧效果 - 绘制在怪物身上
+        if (monster.burnTimer > 0) {
+          this.drawBurningEffect(ctx, monster, size)
+        }
       }
-      
-      // 根据怪物类型绘制不同外观
-      this.drawMonsterByType(ctx, monster, size)
-      
-      // 燃烧效果 - 绘制在怪物身上
-      if (monster.burnTimer > 0) {
-        this.drawBurningEffect(ctx, monster, size)
-      }
-      
+
       // 血条背景
       const barWidth = monster.isBoss ? 55 : 35
       const barHeight = 7
       const barY = monster.y - size - 16
       const hpPercent = Math.max(0, monster.hp / monster.maxHp)
-      
+
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
       ctx.beginPath()
       drawRoundRect(ctx, monster.x - barWidth / 2 - 2, barY - 2, barWidth + 4, barHeight + 4, 3)
       ctx.fill()
-      
+
       // 血条
       const hpColor = hpPercent > 0.6 ? '#44ff44' : hpPercent > 0.3 ? '#ffaa00' : '#ff4444'
       ctx.fillStyle = hpColor
       ctx.beginPath()
       drawRoundRect(ctx, monster.x - barWidth / 2, barY, Math.max(1, barWidth * hpPercent), barHeight, 2)
       ctx.fill()
-      
+
       // 血量百分比
       ctx.fillStyle = '#fff'
       ctx.font = 'bold 9px Arial'
       ctx.textAlign = 'center'
       ctx.fillText(`${Math.floor(hpPercent * 100)}%`, monster.x, barY + barHeight + 10)
     })
+  },
+
+  drawCompactMonster(ctx, monster, size, config) {
+    ctx.save()
+
+    let auraColor = ''
+    if (monster.slowTimer > 0) {
+      auraColor = 'rgba(100, 200, 255, 0.55)'
+    } else if (monster.vineTimer > 0) {
+      auraColor = 'rgba(100, 220, 100, 0.55)'
+    } else if (monster.burnTimer > 0) {
+      auraColor = 'rgba(255, 140, 60, 0.45)'
+    }
+
+    if (auraColor) {
+      ctx.strokeStyle = auraColor
+      ctx.lineWidth = monster.isBoss ? 3 : 2
+      ctx.beginPath()
+      ctx.arc(monster.x, monster.y, size + 4, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+
+    ctx.fillStyle = config.bodyColor
+    ctx.beginPath()
+    ctx.arc(monster.x, monster.y, size, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = config.outlineColor
+    ctx.lineWidth = monster.isBoss ? 2.5 : 1.5
+    ctx.stroke()
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `${monster.isBoss ? '18px' : '14px'} Arial`
+    ctx.fillText(config.emoji, monster.x, monster.y + 0.5)
+    ctx.restore()
   },
 
   // 绘制燃烧效果 - 更逼真的火焰
