@@ -1,36 +1,56 @@
 <view class="game-container" catchtouchmove="onGlobalTouchMove" catchtouchend="onGlobalTouchEnd">
   <!-- 顶部状态栏 -->
   <view class="status-bar">
-    <view class="status-item wave">
-      <text class="status-icon">🏰</text>
-      <text class="status-value">{{level}}-{{waveInLevel}}</text>
-      <text class="status-label">关</text>
+    <view class="status-main">
+      <view class="status-item wave">
+        <text class="status-icon">🏰</text>
+        <text class="status-value">{{level}}-{{waveInLevel}}关</text>
+      </view>
+      <view class="status-item gold">
+        <text class="status-icon">💰</text>
+        <text class="status-value gold-value">{{gold}}</text>
+      </view>
+      <view class="status-item lives">
+        <text class="status-icon">❤️</text>
+        <text class="status-value lives-value">{{lives}}</text>
+      </view>
+      <view class="status-item score">
+        <text class="status-icon">⭐</text>
+        <text class="status-value">{{score}}</text>
+      </view>
     </view>
-    <view class="status-item gold">
-      <text class="status-icon">💰</text>
-      <text class="status-value gold-value">{{gold}}</text>
-    </view>
-    <view class="status-item lives">
-      <text class="status-icon">❤️</text>
-      <text class="status-value lives-value">{{lives}}</text>
-    </view>
-    <view class="status-item score">
-      <text class="status-icon">⭐</text>
-      <text class="status-value">{{score}}</text>
-    </view>
-    <view class="pause-btn" bindtap="togglePause">
-      <text>⏸</text>
+    <view class="status-actions">
+      <view class="sound-btn {{soundEnabled ? '' : 'muted'}}" bindtap="toggleSound">
+        <text>{{soundEnabled ? '🔊' : '🔇'}}</text>
+      </view>
+      <view class="pause-btn" bindtap="togglePause">
+        <text>⏸</text>
+      </view>
     </view>
   </view>
 
   <view class="battle-banner" wx:if="{{gameState !== 'prep'}}">
-    <view class="banner-chip {{selectedBlessingKey ? 'active' : ''}}">
-      <text>{{selectedBlessingIcon}} {{selectedBlessingName}}</text>
+    <scroll-view class="battle-banner-row battle-banner-row-top" scroll-x="true" enhanced="true" show-scrollbar="false" enable-flex="true">
+      <view class="banner-chip {{selectedBlessingKey ? 'active' : ''}}">
+        <text>{{selectedBlessingIcon}} {{selectedBlessingName}}</text>
+      </view>
+      <view class="banner-chip banner-chip-threat">
+        <text>{{currentThreatIcon}} {{currentThreatTitle}}</text>
+      </view>
+      <view class="banner-chip banner-chip-objective {{threatMissionReady ? 'ready' : ''}}">
+        <text>🎯 {{threatMissionText}}</text>
+      </view>
+      <view class="banner-chip banner-chip-command {{commandPoints >= 2 ? 'ready' : ''}}">
+        <text>🛰️ {{commandPoints}} 点</text>
+      </view>
+      <view class="banner-chip banner-chip-chain" wx:if="{{activeChainTitle}}">
+        <text>{{activeChainIcon}} {{activeChainTitle}}</text>
+      </view>
+    </scroll-view>
+    <view class="battle-banner-row battle-banner-row-detail">
+      <text class="banner-detail-text">强化 {{runBuffSummary}}</text>
+      <text class="banner-detail-text banner-detail-text-secondary">{{activeChainDescription ? ('连锁：' + activeChainDescription) : (currentThreatCounterText + ' · 第' + nextSupplyWave + '波补给')}}</text>
     </view>
-    <view class="banner-chip banner-chip-subtle">
-      <text>强化 {{runBuffSummary}}</text>
-    </view>
-    <text class="banner-tip">拖动同塔合成升级 · 第{{nextSupplyWave}}波补给</text>
   </view>
 
   <!-- 战前准备条 -->
@@ -38,16 +58,16 @@
     <view class="prep-hud-top">
       <view class="prep-copy">
         <text class="prep-hud-eyebrow">开波准备</text>
-        <text class="prep-hud-title">{{selectedBlessingKey ? '继续放 1 座塔，然后开第一波' : '先选 1 个战术祝福'}}</text>
+        <text class="prep-hud-title">{{selectedBlessingKey ? '祝福已生效，至少放 1 座塔后再开第一波' : '先选 1 个战术祝福'}}</text>
       </view>
       <view class="prep-progress {{fieldTowerCount > 0 ? 'ready' : ''}}">
-        <text>{{fieldTowerCount > 0 ? '已布阵 1/1' : '待布阵 0/1'}}</text>
+        <text>{{fieldTowerCount > 0 ? '已布阵 ' + fieldTowerCount + ' 座' : '待布阵 0 座'}}</text>
       </view>
     </view>
 
     <view class="prep-step-line">
       <text class="prep-step {{selectedBlessingKey ? 'done' : 'active'}}">1 选祝福</text>
-      <text class="prep-step {{selectedBlessingKey && fieldTowerCount === 0 ? 'active' : (fieldTowerCount > 0 ? 'done' : '')}}">2 放塔</text>
+      <text class="prep-step {{selectedBlessingKey && fieldTowerCount === 0 ? 'active' : (fieldTowerCount > 0 ? 'done' : '')}}">2 布阵</text>
       <text class="prep-step {{canStartBattle ? 'active ready' : ''}}">3 开波</text>
     </view>
 
@@ -66,7 +86,10 @@
     </view>
 
     <view class="prep-footer compact">
-      <text class="prep-footnote {{canStartBattle ? 'ready' : ''}}">{{canStartBattle ? '已准备好，直接开第一波' : prepActionHint}}</text>
+      <view class="prep-copy">
+        <text class="prep-footnote {{canStartBattle ? 'ready' : ''}}">{{canStartBattle ? '已准备好，点开始后才会正式出怪' : prepActionHint}}</text>
+        <text class="prep-footnote prep-footnote-secondary" wx:if="{{selectedBlessingKey}}">{{selectedBlessingIcon}} {{selectedBlessingDescription}}</text>
+      </view>
       <button class="btn primary prep-start-btn {{canStartBattle ? '' : 'disabled'}}" bindtap="startBattle" disabled="{{!canStartBattle}}">开始第一波</button>
     </view>
   </view>
@@ -79,46 +102,73 @@
       class="game-canvas {{gameState === 'prep' ? 'prep-canvas' : ''}}"
       bindtouchstart="onCanvasTouchStart"
     ></canvas>
-    <view class="prep-slot-layer" wx:if="{{gameState === 'prep'}}">
-      <view
-        class="prep-slot {{item.occupied ? 'occupied' : ''}} {{selectedInventoryIndex !== -1 && !item.occupied ? 'selectable' : ''}}"
+    <cover-view class="prep-slot-layer">
+      <cover-view
+        class="prep-slot {{item.occupied ? 'occupied' : ''}} {{gameState === 'prep' && selectedInventoryIndex !== -1 && !item.occupied ? 'selectable' : ''}} {{gameState !== 'prep' && !item.occupied ? 'readonly' : ''}}"
         wx:for="{{prepTowerSlots}}"
         wx:key="key"
         data-row="{{item.row}}"
         data-col="{{item.col}}"
         bindtap="handlePrepSlotTap"
         style="left: {{item.left}}px; top: {{item.top}}px;"
-      ></view>
-    </view>
+      ></cover-view>
+    </cover-view>
   </view>
 
   <!-- 合成提示 -->
-  <view class="merge-hint" wx:if="{{showMergeHint}}">
-    <text class="merge-text">✨ 松开合成升级 ✨</text>
+  <view class="merge-hint {{gold < mergeCost ? 'merge-cost-warn' : ''}}" wx:if="{{showMergeHint}}">
+    <text class="merge-text">✨ 升级至 Lv.{{mergeTargetNextLevel}} · 花费 💰{{mergeCost}} ✨</text>
+    <text class="merge-cost-sub" wx:if="{{gold < mergeCost}}">金币不足</text>
+  </view>
+
+  <!-- 跟手拖拽浮层 -->
+  <view
+    class="drag-floating-tower"
+    wx:if="{{dragFloating}}"
+    style="left: {{dragFloatingX}}px; top: {{dragFloatingY}}px;"
+  >
+    <view class="drag-float-core slot-tower-{{dragFloatingType}}" style="border-color: {{dragFloatingColor}}; box-shadow: 0 0 16px {{dragFloatingColor}};">
+      <text class="drag-float-emoji">{{dragFloatingEmoji}}</text>
+      <text class="drag-float-level">Lv.{{dragFloatingLevel}}</text>
+    </view>
   </view>
 
   <!-- 底部仓库区域 -->
-  <view class="inventory-area">
+  <view class="inventory-area {{gameState === 'playing' ? 'battle-running' : ''}}">
     <view class="inventory-header">
       <text class="inventory-title">🏰 防御塔仓库</text>
-      <view class="summon-btn {{gold < summonCost || inventoryFull ? 'disabled' : ''}}" catchtap="summonTower">
-        <text class="summon-icon">✨</text>
-        <text class="summon-text">召唤</text>
-        <text class="summon-cost">💰{{summonCost}}</text>
+      <view class="inventory-actions">
+        <view class="supply-drop-btn {{commandPoints >= 2 ? '' : 'disabled'}}" catchtap="callSupplyDrop">
+          <text class="supply-drop-icon">📦</text>
+          <text class="supply-drop-text">空投</text>
+          <text class="supply-drop-cost">{{commandPoints}} / 2</text>
+        </view>
+        <view class="commander-btn {{commanderAiming ? 'targeting' : ''}} {{commandPoints >= commanderCost ? '' : 'disabled'}}" catchtap="toggleCommanderTargeting">
+          <text class="commander-icon">🛰️</text>
+          <text class="commander-text">指挥</text>
+          <text class="commander-cost">{{commandPoints}} / {{commanderCost}}</text>
+        </view>
+        <view class="summon-btn {{gold < summonCost || inventoryFull ? 'disabled' : ''}}" catchtap="summonTower">
+          <text class="summon-icon">✨</text>
+          <text class="summon-text">召唤</text>
+          <text class="summon-cost">💰{{summonCost}}</text>
+        </view>
       </view>
     </view>
     
     <view class="inventory-hint">
-      <text>点选或拖拽放置，相同塔可合成</text>
+      <text>无漏怪或击杀精英可攒战术点，2 点可空投补塔，3 点可投放集火区（优先攻击并增伤）</text>
     </view>
     
-    <view class="inventory-grid">
+    <view class="inventory-grid {{showWaveChoice ? 'dimmed' : ''}}">
       <view 
         class="inventory-slot {{item ? 'has-tower tower-' + item.type : 'empty'}} {{draggingSlotIndex === index ? 'dragging' : ''}} {{mergeTargetSlotIndex === index ? 'merge-target' : ''}} {{selectedInventoryIndex === index ? 'selected' : ''}}"
         wx:for="{{inventorySlots}}"
         wx:key="index"
         data-index="{{index}}"
         catchtouchstart="onInventoryTouchStart"
+        catchtouchmove="onTouchMove"
+        catchtouchend="onTouchEnd"
         bindtap="handleInventorySlotTap"
       >
         <block wx:if="{{item}}">
@@ -156,38 +206,35 @@
         </block>
       </view>
     </view>
-  </view>
 
-  <!-- 拖动浮层 -->
-  <view 
-    class="drag-floating-tower" 
-    wx:if="{{dragFloating}}"
-    style="left:{{dragFloatingX}}px; top:{{dragFloatingY}}px; border-color:{{dragFloatingColor}};"
-  >
-    <view class="drag-float-body slot-tower-{{dragFloatingType}}" style="background: radial-gradient(circle at 30% 30%, #fff, {{dragFloatingColor}}); box-shadow: 0 0 15px {{dragFloatingColor}}, inset 0 -3px 8px rgba(0,0,0,0.3);">
-      <text class="drag-float-emoji">{{dragFloatingEmoji}}</text>
-    </view>
-    <view class="drag-float-level">
-      <text>Lv.{{dragFloatingLevel}}</text>
-    </view>
-  </view>
-
-  <view class="overlay" wx:if="{{showWaveChoice}}">
-    <view class="panel supply-panel">
-      <text class="panel-title">战术补给</text>
-      <text class="supply-subtitle">{{waveChoiceTitle}}</text>
-      <view class="supply-list">
-        <view
-          class="supply-card"
-          wx:for="{{waveChoiceOptions}}"
-          wx:key="key"
-          data-key="{{item.key}}"
-          bindtap="applyWaveChoice"
-        >
-          <text class="supply-icon">{{item.icon}}</text>
-          <text class="supply-name">{{item.title}}</text>
-          <text class="supply-desc">{{item.description}}</text>
+    <view class="choice-drawer" wx:if="{{showWaveChoice}}">
+      <view class="choice-drawer-panel">
+        <view class="choice-drawer-head">
+          <text class="choice-drawer-title">{{waveChoicePanelTitle || '战术补给'}}</text>
+          <text class="choice-drawer-subtitle">{{waveChoiceTitle}}</text>
+          <text class="choice-drawer-hint" wx:if="{{waveChoiceHint}}">{{waveChoiceHint}}</text>
         </view>
+        <scroll-view class="choice-drawer-scroll" scroll-x="true" enhanced="true" show-scrollbar="false" enable-flex="true">
+          <view class="choice-drawer-list">
+            <view
+              class="choice-drawer-card"
+              wx:for="{{waveChoiceOptions}}"
+              wx:key="key"
+              data-key="{{item.key}}"
+              bindtap="applyWaveChoice"
+            >
+              <text class="choice-drawer-icon">{{item.icon}}</text>
+              <view class="choice-drawer-copy">
+                <view class="choice-drawer-name">
+                  <text>{{item.title}}</text>
+                </view>
+                <view class="choice-drawer-desc">
+                  <text>{{item.description}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
       </view>
     </view>
   </view>

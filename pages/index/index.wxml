@@ -7,17 +7,21 @@
     <view class="badge-row">
       <text class="hero-badge">3分钟一局</text>
       <text class="hero-badge">拖拽合成</text>
-      <text class="hero-badge">每3波补给</text>
+      <text class="hero-badge">威胁 + 空投</text>
     </view>
     <text class="main-title">元素守护者</text>
     <text class="sub-title">ELEMENT GUARDIAN</text>
-    <text class="hero-desc">选祝福、摆防线、每3波选强化，三分钟一局。</text>
+    <text class="hero-desc">选祝福、读威胁、攒战术点呼叫空投，三分钟一局。</text>
   </view>
 
   <view class="menu-section">
     <button class="game-btn start-btn" bindtap="startGame">
-      <text class="btn-text">开始守护</text>
+      <text class="btn-text">{{hasSavedRun ? '继续守护' : '开始守护'}}</text>
       <text class="btn-icon">⚔️</text>
+    </button>
+    <text class="saved-run-tip" wx:if="{{hasSavedRun}}">{{savedRunLabel}}</text>
+    <button class="game-btn ghost-btn" wx:if="{{hasSavedRun}}" bindtap="startNewGame">
+      <text class="ghost-btn-text">放弃存档，开始新局</text>
     </button>
 
     <view class="stats-panel">
@@ -57,8 +61,8 @@
       </view>
       <view class="feature-card compact tutorial-card">
         <text class="tutorial-step-no">3</text>
-        <text class="feature-title">清波选强化</text>
-        <text class="feature-text">每3波二选一补给。</text>
+        <text class="feature-title">读威胁攒空投</text>
+        <text class="feature-text">无漏怪或斩精英拿战术点。</text>
       </view>
     </view>
   </view>

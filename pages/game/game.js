@@ -16,7 +16,7 @@ const CONFIG = {
   canvasWidth: 375,
   canvasHeight: 550,
   gridCols: 11,
-  gridRows: 10,
+  gridRows: 12,
   cellSize: 32,
   spawnInterval: 1800
 }
@@ -35,7 +35,208 @@ const PERFORMANCE_LIMITS = {
 
 const DRAG_UI_INTERVAL = 32
 const IDLE_RENDER_INTERVAL = 120
-const MIN_SUMMON_COST = 8
+const MIN_SUMMON_COST = 10
+const DRAG_START_THRESHOLD = 10
+const FIELD_DRAG_PICK_RADIUS = 28
+const FIELD_MERGE_RADIUS = 58
+const TOWER_SLOT_SNAP_RADIUS = 34
+const INVENTORY_HIT_TOLERANCE = 8
+const INVENTORY_MERGE_RADIUS = 22
+const INVENTORY_MERGE_COMMIT_RADIUS = 12
+const INVENTORY_MERGE_CORE_RATIO = 0.24
+const BOSS_PRESSURE_BONUS = 42
+const BOSS_PROFILE_GRACE_MS = 520
+const PERFORMANCE_PROFILE_INTERVALS = {
+  relaxed: 180,
+  elevated: 80
+}
+const PERFORMANCE_PROFILE_HYSTERESIS = {
+  busyEnter: 52,
+  busyExit: 38,
+  intenseEnter: 94,
+  intenseExit: 72,
+  bossBusyFloor: 48,
+  bossIntenseEnter: 60,
+  bossIntenseExit: 46
+}
+
+const AUDIO_SETTING_KEY = 'miniTSoundEnabled'
+const RUN_PROGRESS_KEY = 'miniTRunProgress'
+const RUN_PROGRESS_VERSION = 1
+const RUN_PROGRESS_INTERVAL = 1500
+const COMMANDER_COST = 3
+const COMMANDER_MARK_DURATION = 5600
+const COMMANDER_MARK_RADIUS = 76
+const COMMANDER_PULSE_INTERVAL = 420
+const COMMANDER_PULSE_DAMAGE = 12
+const COMMANDER_ZONE_DAMAGE_BONUS = 0.45
+const COMMANDER_ZONE_ATTACK_SPEED_FACTOR = 0.72
+const SOUND_ASSETS = {
+  ui: '/assets/audio/ui-tap.wav',
+  blessing: '/assets/audio/blessing.wav',
+  summon: '/assets/audio/summon.wav',
+  place: '/assets/audio/place.wav',
+  merge: '/assets/audio/merge.wav',
+  reward: '/assets/audio/reward.wav',
+  wave: '/assets/audio/wave-start.wav',
+  boss: '/assets/audio/boss-spawn.wav',
+  chainReady: '/assets/audio/chain-ready.wav',
+  specialize: '/assets/audio/specialize.wav',
+  commander: '/assets/audio/commander.wav',
+  fireAttack: '/assets/audio/fire-shot.wav',
+  fireAttackAlt: '/assets/audio/fire-shot-alt.wav',
+  iceAttack: '/assets/audio/ice-shot.wav',
+  iceAttackAlt: '/assets/audio/ice-shot-alt.wav',
+  natureAttack: '/assets/audio/nature-shot.wav',
+  natureAttackAlt: '/assets/audio/nature-shot-alt.wav',
+  arcaneAttack: '/assets/audio/arcane-shot.wav',
+  arcaneAttackAlt: '/assets/audio/arcane-shot-alt.wav',
+  lightningAttack: '/assets/audio/lightning-shot.wav',
+  lightningAttackAlt: '/assets/audio/lightning-shot-alt.wav',
+  forestAmbience: '/assets/audio/forest-ambience.wav',
+  desertAmbience: '/assets/audio/desert-ambience.wav',
+  iceAmbience: '/assets/audio/ice-ambience.wav',
+  volcanoAmbience: '/assets/audio/volcano-ambience.wav',
+  gameover: '/assets/audio/game-over.wav'
+}
+const SOUND_POOL_SIZES = {
+  ui: 2,
+  blessing: 2,
+  summon: 2,
+  place: 2,
+  merge: 2,
+  reward: 2,
+  wave: 2,
+  boss: 1,
+  chainReady: 1,
+  specialize: 1,
+  commander: 1,
+  fireAttack: 3,
+  fireAttackAlt: 3,
+  iceAttack: 3,
+  iceAttackAlt: 3,
+  natureAttack: 3,
+  natureAttackAlt: 3,
+  arcaneAttack: 3,
+  arcaneAttackAlt: 3,
+  lightningAttack: 2,
+  lightningAttackAlt: 2,
+  gameover: 1
+}
+const SOUND_VOLUMES = {
+  ui: 0.34,
+  blessing: 0.55,
+  summon: 0.45,
+  place: 0.42,
+  merge: 0.62,
+  reward: 0.48,
+  wave: 0.56,
+  boss: 0.68,
+  chainReady: 0.62,
+  specialize: 0.66,
+  commander: 0.58,
+  fireAttack: 0.2,
+  fireAttackAlt: 0.18,
+  iceAttack: 0.18,
+  iceAttackAlt: 0.18,
+  natureAttack: 0.19,
+  natureAttackAlt: 0.18,
+  arcaneAttack: 0.22,
+  arcaneAttackAlt: 0.22,
+  lightningAttack: 0.22,
+  lightningAttackAlt: 0.22,
+  forestAmbience: 0.16,
+  desertAmbience: 0.14,
+  iceAmbience: 0.14,
+  volcanoAmbience: 0.17,
+  gameover: 0.62
+}
+const SOUND_COOLDOWNS = {
+  fireAttack: 82,
+  fireAttackAlt: 82,
+  iceAttack: 96,
+  iceAttackAlt: 96,
+  natureAttack: 92,
+  natureAttackAlt: 92,
+  arcaneAttack: 110,
+  arcaneAttackAlt: 110,
+  lightningAttack: 110,
+  lightningAttackAlt: 110,
+  merge: 140,
+  chainReady: 420,
+  specialize: 400,
+  commander: 260,
+  boss: 420,
+  gameover: 800
+}
+const AMBIENT_TRACKS = {
+  forest: 'forestAmbience',
+  desert: 'desertAmbience',
+  ice: 'iceAmbience',
+  volcano: 'volcanoAmbience'
+}
+const TOWER_ATTACK_SOUNDS = {
+  fire: { keys: ['fireAttack', 'fireAttackAlt'], cooldownKey: 'fireAttack', levelBoost: 0.018 },
+  ice: { keys: ['iceAttack', 'iceAttackAlt'], cooldownKey: 'iceAttack', levelBoost: 0.016 },
+  nature: { keys: ['natureAttack', 'natureAttackAlt'], cooldownKey: 'natureAttack', levelBoost: 0.014 },
+  arcane: { keys: ['arcaneAttack', 'arcaneAttackAlt'], cooldownKey: 'arcaneAttack', levelBoost: 0.02 },
+  lightning: { keys: ['lightningAttack', 'lightningAttackAlt'], cooldownKey: 'lightningAttack', levelBoost: 0.018 }
+}
+
+const PERFORMANCE_PROFILES = {
+  relaxed: {
+    renderInterval: 16,
+    simplifyTowers: false,
+    simplifyMonsters: false,
+    simplifyBosses: false,
+    simplifyProjectiles: false,
+    skipDecorations: false,
+    decorStride: 1,
+    animatedDecorations: true,
+    effectRenderStride: 1,
+    projectileTrailPoints: 5,
+    damageTextStride: 1,
+    compactBossHp: false,
+    bossDamageTextCooldown: 0
+  },
+  busy: {
+    renderInterval: 30,
+    simplifyTowers: false,
+    simplifyMonsters: false,
+    simplifyBosses: true,
+    simplifyProjectiles: true,
+    skipDecorations: false,
+    decorStride: 2,
+    animatedDecorations: false,
+    effectRenderStride: 2,
+    projectileTrailPoints: 3,
+    damageTextStride: 1,
+    compactBossHp: true,
+    bossDamageTextCooldown: 80
+  },
+  intense: {
+    renderInterval: 42,
+    simplifyTowers: true,
+    simplifyMonsters: true,
+    simplifyBosses: true,
+    simplifyProjectiles: true,
+    skipDecorations: true,
+    decorStride: 3,
+    animatedDecorations: false,
+    effectRenderStride: 3,
+    projectileTrailPoints: 1,
+    damageTextStride: 2,
+    compactBossHp: true,
+    bossDamageTextCooldown: 140
+  }
+}
+
+// 塔最高等级（合并/升级上限）
+const MAX_TOWER_LEVEL = 10
+
+// 塔升级金币消耗公式：base + perLevelSq × level²
+const TOWER_UPGRADE_GOLD_BASE = 15
+const TOWER_UPGRADE_GOLD_PER_LEVEL_SQ = 5
 
 // 塔类型配置
 const TOWER_TYPES = {
@@ -145,41 +346,41 @@ const SUPPLY_REWARDS = {
     key: 'forge',
     icon: '🔧',
     title: '火力铸造',
-    description: '全塔伤害 +1，本局持续生效。',
+    description: '全塔伤害 +2，本局持续生效。',
     type: 'damage',
-    amount: 1
+    amount: 2
   },
   overclock: {
     key: 'overclock',
     icon: '⚙️',
     title: '超频线圈',
-    description: '全塔攻速提升，攻击间隔 -90ms。',
+    description: '全塔攻速提升，攻击间隔 -100ms。',
     type: 'attackSpeed',
-    amount: 90
+    amount: 100
   },
   radar: {
     key: 'radar',
     icon: '📡',
     title: '追猎雷达',
-    description: '全塔射程 +8，补足压线能力。',
+    description: '全塔射程 +12，补足远程压制能力。',
     type: 'range',
-    amount: 8
+    amount: 12
   },
   cache: {
     key: 'cache',
     icon: '💰',
     title: '金币补给',
-    description: '立刻获得 80 金币，快速补经济。',
+    description: '立刻获得 120 金币，快速补经济。',
     type: 'gold',
-    amount: 80
+    amount: 120
   },
-  repair: {
-    key: 'repair',
-    icon: '❤️',
-    title: '紧急修复',
-    description: '立刻恢复 3 点生命。',
-    type: 'lives',
-    amount: 3
+  lifeInfuse: {
+    key: 'lifeInfuse',
+    icon: '💚',
+    title: '生命灌注',
+    description: '恢复 4 点生命，且场上所有塔回复满血量。',
+    type: 'lifeInfuse',
+    amount: 4
   },
   airdrop: {
     key: 'airdrop',
@@ -188,20 +389,177 @@ const SUPPLY_REWARDS = {
     description: '获得 1 座与当前祝福同流派的塔。',
     type: 'tower'
   },
-  discount: {
-    key: 'discount',
-    icon: '🛒',
-    title: '招募折扣',
-    description: '召唤价格 -2，最低 8 金币。',
-    type: 'summonCost',
-    amount: 2
+  critCore: {
+    key: 'critCore',
+    icon: '💥',
+    title: '暴击核心',
+    description: '全塔获得 18% 暴击率，暴击伤害 ×2。持续整局。',
+    type: 'crit',
+    amount: 0.18
   }
 }
 
 const SUPPLY_SYNERGY = {
   ember: 'forge',
-  storm: 'overclock',
-  grove: 'radar'
+  storm: 'critCore',
+  grove: 'lifeInfuse'
+}
+
+const WAVE_THREAT_ROTATION = ['swarm', 'bulwark', 'rush', 'elite']
+const WAVE_THREATS = {
+  swarm: {
+    key: 'swarm',
+    icon: '🐜',
+    title: '虫潮奔袭',
+    description: '敌人更多，但单体更脆。',
+    counterText: '推荐：火焰 / 闪电',
+    counterTypes: ['fire', 'lightning'],
+    countMultiplier: 1.32,
+    hpMultiplier: 0.88,
+    speedMultiplier: 1.05,
+    suppressionGoal: 6
+  },
+  bulwark: {
+    key: 'bulwark',
+    icon: '🛡️',
+    title: '重甲推进',
+    description: '敌人更硬更慢，适合点杀。',
+    counterText: '推荐：奥术 / 火焰',
+    counterTypes: ['arcane', 'fire'],
+    countMultiplier: 0.84,
+    hpMultiplier: 1.48,
+    speedMultiplier: 0.9,
+    suppressionGoal: 5
+  },
+  rush: {
+    key: 'rush',
+    icon: '💨',
+    title: '疾行突袭',
+    description: '敌人更快，容易漏怪。',
+    counterText: '推荐：寒冰 / 闪电',
+    counterTypes: ['ice', 'lightning'],
+    countMultiplier: 1.1,
+    hpMultiplier: 0.94,
+    speedMultiplier: 1.22,
+    suppressionGoal: 5
+  },
+  elite: {
+    key: 'elite',
+    icon: '👑',
+    title: '精英领队',
+    description: '本波混入高赏金精英。',
+    counterText: '推荐：奥术 / 自然',
+    counterTypes: ['arcane', 'nature'],
+    countMultiplier: 0.96,
+    hpMultiplier: 1.05,
+    speedMultiplier: 1.05,
+    suppressionGoal: 4,
+    eliteCount: 1,
+    eliteHpMultiplier: 2.45,
+    eliteSpeedMultiplier: 1.12,
+    eliteGoldBonus: 18,
+    eliteRewardPoints: 1
+  },
+  boss: {
+    key: 'boss',
+    icon: '☄️',
+    title: '灾厄首领',
+    description: 'Boss 血量更高，击杀给额外战术点。',
+    counterText: '推荐：奥术 / 火焰',
+    counterTypes: ['arcane', 'fire'],
+    countMultiplier: 1,
+    hpMultiplier: 1.08,
+    speedMultiplier: 1,
+    suppressionGoal: 3,
+    bossHpMultiplier: 1.2,
+    bossGoldBonus: 35,
+    bossRewardPoints: 1
+  }
+}
+
+const THREAT_CHAIN_RULES = {
+  blitz: {
+    key: 'blitz',
+    icon: '⚡',
+    title: '闪电突袭',
+    description: '敌人又快又脆，适合高攻速点杀流。',
+    detail: '数量 -28% · 速度 +30% · 血量 ×0.75 · 金币 +15%',
+    countMultiplier: 0.72,
+    speedMultiplier: 1.30,
+    hpMultiplier: 0.75,
+    goldMultiplier: 1.15
+  },
+  greed: {
+    key: 'greed',
+    icon: '💎',
+    title: '黄金潮汐',
+    description: '海量弱怪涌来，守住了就是一波肥。',
+    detail: '数量 +42% · 精英 +1 · 金币 +50% · 战术点 +1/精英',
+    countMultiplier: 1.42,
+    goldMultiplier: 1.50,
+    extraEliteCount: 1,
+    eliteRewardPoints: 1
+  },
+  fortress: {
+    key: 'fortress',
+    icon: '🛡️',
+    title: '钢铁堡垒',
+    description: '重甲慢速强敌，打穿一个就回本。',
+    detail: '血量 ×1.85 · 速度 -25% · 金币 +40% · 精英 +2 · 精英血量 ×1.5',
+    hpMultiplier: 1.85,
+    speedMultiplier: 0.75,
+    goldMultiplier: 1.40,
+    extraEliteCount: 2,
+    eliteHpMultiplier: 1.5
+  }
+}
+
+const SPECIALIZATION_OPTIONS = {
+  fire: [
+    {
+      key: 'inferno',
+      icon: '🔥',
+      title: '炼狱焦芯',
+      description: '灼烧更久更痛，对精英/Boss 灼烧+60%，专烧硬骨头。',
+      shortName: '炼狱',
+      burnDurationBonus: 150,
+      burnDamageMultiplier: 1.85,
+      damageBonus: 5
+    },
+    {
+      key: 'volatile',
+      icon: '💥',
+      title: '爆燃弹芯',
+      description: '命中大范围溅射，攻速更快，专清虫潮。',
+      shortName: '爆燃',
+      splashRadius: 62,
+      splashRatio: 0.75,
+      rangeBonus: 2,
+      attackSpeedBonus: -50
+    }
+  ],
+  ice: [
+    {
+      key: 'frostlock',
+      icon: '🧊',
+      title: '霜锁线圈',
+      description: '连续命中后可短暂冻结目标。',
+      shortName: '霜锁',
+      freezeHits: 3,
+      freezeDuration: 34,
+      rangeBonus: 8
+    },
+    {
+      key: 'shatter',
+      icon: '💠',
+      title: '碎晶协议',
+      description: '对减速目标造成更高伤害。',
+      shortName: '碎晶',
+      shatterMultiplier: 1.38,
+      damageBonus: 2,
+      attackSpeedBonus: 40
+    }
+  ]
 }
 
 // 怪物类型配置 - 添加独特外观
@@ -290,6 +648,32 @@ const MONSTER_TYPES = {
     shape: 'demon',
     unlockWave: 9
   },
+  wraith: {
+    name: '幽影',
+    emoji: '👤',
+    bodyColor: '#6644aa',
+    outlineColor: '#332266',
+    eyeColor: '#ff66ff',
+    baseHp: 90,
+    speed: 1.7,
+    goldDrop: 20,
+    shape: 'wraith',
+    unlockWave: 12,
+    evasionChance: 0.3
+  },
+  troll: {
+    name: '巨魔',
+    emoji: '🧌',
+    bodyColor: '#556644',
+    outlineColor: '#334422',
+    eyeColor: '#ffaa00',
+    baseHp: 600,
+    speed: 0.7,
+    goldDrop: 45,
+    shape: 'troll',
+    unlockWave: 15,
+    regenPerSec: 14
+  },
   dragon: { 
     name: '巨龙', 
     emoji: '🐉',
@@ -346,7 +730,7 @@ const MONSTER_TYPES = {
 
 // 底部格子配置
 const INVENTORY_COLS = 5
-const INVENTORY_ROWS = 3
+const INVENTORY_ROWS = 4
 
 // 地形主题配置
 const MAP_THEMES = {
@@ -357,14 +741,14 @@ const MAP_THEMES = {
     grassColor: 'rgba(60, 120, 60, 0.15)',
     gridColor: 'rgba(80, 180, 80, 0.2)',
     decorTypes: ['tree', 'bush', 'flower', 'mushroom', 'rock'],
-    // 塔位放在路径两侧，不在路上
     towerSlots: [
-      {row: 0, col: 1}, {row: 0, col: 4}, {row: 0, col: 7}, {row: 0, col: 10},
+      {row: 1, col: 1}, {row: 1, col: 4}, {row: 1, col: 7}, {row: 1, col: 10},
       {row: 2, col: 2}, {row: 2, col: 9},
       {row: 4, col: 0}, {row: 4, col: 5}, {row: 4, col: 10},
       {row: 6, col: 2}, {row: 6, col: 7},
       {row: 8, col: 0}, {row: 8, col: 4}, {row: 8, col: 10},
-      {row: 9, col: 6}
+      {row: 9, col: 6},
+      {row: 10, col: 7}, {row: 10, col: 9}, {row: 10, col: 10}, {row: 11, col: 8}
     ]
   },
   desert: {
@@ -375,12 +759,13 @@ const MAP_THEMES = {
     gridColor: 'rgba(200, 180, 100, 0.2)',
     decorTypes: ['cactus', 'rock', 'skull', 'tumbleweed'],
     towerSlots: [
-      {row: 0, col: 1}, {row: 0, col: 5}, {row: 0, col: 9},
-      {row: 2, col: 3}, {row: 2, col: 7},
-      {row: 4, col: 0}, {row: 4, col: 10},
-      {row: 6, col: 2}, {row: 6, col: 5}, {row: 6, col: 8},
-      {row: 8, col: 0}, {row: 8, col: 4}, {row: 8, col: 10},
-      {row: 9, col: 7}
+      {row: 1, col: 2}, {row: 1, col: 4}, {row: 1, col: 6}, {row: 1, col: 8}, {row: 1, col: 10},
+      {row: 3, col: 0}, {row: 3, col: 6},
+      {row: 5, col: 2}, {row: 5, col: 8},
+      {row: 6, col: 0}, {row: 6, col: 4}, {row: 6, col: 10},
+      {row: 7, col: 2}, {row: 7, col: 8},
+      {row: 8, col: 5},
+      {row: 10, col: 7}, {row: 10, col: 9}, {row: 11, col: 8}
     ]
   },
   ice: {
@@ -391,12 +776,13 @@ const MAP_THEMES = {
     gridColor: 'rgba(100, 180, 255, 0.2)',
     decorTypes: ['ice_crystal', 'snow_pile', 'frozen_tree', 'rock'],
     towerSlots: [
-      {row: 0, col: 2}, {row: 0, col: 8},
-      {row: 2, col: 0}, {row: 2, col: 5}, {row: 2, col: 10},
-      {row: 4, col: 3}, {row: 4, col: 7},
-      {row: 6, col: 0}, {row: 6, col: 5}, {row: 6, col: 10},
-      {row: 8, col: 2}, {row: 8, col: 8},
-      {row: 9, col: 5}
+      {row: 1, col: 1}, {row: 1, col: 3}, {row: 1, col: 6}, {row: 1, col: 9},
+      {row: 3, col: 1}, {row: 3, col: 7},
+      {row: 4, col: 0}, {row: 4, col: 5}, {row: 4, col: 10},
+      {row: 6, col: 3}, {row: 6, col: 9},
+      {row: 7, col: 1}, {row: 7, col: 7},
+      {row: 8, col: 0}, {row: 8, col: 5}, {row: 8, col: 10},
+      {row: 10, col: 5}, {row: 10, col: 7}, {row: 11, col: 6}
     ]
   },
   volcano: {
@@ -407,11 +793,14 @@ const MAP_THEMES = {
     gridColor: 'rgba(255, 150, 100, 0.15)',
     decorTypes: ['lava_rock', 'fire_vent', 'ash_pile', 'dead_tree'],
     towerSlots: [
-      {row: 0, col: 0}, {row: 0, col: 5}, {row: 0, col: 10},
-      {row: 2, col: 2}, {row: 2, col: 8},
-      {row: 4, col: 0}, {row: 4, col: 4}, {row: 4, col: 10},
-      {row: 6, col: 2}, {row: 6, col: 6}, {row: 6, col: 9},
-      {row: 8, col: 0}, {row: 8, col: 5}, {row: 8, col: 10}
+      {row: 1, col: 0}, {row: 1, col: 2}, {row: 1, col: 5}, {row: 1, col: 8}, {row: 1, col: 10},
+      {row: 3, col: 3}, {row: 3, col: 7},
+      {row: 4, col: 0}, {row: 4, col: 10},
+      {row: 5, col: 5},
+      {row: 6, col: 2}, {row: 6, col: 8},
+      {row: 7, col: 0}, {row: 7, col: 6}, {row: 7, col: 10},
+      {row: 8, col: 3}, {row: 8, col: 9},
+      {row: 10, col: 6}, {row: 10, col: 8}, {row: 11, col: 7}
     ]
   }
 }
@@ -433,16 +822,26 @@ Page({
     totalWavesInLevel: 10, // 每关总波数
     // 底部仓库
     inventorySlots: [],
-    summonCost: 15,
+    summonCost: 20,
     inventoryFull: false,
     canvasRect: null,
     draggingSlotIndex: -1,
     mergeTargetSlotIndex: -1,
+    mergeCost: 0,
+    mergeTargetNextLevel: 2,
+    dragFloating: false,
+    dragFloatingX: 0,
+    dragFloatingY: 0,
+    dragFloatingEmoji: '✨',
+    dragFloatingColor: '#8bff7b',
+    dragFloatingLevel: 1,
+    dragFloatingType: 'fire',
     // 当前地形主题
     currentTheme: 'forest',
     selectedBlessingKey: '',
     selectedBlessingName: '尚未选择战术祝福',
     selectedBlessingIcon: '✨',
+    selectedBlessingDescription: '选择后会立刻生效，并持续整局。',
     blessingOptions: Object.values(BLESSINGS),
     fieldTowerCount: 0,
     canStartBattle: false,
@@ -452,8 +851,28 @@ Page({
     runBuffSummary: '未激活',
     nextSupplyWave: 3,
     showWaveChoice: false,
+    waveChoiceMode: '',
+    waveChoicePanelTitle: '战术补给',
     waveChoiceTitle: '',
-    waveChoiceOptions: []
+    waveChoiceHint: '',
+    waveChoiceOptions: [],
+    pendingSpecializationTowerId: null,
+    pendingSpecializationSource: '',
+    choiceReturnState: 'playing',
+    activeChainIcon: '',
+    activeChainTitle: '',
+    activeChainDescription: '',
+    currentThreatIcon: '🐜',
+    currentThreatTitle: '虫潮奔袭',
+    currentThreatDescription: '敌人更多，但单体更脆。',
+    currentThreatCounterText: '推荐：火焰 / 闪电',
+    threatMissionText: '压制 0/6',
+    threatMissionReady: false,
+    commanderCost: COMMANDER_COST,
+    commanderAiming: false,
+    commanderReadyText: '3 点可火力标记',
+    commandPoints: 0,
+    soundEnabled: true
   },
 
   canvas: null,
@@ -494,8 +913,33 @@ Page({
   lastDragUiUpdateAt: 0,
   lastMergeHintVisible: false,
   lastMergeHintSlotIndex: -1,
+  lastMergeCost: 0,
+  lastMergeTargetNextLevel: 0,
   inventoryRect: null,
+  inventorySlotRects: [],
   windowWidth: 375,
+  performanceProfileKey: 'relaxed',
+  activePerformanceProfile: PERFORMANCE_PROFILES.relaxed,
+  lastPerformanceProfileCheckAt: 0,
+  lastBossSeenAt: 0,
+  lastFrameRenderAt: 0,
+  renderFrameCount: 0,
+  lastRunPersistedAt: 0,
+  lastRenderRecoveryAt: 0,
+  pendingGoldDelta: 0,
+  pendingScoreDelta: 0,
+  pendingLivesDelta: 0,
+  pendingCommandPointsDelta: 0,
+  waveStartLives: 20,
+  currentWaveThreat: WAVE_THREATS.swarm,
+  currentThreatMissionProgress: 0,
+  currentThreatMissionTarget: 6,
+  currentThreatMissionCompleted: false,
+  pendingNextWaveModifier: null,
+  activeWaveModifier: null,
+  commanderZone: null,
+  ambientAudio: null,
+  ambientKey: '',
   
   // 拖动 - 优化
   draggingTower: null,
@@ -513,12 +957,13 @@ Page({
   dragStartClientX: 0,       // 触摸起始位置X
   dragStartClientY: 0,       // 触摸起始位置Y
   hasMoved: false,           // 是否已经开始移动
-  dragThreshold: 8,          // 拖动阈值（降低）
+  dragThreshold: DRAG_START_THRESHOLD,
   touchStartTime: 0,         // 触摸开始时间
   mergeTargetType: null,
   mergeTargetInventoryIndex: -1,
 
   onLoad() {
+    this.initSoundSettings()
     this.initCanvas()
   },
 
@@ -530,11 +975,208 @@ Page({
   },
 
   onHide() {
+    this.persistRunProgress({ immediate: true })
+    this.stopAllSounds()
     this.stopGame()
   },
 
   onUnload() {
+    this.persistRunProgress({ immediate: true })
     this.stopGame()
+    this.destroySoundPool()
+  },
+
+  initSoundSettings() {
+    const stored = wx.getStorageSync(AUDIO_SETTING_KEY)
+    const soundEnabled = typeof stored === 'boolean' ? stored : true
+    this.soundEnabled = soundEnabled
+    this.setData({ soundEnabled })
+    this.ensureSoundPool()
+  },
+
+  ensureSoundPool() {
+    if (this.soundInitialized) return
+
+    this.soundPool = {}
+    this.soundPoolCursor = {}
+    this.soundLastPlayedAt = {}
+
+    Object.keys(SOUND_ASSETS).forEach((key) => {
+      if (String(key).endsWith('Ambience')) return
+
+      const size = SOUND_POOL_SIZES[key] || 1
+      this.soundPool[key] = []
+      this.soundPoolCursor[key] = 0
+
+      for (let i = 0; i < size; i++) {
+        try {
+          const audio = wx.createInnerAudioContext()
+          audio.src = SOUND_ASSETS[key]
+          audio.autoplay = false
+          audio.loop = false
+          audio.obeyMuteSwitch = true
+          audio.volume = SOUND_VOLUMES[key] ?? 0.5
+          this.soundPool[key].push(audio)
+        } catch (error) {
+          // 忽略单个音频实例初始化失败，避免阻塞游戏主流程
+        }
+      }
+    })
+
+    this.soundInitialized = true
+  },
+
+  ensureAmbientAudio() {
+    if (this.ambientAudio) return this.ambientAudio
+
+    try {
+      const audio = wx.createInnerAudioContext()
+      audio.autoplay = false
+      audio.loop = true
+      audio.obeyMuteSwitch = true
+      this.ambientAudio = audio
+      return audio
+    } catch (error) {
+      this.ambientAudio = null
+      return null
+    }
+  },
+
+  syncAmbientTrack(themeKey = this.data.currentTheme) {
+    if (!this.soundEnabled) return
+
+    const ambientKey = AMBIENT_TRACKS[themeKey]
+    if (!ambientKey || !SOUND_ASSETS[ambientKey]) return
+
+    const audio = this.ensureAmbientAudio()
+    if (!audio) return
+
+    try {
+      audio.volume = SOUND_VOLUMES[ambientKey] ?? 0.16
+      if (this.ambientKey !== ambientKey) {
+        audio.stop()
+        audio.src = SOUND_ASSETS[ambientKey]
+        this.ambientKey = ambientKey
+      }
+      audio.play()
+    } catch (error) {
+      // 忽略环境音失败
+    }
+  },
+
+  stopAmbientTrack() {
+    if (!this.ambientAudio) return
+    try {
+      this.ambientAudio.stop()
+    } catch (error) {
+      // 忽略停止失败
+    }
+  },
+
+  playSound(key, options = {}) {
+    if (!this.soundEnabled) return
+    this.ensureSoundPool()
+
+    const pool = this.soundPool[key]
+    if (!pool || pool.length === 0) return
+
+    const cooldown = options.cooldown ?? SOUND_COOLDOWNS[key] ?? 0
+    const cooldownKey = options.cooldownKey || key
+    const now = Date.now()
+    const lastAt = this.soundLastPlayedAt[cooldownKey] || 0
+    if (cooldown > 0 && now - lastAt < cooldown) {
+      return
+    }
+    this.soundLastPlayedAt[cooldownKey] = now
+
+    const cursor = this.soundPoolCursor[key] || 0
+    const audio = pool[cursor % pool.length]
+    this.soundPoolCursor[key] = (cursor + 1) % pool.length
+    if (!audio) return
+
+    try {
+      audio.stop()
+      if (typeof audio.seek === 'function') {
+        audio.seek(0)
+      }
+      audio.volume = options.volume ?? SOUND_VOLUMES[key] ?? 0.5
+      audio.play()
+    } catch (error) {
+      // 低端机或未解锁音频时静默降级，不影响游戏进行
+    }
+  },
+
+  playTowerAttackSound(tower) {
+    if (!tower) return
+
+    const soundConfig = TOWER_ATTACK_SOUNDS[tower.type] || TOWER_ATTACK_SOUNDS.fire
+    if (!soundConfig) return
+
+    const soundKeys = soundConfig.keys || [soundConfig.key]
+    const level = Math.max(1, tower.level || 1)
+    const variantIndex = (level + this.renderFrameCount) % soundKeys.length
+    const soundKey = soundKeys[variantIndex]
+    const baseVolume = SOUND_VOLUMES[soundKey] ?? 0.22
+    const levelBoost = Math.min((level - 1) * (soundConfig.levelBoost || 0.015), 0.08)
+
+    this.playSound(soundKey, {
+      volume: Math.min(baseVolume + levelBoost, 0.34),
+      cooldownKey: soundConfig.cooldownKey || soundKey
+    })
+  },
+
+  stopAllSounds() {
+    Object.values(this.soundPool).forEach((pool) => {
+      ;(pool || []).forEach((audio) => {
+        try {
+          audio.stop()
+        } catch (error) {
+          // 忽略停止失败
+        }
+      })
+    })
+    this.stopAmbientTrack()
+  },
+
+  destroySoundPool() {
+    this.stopAllSounds()
+    Object.values(this.soundPool).forEach((pool) => {
+      ;(pool || []).forEach((audio) => {
+        try {
+          audio.destroy()
+        } catch (error) {
+          // 忽略销毁失败
+        }
+      })
+    })
+    if (this.ambientAudio) {
+      try {
+        this.ambientAudio.destroy()
+      } catch (error) {
+        // 忽略销毁失败
+      }
+    }
+    this.ambientAudio = null
+    this.ambientKey = ''
+    this.soundPool = {}
+    this.soundPoolCursor = {}
+    this.soundLastPlayedAt = {}
+    this.soundInitialized = false
+  },
+
+  toggleSound() {
+    const nextEnabled = !this.soundEnabled
+    this.soundEnabled = nextEnabled
+    wx.setStorageSync(AUDIO_SETTING_KEY, nextEnabled)
+    if (!nextEnabled) {
+      this.stopAllSounds()
+    }
+    this.setData({ soundEnabled: nextEnabled })
+    wx.showToast({ title: nextEnabled ? '音效已开启' : '音效已关闭', icon: 'none' })
+    if (nextEnabled) {
+      this.playSound('ui', { cooldown: 0, volume: 0.4 })
+      this.syncAmbientTrack()
+    }
   },
 
   initCanvas() {
@@ -560,7 +1202,9 @@ Page({
         this.refreshCanvasRect()
         this.refreshInventoryRect()
         
-        this.initGame()
+        if (!this.tryRestoreRunProgress()) {
+          this.initGame()
+        }
         this.startGame()
       })
   },
@@ -569,9 +1213,9 @@ Page({
     CONFIG.canvasWidth = width
     CONFIG.canvasHeight = height
 
-    const horizontalPadding = 14
-    const verticalPadding = 10
-    CONFIG.cellSize = Math.max(28, Math.floor(Math.min(
+    const horizontalPadding = 0  // 减水平 padding 让 cellSize 突破 31px 限制、塔不压扁（iPhone 16 Pro 水平方向 375/11=31 太挤）
+    const verticalPadding = 50  // 顶部留 50px 给顶部 HUD（关卡/波次/状态栏），避免 row 0 塔位塔身/Lv.标签挡住状态栏
+    CONFIG.cellSize = Math.max(34, Math.floor(Math.min(
       (CONFIG.canvasWidth - horizontalPadding * 2) / CONFIG.gridCols,
       (CONFIG.canvasHeight - verticalPadding * 2) / CONFIG.gridRows
     )))
@@ -581,6 +1225,17 @@ Page({
     this.setData({
       gridOffsetX: (CONFIG.canvasWidth - gridWidth) / 2,
       gridOffsetY: (CONFIG.canvasHeight - gridHeight) / 2
+    }, () => {
+      // setData 是异步的——回调里 gridOffsetX/Y 才真正更新到 this.data
+      // initGame 在 setData 之后同步执行，用的还是旧 offset，导致 pathPoints / prepTowerSlots 位置全部偏移
+      // 这里必须重新生成路径 + 塔位，否则开发者工具里圈完全错位/不可见
+      if (Array.isArray(this.pathPoints) && this.pathPoints.length >= 2) {
+        this.generatePath(this.data.currentTheme)
+      }
+      if (Array.isArray(this.grid) && this.grid.length === CONFIG.gridRows) {
+        this.syncPrepTowerSlots(this.data.currentTheme)
+      }
+      this.requestRender()
     })
     this.requestRender()
   },
@@ -589,22 +1244,483 @@ Page({
     this.needsRender = true
   },
 
+  clonePlainData(value, fallback = null) {
+    if (value === undefined) return fallback
+    try {
+      return JSON.parse(JSON.stringify(value))
+    } catch (error) {
+      return fallback
+    }
+  },
+
+  hasMeaningfulRunProgress() {
+    return !!this.data.selectedBlessingKey ||
+      this.towers.length > 0 ||
+      this.data.wave > 1 ||
+      this.data.score > 0 ||
+      this.data.gameState !== 'prep'
+  },
+
+  buildRunProgressSnapshot() {
+    const threat = this.currentWaveThreat || this.resolveWaveThreat(this.data.wave)
+    return {
+      version: RUN_PROGRESS_VERSION,
+      savedAt: Date.now(),
+      currentWaveThreatKey: threat?.key || 'swarm',
+      currentThreatMissionProgress: this.currentThreatMissionProgress || 0,
+      currentThreatMissionTarget: this.currentThreatMissionTarget || this.getThreatMissionTarget(this.data.wave, threat),
+      currentThreatMissionCompleted: !!this.currentThreatMissionCompleted,
+      runBonuses: {
+        damage: this.runDamageBonus || 0,
+        range: this.runRangeBonus || 0,
+        attackSpeed: this.runAttackSpeedBonus || 0,
+        crit: this.runCritBonus || 0
+      },
+      blessingApplied: !!this.blessingApplied,
+      waveStartLives: this.waveStartLives || this.data.lives,
+      waveComplete: !!this.waveComplete,
+      spawnIndex: this.spawnIndex || 0,
+      lastSpawnDelta: Math.max(0, Date.now() - (this.lastSpawnTime || 0)),
+      pendingWaveAdvance: this.pendingWaveAdvance || null,
+      data: {
+        wave: this.data.wave,
+        score: this.data.score,
+        gold: this.data.gold,
+        lives: this.data.lives,
+        gameState: this.data.gameState,
+        level: this.data.level,
+        waveInLevel: this.data.waveInLevel,
+        totalWavesInLevel: this.data.totalWavesInLevel,
+        currentTheme: this.data.currentTheme,
+        selectedBlessingKey: this.data.selectedBlessingKey,
+        selectedBlessingName: this.data.selectedBlessingName,
+        selectedBlessingIcon: this.data.selectedBlessingIcon,
+        selectedBlessingDescription: this.data.selectedBlessingDescription,
+        fieldTowerCount: this.towers.length,
+        canStartBattle: this.data.canStartBattle,
+        prepActionHint: this.data.prepActionHint,
+        runBuffSummary: this.data.runBuffSummary,
+        nextSupplyWave: this.data.nextSupplyWave,
+        showWaveChoice: this.data.showWaveChoice,
+        waveChoiceMode: this.data.waveChoiceMode,
+        waveChoicePanelTitle: this.data.waveChoicePanelTitle,
+        waveChoiceTitle: this.data.waveChoiceTitle,
+        waveChoiceHint: this.data.waveChoiceHint,
+        waveChoiceOptions: this.data.waveChoiceOptions || [],
+        pendingSpecializationTowerId: this.data.pendingSpecializationTowerId,
+        pendingSpecializationSource: this.data.pendingSpecializationSource,
+        choiceReturnState: this.data.choiceReturnState,
+        activeChainIcon: this.data.activeChainIcon,
+        activeChainTitle: this.data.activeChainTitle,
+        activeChainDescription: this.data.activeChainDescription,
+        currentThreatIcon: this.data.currentThreatIcon,
+        currentThreatTitle: this.data.currentThreatTitle,
+        currentThreatDescription: this.data.currentThreatDescription,
+        currentThreatCounterText: this.data.currentThreatCounterText,
+        threatMissionText: this.data.threatMissionText,
+        threatMissionReady: this.data.threatMissionReady,
+        commanderCost: this.data.commanderCost,
+        commanderAiming: false,
+        commanderReadyText: this.data.commanderReadyText,
+        commandPoints: this.data.commandPoints,
+        summonCost: this.data.summonCost,
+        selectedInventoryIndex: this.data.selectedInventoryIndex
+      },
+      inventory: this.inventory,
+      towers: this.towers,
+      // 怪物列表截断保存（上限50只）：防止后期大量怪物导致序列化卡死
+      monsters: this.monsters.slice(0, 30),
+      waveMonsters: this.waveMonsters.slice(0, 50)
+    }
+  },
+
+  persistRunProgress({ immediate = false } = {}) {
+    if (!this.hasMeaningfulRunProgress() || this.data.gameState === 'gameover') {
+      this.clearRunProgress()
+      return false
+    }
+
+    const now = Date.now()
+    if (!immediate && now - (this.lastRunPersistedAt || 0) < RUN_PROGRESS_INTERVAL) {
+      return false
+    }
+
+    // 关键：上一份 setStorage 还没落盘完成则跳过，避免异步队列累积旧 snapshot 闭包导致 JS 堆线性增长
+    // 微信开发者工具模拟器 1GB 限制下，跑久了会触发 OOM 自动重启——这是 OOM 真凶之一
+    if (this._persistInFlight) {
+      return false
+    }
+
+    this._persistInFlight = true
+    this.lastRunPersistedAt = now
+    const snapshot = this.buildRunProgressSnapshot()
+    try {
+      wx.setStorage({
+        key: RUN_PROGRESS_KEY,
+        data: snapshot,
+        complete: () => {
+          this._persistInFlight = false
+        }
+      })
+      return true
+    } catch (error) {
+      console.warn('persistRunProgress failed', error)
+      this._persistInFlight = false
+      return false
+    }
+  },
+
+  clearRunProgress() {
+    this.lastRunPersistedAt = 0
+    try {
+      wx.removeStorageSync(RUN_PROGRESS_KEY)
+    } catch (error) {
+      console.warn('clearRunProgress failed', error)
+    }
+  },
+
+  normalizeSavedTower(tower, mode = 'field', blessingKey = this.data.selectedBlessingKey) {
+    if (!tower || !tower.type) return null
+    const stats = this.getTowerStatsForLevel(tower.type, tower.level || 1, mode, blessingKey, tower.specializationKey)
+    return {
+      ...tower,
+      ...stats,
+      lastAttack: tower.lastAttack || 0
+    }
+  },
+
+  rebuildGridFromTowers() {
+    this.grid = []
+    for (let row = 0; row < CONFIG.gridRows; row++) {
+      this.grid[row] = []
+      for (let col = 0; col < CONFIG.gridCols; col++) {
+        this.grid[row][col] = null
+      }
+    }
+
+    this.towers.forEach((tower) => {
+      if (tower.row >= 0 && tower.row < CONFIG.gridRows && tower.col >= 0 && tower.col < CONFIG.gridCols) {
+        tower.x = this.data.gridOffsetX + tower.col * CONFIG.cellSize + CONFIG.cellSize / 2
+        tower.y = this.data.gridOffsetY + tower.row * CONFIG.cellSize + CONFIG.cellSize / 2
+        this.grid[tower.row][tower.col] = tower
+      }
+    })
+  },
+
+  ensureBattlefieldState() {
+    const pathInvalid = !Array.isArray(this.pathPoints) || this.pathPoints.length < 2
+    const gridInvalid = !Array.isArray(this.grid) || this.grid.length !== CONFIG.gridRows
+    if (!pathInvalid && !gridInvalid) {
+      return true
+    }
+
+    this.generatePath(this.data.currentTheme)
+    this.rebuildGridFromTowers()
+    this.syncPrepTowerSlots(this.data.currentTheme)
+    return false
+  },
+
+  tryRestoreRunProgress() {
+    let snapshot = null
+    try {
+      snapshot = wx.getStorageSync(RUN_PROGRESS_KEY)
+    } catch (error) {
+      snapshot = null
+    }
+
+    if (!snapshot || snapshot.version !== RUN_PROGRESS_VERSION || !snapshot.data) {
+      return false
+    }
+
+    try {
+      const savedData = snapshot.data
+      const blessingKey = savedData.selectedBlessingKey || ''
+      const themeKey = savedData.currentTheme || 'forest'
+      const threat = WAVE_THREATS[snapshot.currentWaveThreatKey] || this.resolveWaveThreat(savedData.wave || 1)
+
+      this.clearScheduledTimeouts()
+      this.generatePath(themeKey)
+      this.towers = (snapshot.towers || [])
+        .map((tower) => this.normalizeSavedTower(tower, 'field', blessingKey))
+        .filter(Boolean)
+      this.inventory = (snapshot.inventory || [])
+        .map((tower) => this.normalizeSavedTower(tower, 'inventory', blessingKey))
+        .filter(Boolean)
+      this.monsters = (snapshot.monsters || []).map((monster) => ({ ...monster }))
+      this.waveMonsters = (snapshot.waveMonsters || []).map((monster) => ({ ...monster }))
+      this.projectiles = []
+      this.particles = []
+      this.floatingTexts = []
+      this.lightningEffects = []
+      this.fireEffects = []
+      this.iceEffects = []
+      this.poisonEffects = []
+      this.arcaneEffects = []
+      this.mergeEffects = []
+      this.blessingApplied = snapshot.blessingApplied !== false
+      this.runDamageBonus = snapshot.runBonuses?.damage || 0
+      this.runRangeBonus = snapshot.runBonuses?.range || 0
+      this.runAttackSpeedBonus = snapshot.runBonuses?.attackSpeed || 0
+      this.runCritBonus = snapshot.runBonuses?.crit || 0
+      this.currentWaveThreat = threat
+      this.currentThreatMissionProgress = snapshot.currentThreatMissionProgress || 0
+      this.currentThreatMissionTarget = snapshot.currentThreatMissionTarget || this.getThreatMissionTarget(savedData.wave || 1, threat)
+      this.currentThreatMissionCompleted = !!snapshot.currentThreatMissionCompleted
+      this.waveStartLives = snapshot.waveStartLives || savedData.lives || 20
+      this.waveComplete = !!snapshot.waveComplete
+      this.spawnIndex = Math.max(0, snapshot.spawnIndex || 0)
+      this.lastSpawnTime = Date.now() - Math.min(snapshot.lastSpawnDelta || 0, CONFIG.spawnInterval)
+      this.pendingWaveAdvance = snapshot.pendingWaveAdvance || null
+      this.performanceProfileKey = 'relaxed'
+      this.activePerformanceProfile = PERFORMANCE_PROFILES.relaxed
+      this.lastPerformanceProfileCheckAt = 0
+      this.lastBossSeenAt = 0
+      this.lastFrameRenderAt = 0
+      this.renderFrameCount = 0
+      this.pendingGoldDelta = 0
+      this.pendingScoreDelta = 0
+      this.pendingLivesDelta = 0
+      this.pendingCommandPointsDelta = 0
+      this.lastIdleRenderAt = 0
+      this.lastDragUiUpdateAt = 0
+      this.lastMergeHintVisible = false
+      this.lastMergeHintSlotIndex = -1
+      this.lastMergeCost = 0
+      this.lastMergeTargetNextLevel = 0
+      this.draggingTower = null
+      this.pendingDragTower = null
+      this.isDragging = false
+      this.hasMoved = false
+      this.mergeTarget = null
+      this.mergeTargetType = null
+      this.mergeTargetInventoryIndex = -1
+      this.rebuildGridFromTowers()
+
+      this.setData({
+        ...savedData,
+        gameState: savedData.gameState === 'gameover' ? 'paused' : savedData.gameState,
+        currentTheme: themeKey,
+        currentThreatIcon: threat.icon,
+        currentThreatTitle: threat.title,
+        currentThreatDescription: threat.description,
+        currentThreatCounterText: threat.counterText,
+        dragFloating: false,
+        draggingSlotIndex: -1,
+        mergeTargetSlotIndex: -1,
+        showMergeHint: false
+      })
+
+      this.updateInventoryDisplay()
+      this.syncPrepTowerSlots(themeKey)
+      this.syncFieldTowerCount()
+      this.updateRunBuffSummary(savedData.wave || 1)
+      this.syncThreatMissionDisplay()
+      this.refreshCanvasRect()
+      this.refreshInventoryRect()
+      this.requestRender()
+      this.lastRunPersistedAt = Date.now()
+      wx.showToast({ title: '已恢复上次战局', icon: 'none' })
+      return true
+    } catch (error) {
+      console.warn('tryRestoreRunProgress failed', error)
+      this.clearRunProgress()
+      return false
+    }
+  },
+
+  getActivePerformanceProfile() {
+    return this.activePerformanceProfile || PERFORMANCE_PROFILES.relaxed
+  },
+
+  setPerformanceProfile(nextKey) {
+    if (!PERFORMANCE_PROFILES[nextKey]) {
+      nextKey = 'relaxed'
+    }
+
+    if (nextKey !== this.performanceProfileKey || !this.activePerformanceProfile) {
+      this.performanceProfileKey = nextKey
+      this.activePerformanceProfile = PERFORMANCE_PROFILES[nextKey]
+    }
+  },
+
+  calculateScenePressure() {
+    const effectLoad = this.particles.length + this.fireEffects.length + this.iceEffects.length +
+      this.poisonEffects.length + this.arcaneEffects.length + this.lightningEffects.length +
+      this.mergeEffects.length
+    const bossCount = this.monsters.filter((monster) => monster.isBoss).length
+
+    return this.monsters.length * 3.6 +
+      bossCount * BOSS_PRESSURE_BONUS +
+      this.projectiles.length * 2.35 +
+      this.towers.length * 0.95 +
+      effectLoad * 0.26 +
+      this.floatingTexts.length * 0.7 +
+      (this.isDragging ? 12 : 0)
+  },
+
+  resolvePerformanceProfileKey(pressure, hasBoss, now = Date.now()) {
+    const bossPressureActive = hasBoss || (
+      this.lastBossSeenAt > 0 && now - this.lastBossSeenAt <= BOSS_PROFILE_GRACE_MS
+    )
+    const currentKey = this.performanceProfileKey || 'relaxed'
+
+    if (currentKey === 'intense') {
+      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.intenseExit &&
+        (!bossPressureActive || pressure <= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseExit)) {
+        return pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit && !bossPressureActive ? 'relaxed' : 'busy'
+      }
+      return this.isDragging ? 'busy' : 'intense'
+    }
+
+    if (currentKey === 'busy') {
+      if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter ||
+        (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseEnter)) {
+        return this.isDragging ? 'busy' : 'intense'
+      }
+      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit && !bossPressureActive) {
+        return 'relaxed'
+      }
+      return 'busy'
+    }
+
+    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter ||
+      (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseEnter)) {
+      return this.isDragging ? 'busy' : 'intense'
+    }
+
+    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.busyEnter ||
+      (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossBusyFloor)) {
+      return 'busy'
+    }
+
+    return 'relaxed'
+  },
+
+  updatePerformanceProfile(now = Date.now(), force = false) {
+    const pressure = this.calculateScenePressure()
+    const hasBoss = this.hasBossOnField()
+
+    if (hasBoss) {
+      this.lastBossSeenAt = now
+    }
+
+    const checkInterval = hasBoss || this.performanceProfileKey !== 'relaxed' || pressure >= 48
+      ? PERFORMANCE_PROFILE_INTERVALS.elevated
+      : PERFORMANCE_PROFILE_INTERVALS.relaxed
+
+    if (!force && now - this.lastPerformanceProfileCheckAt < checkInterval) {
+      return
+    }
+
+    this.lastPerformanceProfileCheckAt = now
+    const nextKey = this.resolvePerformanceProfileKey(pressure, hasBoss, now)
+    this.setPerformanceProfile(nextKey)
+  },
+
+  getAdaptiveRenderInterval() {
+    const profile = this.getActivePerformanceProfile()
+    if (this.isDragging) {
+      return Math.min(profile.renderInterval, 34)
+    }
+    return profile.renderInterval
+  },
+
+  shouldRenderFrame(now = Date.now()) {
+    if (this.needsRender) {
+      return true
+    }
+    return now - this.lastFrameRenderAt >= this.getAdaptiveRenderInterval()
+  },
+
+  queueStatDelta({ gold = 0, score = 0, lives = 0, commandPoints = 0 } = {}) {
+    this.pendingGoldDelta += gold
+    this.pendingScoreDelta += score
+    this.pendingLivesDelta += lives
+    this.pendingCommandPointsDelta += commandPoints
+  },
+
+  flushQueuedStats() {
+    if (!this.pendingGoldDelta && !this.pendingScoreDelta && !this.pendingLivesDelta && !this.pendingCommandPointsDelta) {
+      return
+    }
+
+    const nextData = {}
+    if (this.pendingGoldDelta) {
+      nextData.gold = Math.max(0, this.data.gold + this.pendingGoldDelta)
+    }
+    if (this.pendingScoreDelta) {
+      nextData.score = Math.max(0, this.data.score + this.pendingScoreDelta)
+    }
+    if (this.pendingLivesDelta) {
+      nextData.lives = Math.max(0, this.data.lives + this.pendingLivesDelta)
+    }
+    if (this.pendingCommandPointsDelta) {
+      nextData.commandPoints = Math.max(0, (this.data.commandPoints || 0) + this.pendingCommandPointsDelta)
+    }
+
+    this.pendingGoldDelta = 0
+    this.pendingScoreDelta = 0
+    this.pendingLivesDelta = 0
+    this.pendingCommandPointsDelta = 0
+
+    if (Object.keys(nextData).length > 0) {
+      this.setData(nextData)
+    }
+  },
+
+  hasBossOnField() {
+    return this.monsters.some((monster) => monster.isBoss)
+  },
+
+  shouldUseSimplifiedProjectiles() {
+    const profile = this.getActivePerformanceProfile()
+    return profile.simplifyProjectiles || this.hasBossOnField()
+  },
+
+  getEffectRenderStride() {
+    const profile = this.getActivePerformanceProfile()
+    const stride = this.hasBossOnField()
+      ? Math.max(profile.effectRenderStride, 2)
+      : profile.effectRenderStride
+    return this.isDragging ? Math.min(stride, 2) : stride
+  },
+
+  getProjectileTrailLimit() {
+    const profile = this.getActivePerformanceProfile()
+    if (this.hasBossOnField()) {
+      return Math.min(profile.projectileTrailPoints || PERFORMANCE_LIMITS.trailPoints, 2)
+    }
+    return profile.projectileTrailPoints || PERFORMANCE_LIMITS.trailPoints
+  },
+
+  getDamageTextStride() {
+    const profile = this.getActivePerformanceProfile()
+    if (this.hasBossOnField()) {
+      return Math.max(profile.damageTextStride || 1, 2)
+    }
+    return profile.damageTextStride || 1
+  },
+
   refreshCanvasRect() {
     wx.nextTick(() => {
       wx.createSelectorQuery().select('#gameCanvas').boundingClientRect((rect) => {
         if (!rect) return
         this.cachedCanvasRect = rect
-        this.setData({ canvasRect: rect })
       }).exec()
     })
   },
 
   refreshInventoryRect() {
     wx.nextTick(() => {
-      wx.createSelectorQuery().select('.inventory-grid').boundingClientRect((rect) => {
+      const query = wx.createSelectorQuery()
+      query.select('.inventory-grid').boundingClientRect()
+      query.selectAll('.inventory-slot').boundingClientRect()
+      query.exec((res) => {
+        const rect = res && res[0]
         if (!rect) return
         this.inventoryRect = rect
-      }).exec()
+        this.inventorySlotRects = Array.isArray(res[1]) ? res[1] : []
+      })
     })
   },
 
@@ -618,6 +1734,12 @@ Page({
   },
 
   clearScheduledTimeouts() {
+    if (!Array.isArray(this.scheduledTimeouts)) {
+      this.scheduledTimeouts = []
+      this.pendingWaveAdvance = null
+      return
+    }
+
     this.scheduledTimeouts.forEach((timeoutId) => clearTimeout(timeoutId))
     this.scheduledTimeouts = []
     this.pendingWaveAdvance = null
@@ -629,20 +1751,178 @@ Page({
   },
 
   enforcePerformanceCaps() {
-    this.trimEffectQueue('particles', PERFORMANCE_LIMITS.particles)
-    this.trimEffectQueue('floatingTexts', PERFORMANCE_LIMITS.floatingTexts)
-    this.trimEffectQueue('lightningEffects', PERFORMANCE_LIMITS.lightningEffects)
-    this.trimEffectQueue('fireEffects', PERFORMANCE_LIMITS.fireEffects)
-    this.trimEffectQueue('iceEffects', PERFORMANCE_LIMITS.iceEffects)
-    this.trimEffectQueue('poisonEffects', PERFORMANCE_LIMITS.poisonEffects)
-    this.trimEffectQueue('arcaneEffects', PERFORMANCE_LIMITS.arcaneEffects)
+    const hasBoss = this.hasBossOnField()
+    const effectCapFactor = hasBoss ? 0.72 : 1
+
+    this.trimEffectQueue('particles', Math.max(40, Math.floor(PERFORMANCE_LIMITS.particles * effectCapFactor)))
+    this.trimEffectQueue('floatingTexts', Math.max(10, Math.floor(PERFORMANCE_LIMITS.floatingTexts * effectCapFactor)))
+    this.trimEffectQueue('lightningEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.lightningEffects * effectCapFactor)))
+    this.trimEffectQueue('fireEffects', Math.max(20, Math.floor(PERFORMANCE_LIMITS.fireEffects * effectCapFactor)))
+    this.trimEffectQueue('iceEffects', Math.max(16, Math.floor(PERFORMANCE_LIMITS.iceEffects * effectCapFactor)))
+    this.trimEffectQueue('poisonEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.poisonEffects * effectCapFactor)))
+    this.trimEffectQueue('arcaneEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.arcaneEffects * effectCapFactor)))
     this.trimEffectQueue('mergeEffects', PERFORMANCE_LIMITS.mergeEffects)
 
+    const trailLimit = this.getProjectileTrailLimit()
     this.projectiles.forEach((proj) => {
-      if (proj.trail.length > PERFORMANCE_LIMITS.trailPoints) {
-        proj.trail.splice(0, proj.trail.length - PERFORMANCE_LIMITS.trailPoints)
+      if (proj.trail.length > trailLimit) {
+        proj.trail.splice(0, proj.trail.length - trailLimit)
       }
     })
+
+    // 防御性硬上限：防止后期/Boss 波弹丸与怪物瞬时堆积把堆冲爆（模拟器 1GB 限制下 OOM 真凶）
+    const MAX_PROJECTILES_HARD = 180
+    if (this.projectiles.length > MAX_PROJECTILES_HARD) {
+      this.projectiles.splice(0, this.projectiles.length - MAX_PROJECTILES_HARD)
+    }
+    const MAX_MONSTERS_HARD = 80
+    if (this.monsters.length > MAX_MONSTERS_HARD) {
+      this.monsters.splice(0, this.monsters.length - MAX_MONSTERS_HARD)
+    }
+    // 主动提示 V8 立即 GC 释放被 trim 掉的对象（仅开发环境有效）
+    if (typeof wx !== 'undefined' && typeof wx.triggerGC === 'function') {
+      try { wx.triggerGC() } catch (e) {}
+    }
+  },
+
+  getRuntimeCounts() {
+    const eff = (name) => (Array.isArray(this[name]) ? this[name].length : 0)
+    return {
+      monsters: eff('monsters'),
+      projectiles: eff('projectiles'),
+      particles: eff('particles'),
+      floatingTexts: eff('floatingTexts'),
+      fireEffects: eff('fireEffects'),
+      iceEffects: eff('iceEffects'),
+      lightningEffects: eff('lightningEffects'),
+      poisonEffects: eff('poisonEffects'),
+      arcaneEffects: eff('arcaneEffects'),
+      mergeEffects: eff('mergeEffects'),
+      towers: eff('towers'),
+      inventory: eff('inventory'),
+      waveMonsters: eff('waveMonsters'),
+      scheduledTimeouts: eff('scheduledTimeouts'),
+      gameState: this.data.gameState,
+      wave: this.data.wave,
+      gold: this.data.gold,
+      lives: this.data.lives
+    }
+  },
+
+  resolveWaveThreat(wave) {
+    if (wave % 5 === 0) {
+      return WAVE_THREATS.boss
+    }
+
+    const index = (wave - 1) % WAVE_THREAT_ROTATION.length
+    const key = WAVE_THREAT_ROTATION[index]
+    return WAVE_THREATS[key] || WAVE_THREATS.swarm
+  },
+
+  syncThreatDisplay(threat) {
+    const resolvedThreat = threat || this.currentWaveThreat || WAVE_THREATS.swarm
+    this.currentWaveThreat = resolvedThreat
+    this.setData({
+      currentThreatIcon: resolvedThreat.icon,
+      currentThreatTitle: resolvedThreat.title,
+      currentThreatDescription: resolvedThreat.description,
+      currentThreatCounterText: resolvedThreat.counterText
+    })
+  },
+
+  getThreatMissionTarget(wave = this.data.wave, threat = this.currentWaveThreat) {
+    const resolvedThreat = threat || WAVE_THREATS.swarm
+    const baseGoal = resolvedThreat.suppressionGoal || 5
+    const ramp = Math.min(3, Math.floor(Math.max(0, wave - 1) / 6))
+    return baseGoal + ramp
+  },
+
+  syncThreatMissionDisplay() {
+    const progress = this.currentThreatMissionProgress || 0
+    const target = this.currentThreatMissionTarget || 0
+    const completed = !!this.currentThreatMissionCompleted
+
+    this.setData({
+      threatMissionText: completed ? '压制完成 +1点' : `压制 ${progress}/${target}`,
+      threatMissionReady: completed
+    })
+  },
+
+  resetThreatMission(wave = this.data.wave, threat = this.currentWaveThreat) {
+    this.currentThreatMissionProgress = 0
+    this.currentThreatMissionTarget = this.getThreatMissionTarget(wave, threat)
+    this.currentThreatMissionCompleted = false
+    this.syncThreatMissionDisplay()
+  },
+
+  trackThreatMissionKill(monster) {
+    if (!monster || this.currentThreatMissionCompleted) return
+
+    const threat = this.currentWaveThreat || WAVE_THREATS.swarm
+    const sourceType = monster.lastHitTowerType
+    if (!sourceType || !(threat.counterTypes || []).includes(sourceType)) {
+      return
+    }
+
+    this.currentThreatMissionProgress += 1
+    if (this.currentThreatMissionProgress >= this.currentThreatMissionTarget) {
+      this.currentThreatMissionProgress = this.currentThreatMissionTarget
+      this.currentThreatMissionCompleted = true
+      this.grantCommandPoints(1, {
+        x: monster.x,
+        y: monster.y - 46,
+        text: `🎯 ${threat.title}压制完成 +1战术点`,
+        color: '#c6ffb0',
+        scale: 1.04,
+        life: 92
+      })
+      if (this.canOfferThreatChain(this.data.wave)) {
+        this.playSound('chainReady', { cooldown: 0 })
+      }
+    }
+
+    this.syncThreatMissionDisplay()
+  },
+
+  grantCommandPoints(amount = 1, options = {}) {
+    if (!amount || amount <= 0) return
+
+    this.queueStatDelta({ commandPoints: amount })
+
+    const text = options.text || `🛰️ 战术点 +${amount}`
+    this.floatingTexts.push({
+      x: options.x ?? (CONFIG.canvasWidth / 2),
+      y: options.y ?? (CONFIG.canvasHeight / 2 - 10),
+      text,
+      color: options.color || '#a8f2ff',
+      life: options.life || 95,
+      maxLife: options.life || 95,
+      vy: -0.42,
+      vx: 0,
+      scale: options.scale || 1.2,
+      isBold: true
+    })
+  },
+
+  getSupplyDropPool(threat = this.currentWaveThreat) {
+    const pool = []
+    const blessingType = BLESSINGS[this.data.selectedBlessingKey]?.towerType
+
+    if (blessingType) {
+      pool.push(blessingType)
+    }
+
+    ;(threat?.counterTypes || []).forEach((type) => {
+      if (!pool.includes(type)) {
+        pool.push(type)
+      }
+    })
+
+    if (pool.length === 0) {
+      return Object.keys(TOWER_TYPES)
+    }
+
+    return pool
   },
 
   getNextSupplyWave(baseWave = this.data.wave) {
@@ -657,19 +1937,222 @@ Page({
 
     this.setData({
       runBuffSummary: summaryParts.length ? summaryParts.join(' / ') : '未激活',
-      nextSupplyWave: this.getNextSupplyWave(baseWave)
+      nextSupplyWave: this.getNextSupplyWave(baseWave),
+      commanderReadyText: `${COMMANDER_COST} 点可火力标记`
+    })
+  },
+
+  getTowerSpecializationConfig(type, specializationKey = '') {
+    const options = SPECIALIZATION_OPTIONS[type] || []
+    return options.find((option) => option.key === specializationKey) || null
+  },
+
+  getTowerDisplayName(tower) {
+    const config = TOWER_TYPES[tower.type]
+    const specialization = this.getTowerSpecializationConfig(tower.type, tower.specializationKey)
+    if (!specialization) {
+      return {
+        name: config?.name || '防御塔',
+        specializationShort: ''
+      }
+    }
+
+    return {
+      name: `${config?.name || '防御塔'}·${specialization.shortName}`,
+      specializationShort: specialization.shortName
+    }
+  },
+
+  setActiveWaveModifierDisplay(modifier = null) {
+    this.activeWaveModifier = modifier || null
+    this.setData({
+      activeChainIcon: modifier?.icon || '',
+      activeChainTitle: modifier?.title || '',
+      activeChainDescription: modifier?.detail || ''
+    })
+  },
+
+  canOfferThreatChain(completedWave = this.data.wave) {
+    return completedWave >= 6 && !!this.currentThreatMissionCompleted
+  },
+
+  buildThreatChainOptions(nextWave = this.data.wave + 1) {
+    const favorSwarm = this.currentWaveThreat?.key === 'swarm'
+    const order = favorSwarm ? ['blitz', 'greed', 'hunt'] : ['hunt', 'blitz', 'greed']
+    return order.map((key) => {
+      const rule = THREAT_CHAIN_RULES[key]
+      return {
+        key: rule.key,
+        icon: rule.icon,
+        title: rule.title,
+        description: `第${nextWave}波：${rule.description} ${rule.detail}`
+      }
+    })
+  },
+
+  openChoiceOverlay({
+    mode,
+    panelTitle,
+    title,
+    hint = '',
+    options = [],
+    returnState = this.data.gameState,
+    pendingSpecializationTowerId = null,
+    pendingSpecializationSource = ''
+  }) {
+    const nextState = returnState === 'playing' ? 'choice' : returnState
+    this.setData({
+      showWaveChoice: true,
+      waveChoiceMode: mode,
+      waveChoicePanelTitle: panelTitle,
+      waveChoiceTitle: title,
+      waveChoiceHint: hint,
+      waveChoiceOptions: options,
+      pendingSpecializationTowerId,
+      pendingSpecializationSource,
+      choiceReturnState: returnState,
+      gameState: nextState,
+      commanderAiming: false
+    })
+    this.requestRender()
+  },
+
+  closeChoiceOverlay(nextState = this.data.choiceReturnState || 'playing') {
+    this.setData({
+      showWaveChoice: false,
+      waveChoiceMode: '',
+      waveChoicePanelTitle: '战术补给',
+      waveChoiceTitle: '',
+      waveChoiceHint: '',
+      waveChoiceOptions: [],
+      pendingSpecializationTowerId: null,
+      pendingSpecializationSource: '',
+      choiceReturnState: 'playing',
+      gameState: nextState === 'choice' ? 'playing' : nextState,
+      commanderAiming: false
+    })
+  },
+
+  maybePromptTowerSpecialization(tower, source = 'field') {
+    if (!tower || tower.level < 5 || tower.specializationKey) return false
+
+    const options = SPECIALIZATION_OPTIONS[tower.type]
+    if (!options || options.length === 0) return false
+
+    const towerLabel = TOWER_TYPES[tower.type]?.name || '防御塔'
+    this.playSound('specialize', { cooldown: 0 })
+    this.openChoiceOverlay({
+      mode: 'specialization',
+      panelTitle: '专精抉择',
+      title: `${towerLabel} 已达 Lv.5，选 1 条专精路线`,
+      hint: '本局锁定，优先改变这座塔的打法。',
+      options: options.map((option) => ({
+        key: option.key,
+        icon: option.icon,
+        title: option.title,
+        description: option.description
+      })),
+      returnState: this.data.gameState,
+      pendingSpecializationTowerId: tower.id,
+      pendingSpecializationSource: source
+    })
+    return true
+  },
+
+  applySpecializationToTower(tower, specializationKey, mode = 'field') {
+    if (!tower) return null
+
+    const specialization = this.getTowerSpecializationConfig(tower.type, specializationKey)
+    if (!specialization) return null
+
+    tower.specializationKey = specialization.key
+    tower.specializationTitle = specialization.title
+    tower.specializationShort = specialization.shortName
+    Object.assign(tower, this.getTowerStatsForLevel(
+      tower.type,
+      tower.level,
+      mode,
+      this.data.selectedBlessingKey,
+      specialization.key
+    ))
+    tower.lastAttack = tower.lastAttack || 0
+    return specialization
+  },
+
+  applySpecializationChoice(specializationKey) {
+    const source = this.data.pendingSpecializationSource
+    const towerId = this.data.pendingSpecializationTowerId
+    const tower = source === 'inventory'
+      ? this.inventory.find((item) => item.id === towerId)
+      : this.towers.find((item) => item.id === towerId)
+
+    if (!tower) {
+      this.closeChoiceOverlay(this.data.choiceReturnState || 'playing')
+      return
+    }
+
+    const specialization = this.applySpecializationToTower(
+      tower,
+      specializationKey,
+      source === 'inventory' ? 'inventory' : 'field'
+    )
+    if (!specialization) return
+
+    if (source === 'inventory') {
+      this.updateInventoryDisplay()
+    }
+
+    this.floatingTexts.push({
+      x: source === 'inventory' ? CONFIG.canvasWidth / 2 : tower.x,
+      y: source === 'inventory' ? CONFIG.canvasHeight / 2 - 26 : tower.y - 30,
+      text: `${specialization.icon} ${specialization.shortName}`,
+      color: '#ffe9a6',
+      life: 92,
+      maxLife: 92,
+      vy: -0.45,
+      vx: 0,
+      scale: 1.2,
+      isBold: true
+    })
+
+    this.playSound('specialize', { cooldown: 0 })
+    this.closeChoiceOverlay(this.data.choiceReturnState || (source === 'inventory' ? 'prep' : 'playing'))
+    this.requestRender()
+  },
+
+  applyThreatChainChoice(choiceKey) {
+    const modifier = THREAT_CHAIN_RULES[choiceKey]
+    if (!modifier || !this.pendingWaveAdvance) return
+
+    this.pendingNextWaveModifier = {
+      ...modifier,
+      targetWave: this.pendingWaveAdvance.wave
+    }
+    this.setActiveWaveModifierDisplay(modifier)
+    this.playSound('chainReady', { cooldown: 0 })
+    this.floatingTexts.push({
+      x: CONFIG.canvasWidth / 2,
+      y: CONFIG.canvasHeight / 2 - 20,
+      text: `${modifier.icon} ${modifier.title}`,
+      color: '#d8f6ff',
+      life: 92,
+      maxLife: 92,
+      vy: -0.45,
+      vx: 0,
+      scale: 1.28,
+      isBold: true
     })
   },
 
   refreshAllTowerStats(blessingKey = this.data.selectedBlessingKey) {
     this.inventory = this.inventory.map((tower) => ({
       ...tower,
-      ...this.getTowerStatsForLevel(tower.type, tower.level, 'inventory', blessingKey)
+      ...this.getTowerStatsForLevel(tower.type, tower.level, 'inventory', blessingKey, tower.specializationKey)
     }))
 
     this.towers = this.towers.map((tower) => ({
       ...tower,
-      ...this.getTowerStatsForLevel(tower.type, tower.level, 'field', blessingKey),
+      ...this.getTowerStatsForLevel(tower.type, tower.level, 'field', blessingKey, tower.specializationKey),
       lastAttack: tower.lastAttack || 0
     }))
 
@@ -724,9 +2207,18 @@ Page({
         nextData.gold = this.data.gold + reward.amount
         rewardLabel = `金币 +${reward.amount}`
         break
-      case 'lives':
+      case 'lifeInfuse':
         nextData.lives = this.data.lives + reward.amount
-        rewardLabel = `生命 +${reward.amount}`
+        // 场上所有塔回复满血
+        this.towers = this.towers.map(tower => {
+          const stats = this.getTowerStatsForLevel(tower.type, tower.level, 'field', this.data.selectedBlessingKey, tower.specializationKey)
+          return { ...tower, hp: stats.maxHp || tower.maxHp || 100, maxHp: stats.maxHp || tower.maxHp || 100 }
+        })
+        rewardLabel = `生命 +${reward.amount} · 塔回满`
+        break
+      case 'crit':
+        this.runCritBonus = (this.runCritBonus || 0) + reward.amount
+        rewardLabel = `暴击率 +${Math.round(reward.amount * 100)}%`
         break
       case 'tower': {
         const blessing = BLESSINGS[this.data.selectedBlessingKey]
@@ -766,25 +2258,47 @@ Page({
       isBold: true
     })
 
+    this.playSound('reward', { cooldown: 0 })
     this.requestRender()
   },
 
   applyWaveChoice(e) {
     const rewardKey = e.currentTarget.dataset.key
-    const pendingWave = this.pendingWaveAdvance
-    if (!rewardKey || !pendingWave) return
+    const mode = this.data.waveChoiceMode
 
-    this.applySupplyReward(rewardKey)
+    if (!rewardKey) return
+
+    if (mode === 'specialization') {
+      this.applySpecializationChoice(rewardKey)
+      return
+    }
+
+    const pendingWave = this.pendingWaveAdvance
+    if (!pendingWave) return
+
+    if (mode === 'threatChain') {
+      this.applyThreatChainChoice(rewardKey)
+    } else {
+      this.applySupplyReward(rewardKey)
+    }
+
     this.pendingWaveAdvance = null
     this.setData({
       showWaveChoice: false,
+      waveChoiceMode: '',
+      waveChoicePanelTitle: '战术补给',
       waveChoiceTitle: '',
+      waveChoiceHint: '',
       waveChoiceOptions: [],
+      pendingSpecializationTowerId: null,
+      pendingSpecializationSource: '',
+      choiceReturnState: 'playing',
       wave: pendingWave.wave,
       level: pendingWave.level,
       waveInLevel: pendingWave.waveInLevel,
       totalWavesInLevel: 10,
-      gameState: 'playing'
+      gameState: 'playing',
+      commanderAiming: false
     }, () => {
       this.updateRunBuffSummary(pendingWave.wave)
       this.generateWave(pendingWave.wave)
@@ -820,10 +2334,32 @@ Page({
     this.runDamageBonus = 0
     this.runRangeBonus = 0
     this.runAttackSpeedBonus = 0
+    this.runCritBonus = 0
     this.lastIdleRenderAt = 0
     this.lastDragUiUpdateAt = 0
     this.lastMergeHintVisible = false
     this.lastMergeHintSlotIndex = -1
+    this.lastMergeCost = 0
+    this.lastMergeTargetNextLevel = 0
+    this.performanceProfileKey = 'relaxed'
+    this.activePerformanceProfile = PERFORMANCE_PROFILES.relaxed
+    this.lastPerformanceProfileCheckAt = 0
+    this.lastBossSeenAt = 0
+    this.lastFrameRenderAt = 0
+    this.renderFrameCount = 0
+    this.lastRunPersistedAt = 0
+    this.lastRenderRecoveryAt = 0
+    this.pendingGoldDelta = 0
+    this.pendingScoreDelta = 0
+    this.pendingLivesDelta = 0
+    this.pendingCommandPointsDelta = 0
+    this.currentThreatMissionProgress = 0
+    this.currentThreatMissionTarget = 6
+    this.currentThreatMissionCompleted = false
+    this.pendingNextWaveModifier = null
+    this.activeWaveModifier = null
+    this.commanderZone = null
+    this.inventorySlotRects = []
     
     // 初始化仓库 - 给5个随机塔
     this.inventory = []
@@ -834,6 +2370,9 @@ Page({
     }
     this.updateInventoryDisplay()
     
+    const openingThreat = this.resolveWaveThreat(1)
+    this.currentWaveThreat = openingThreat
+    this.waveStartLives = 20
     this.spawnIndex = 0
     this.waveComplete = false
     this.generateWave(1)
@@ -851,6 +2390,7 @@ Page({
       selectedBlessingKey: '',
       selectedBlessingName: '尚未选择战术祝福',
       selectedBlessingIcon: '✨',
+      selectedBlessingDescription: '选择后会立刻生效，并持续整局。',
       fieldTowerCount: 0,
       canStartBattle: false,
       selectedInventoryIndex: -1,
@@ -859,9 +2399,33 @@ Page({
       runBuffSummary: '未激活',
       nextSupplyWave: 3,
       showWaveChoice: false,
+      waveChoiceMode: '',
+      waveChoicePanelTitle: '战术补给',
       waveChoiceTitle: '',
+      waveChoiceHint: '',
       waveChoiceOptions: [],
-      summonCost: 15
+      pendingSpecializationTowerId: null,
+      pendingSpecializationSource: '',
+      choiceReturnState: 'playing',
+      activeChainIcon: '',
+      activeChainTitle: '',
+      activeChainDescription: '',
+      currentThreatIcon: openingThreat.icon,
+      currentThreatTitle: openingThreat.title,
+      currentThreatDescription: openingThreat.description,
+      currentThreatCounterText: openingThreat.counterText,
+      threatMissionText: '压制 0/6',
+      threatMissionReady: false,
+      commanderCost: COMMANDER_COST,
+      commanderAiming: false,
+      commanderReadyText: `${COMMANDER_COST} 点可火力标记`,
+      commandPoints: 0,
+      summonCost: 20,
+      dragFloating: false,
+      dragFloatingX: 0,
+      dragFloatingY: 0,
+      draggingSlotIndex: -1,
+      mergeTargetSlotIndex: -1
     })
     this.syncPrepTowerSlots('forest')
     this.refreshInventoryRect()
@@ -874,6 +2438,9 @@ Page({
       id: Date.now() + Math.random(),
       type,
       level: 1,
+      specializationKey: '',
+      specializationTitle: '',
+      specializationShort: '',
       damage: stats.damage,
       range: stats.range,
       attackSpeed: stats.attackSpeed,
@@ -895,7 +2462,7 @@ Page({
     }
   },
 
-  getTowerStatsForLevel(type, level, mode = 'field', blessingKey = this.data.selectedBlessingKey) {
+  getTowerStatsForLevel(type, level, mode = 'field', blessingKey = this.data.selectedBlessingKey, specializationKey = '') {
     const config = TOWER_TYPES[type]
     let damage = config.baseDamage
     let range = config.baseRange
@@ -913,6 +2480,13 @@ Page({
       }
     }
 
+    const specialization = this.getTowerSpecializationConfig(type, specializationKey)
+    if (specialization) {
+      damage += specialization.damageBonus || 0
+      range += specialization.rangeBonus || 0
+      attackSpeed = Math.max(300, attackSpeed - (specialization.attackSpeedBonus || 0))
+    }
+
     damage += this.runDamageBonus
     range += this.runRangeBonus
     attackSpeed = Math.max(300, attackSpeed - this.runAttackSpeedBonus)
@@ -922,20 +2496,21 @@ Page({
       level,
       damage,
       range,
-      attackSpeed
+      attackSpeed,
+      specializationKey
     }, blessingKey)
   },
 
   getPrepActionHint(selectedBlessingKey = this.data.selectedBlessingKey, fieldTowerCount = this.data.fieldTowerCount) {
     if (!selectedBlessingKey) {
-      return '先选祝福'
+      return '先选祝福，效果会立刻生效'
     }
 
     if (fieldTowerCount === 0) {
-      return '点仓库塔，再点发光塔位'
+      return '祝福已生效，先从下方拖 1 座塔到发光塔位'
     }
 
-    return '已可开始第一波'
+    return '已可开波，也可以继续补塔再开始'
   },
 
   updatePrepStatus(extraData = {}) {
@@ -968,16 +2543,65 @@ Page({
   },
 
   syncPrepTowerSlots(themeKey = this.data.currentTheme) {
-    const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
-    const prepTowerSlots = theme.towerSlots.map((slot) => ({
-      key: `${slot.row}-${slot.col}`,
-      row: slot.row,
-      col: slot.col,
-      left: this.data.gridOffsetX + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
-      top: this.data.gridOffsetY + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
-      occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
-    }))
-    this.setData({ prepTowerSlots })
+    // 防御：开发者工具模拟器偶发 canvas res width/height=0 → CONFIG.cellSize / gridOffsetX/Y 变成 NaN
+    // 此时算出的 left/top 全是 NaN，setData NaN 会被外层两次 catch 兜底到 []，导致玩家看不到任何圈
+    // 修复：无效尺寸时直接 return，**保留** 上次 prepTowerSlots（不主动清空，避免"圈又没了"假象）
+    if (!Number.isFinite(CONFIG.cellSize) || CONFIG.cellSize <= 0
+        || !Number.isFinite(this.data.gridOffsetX) || !Number.isFinite(this.data.gridOffsetY)) {
+      return
+    }
+    // 关键：整个函数 try-catch 包裹，任何 setData NaN/undefined 异常都不能阻断 render——否则 fillRect 不画，canvas 完全空（"地图直接没了"）
+    try {
+      const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
+      if (!theme || !Array.isArray(theme.towerSlots)) {
+        this.setData({ prepTowerSlots: [] })
+        return
+      }
+      const ox = this.data.gridOffsetX || 0
+      const oy = this.data.gridOffsetY || 0
+      const cellCenter = (row, col) => ({
+        x: ox + col * CONFIG.cellSize + CONFIG.cellSize / 2,
+        y: oy + row * CONFIG.cellSize + CONFIG.cellSize / 2
+      })
+      // 过滤路径上的塔位——用 pointToSegmentDist 检查到路径「线段」的距离
+      // 旧代码只检查 pathPoints 拐点（vertex），导致位于直线段中间的塔位漏网，圈横穿路径
+      const hasPath = Array.isArray(this.pathPoints) && this.pathPoints.length >= 2
+      const prepTowerSlots = theme.towerSlots
+        .filter(slot => !hasPath || !this.isOnPath(slot.row, slot.col))
+        .map((slot) => ({
+          key: `${slot.row}-${slot.col}`,
+          row: slot.row,
+          col: slot.col,
+          left: ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
+          top: oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
+          occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
+        }))
+      this.setData({ prepTowerSlots })
+    } catch (error) {
+      // fallback：保留所有塔位（不过滤过道）——绝对不能让 prep 圈消失，玩家需要圈来放塔
+      console.warn('syncPrepTowerSlots failed, fallback to all slots (no path filter)', (error && error.stack) || error)
+      try {
+        const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
+        if (theme && Array.isArray(theme.towerSlots)) {
+          const ox = this.data.gridOffsetX || 0
+          const oy = this.data.gridOffsetY || 0
+          const prepTowerSlots = theme.towerSlots.map((slot) => ({
+            key: `${slot.row}-${slot.col}`,
+            row: slot.row,
+            col: slot.col,
+            left: ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
+            top: oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
+            occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
+          }))
+          this.setData({ prepTowerSlots })
+        } else {
+          this.setData({ prepTowerSlots: [] })
+        }
+      } catch (e2) {
+        console.warn('syncPrepTowerSlots fallback also failed', e2)
+        this.setData({ prepTowerSlots: [] })
+      }
+    }
   },
 
   getNextSelectedInventoryIndex(removedIndex) {
@@ -1002,11 +2626,14 @@ Page({
     const blessing = BLESSINGS[key]
     if (!blessing) return
 
-    this.updatePrepStatus({
-      selectedBlessingKey: key,
-      selectedBlessingName: blessing.name,
-      selectedBlessingIcon: blessing.icon
-    })
+    if (this.blessingApplied) {
+      if (key !== this.data.selectedBlessingKey) {
+        wx.showToast({ title: '本局战术祝福已锁定', icon: 'none' })
+      }
+      return
+    }
+
+    this.applySelectedBlessing(key)
   },
 
   handleInventorySlotTap(e) {
@@ -1054,10 +2681,10 @@ Page({
     this.placeTowerFromInventory(row, col, inventoryIndex)
   },
 
-  applySelectedBlessing() {
-    if (this.blessingApplied || !this.data.selectedBlessingKey) return
+  applySelectedBlessing(blessingKey = this.data.selectedBlessingKey) {
+    if (this.blessingApplied || !blessingKey) return
 
-    const blessing = BLESSINGS[this.data.selectedBlessingKey]
+    const blessing = BLESSINGS[blessingKey]
     if (!blessing) return
 
     if (blessing.extraTowerType && this.inventory.length < INVENTORY_COLS * INVENTORY_ROWS) {
@@ -1065,8 +2692,10 @@ Page({
     }
 
     const nextData = {
+      selectedBlessingKey: blessing.key,
       selectedBlessingName: blessing.name,
       selectedBlessingIcon: blessing.icon,
+      selectedBlessingDescription: blessing.description,
       nextSupplyWave: this.getNextSupplyWave(1)
     }
 
@@ -1081,7 +2710,21 @@ Page({
     this.blessingApplied = true
     this.refreshAllTowerStats(blessing.key)
     this.updateRunBuffSummary()
-    this.setData(nextData)
+    this.updatePrepStatus(nextData)
+
+    this.floatingTexts.push({
+      x: CONFIG.canvasWidth / 2,
+      y: CONFIG.canvasHeight / 2 - 38,
+      text: `${blessing.icon} ${blessing.name} 生效`,
+      color: blessing.color,
+      life: 95,
+      maxLife: 95,
+      vy: -0.32,
+      vx: 0,
+      scale: 1.22,
+      isBold: true
+    })
+    wx.showToast({ title: '战术祝福已生效', icon: 'none' })
   },
 
   startBattle() {
@@ -1095,11 +2738,11 @@ Page({
       return
     }
 
-    this.applySelectedBlessing()
     this.lastSpawnTime = Date.now()
-    this.setData({ gameState: 'playing' }, () => {
+    this.setData({ gameState: 'playing', commanderAiming: false }, () => {
       this.refreshCanvasRect()
       this.refreshInventoryRect()
+      this.syncAmbientTrack()
       this.requestRender()
     })
     this.floatingTexts.push({
@@ -1122,11 +2765,13 @@ Page({
       if (i < this.inventory.length) {
         const tower = this.inventory[i]
         const config = TOWER_TYPES[tower.type]
+        const displayMeta = this.getTowerDisplayName(tower)
         slots.push({
           ...tower,
           emoji: config.emoji,
           color: config.color,
-          name: config.name
+          name: displayMeta.name,
+          specializationShort: displayMeta.specializationShort
         })
       } else {
         slots.push(null)
@@ -1290,7 +2935,8 @@ Page({
         x: pos.x,
         y: pos.y,
         type: types[i % types.length],
-        size: 0.7 + Math.random() * 0.5
+        size: 0.7 + Math.random() * 0.5,
+        phase: Math.random() * Math.PI * 2
       })
     })
     
@@ -1300,27 +2946,47 @@ Page({
 
   generateWave(wave) {
     this.waveMonsters = []
-    
-    // 基础怪物数量随波次增加
-    const baseCount = 5 + Math.floor(wave * 1.5)
-    
+
+    const threat = this.resolveWaveThreat(wave)
+    const waveModifier = this.pendingNextWaveModifier && this.pendingNextWaveModifier.targetWave === wave
+      ? this.pendingNextWaveModifier
+      : null
+    if (waveModifier) {
+      this.pendingNextWaveModifier = null
+    }
+    this.setActiveWaveModifierDisplay(waveModifier)
+    this.syncThreatDisplay(threat)
+    this.resetThreatMission(wave, threat)
+
+    // 基础怪物数量随波次增加，并受威胁类型调节
+    const rawBaseCount = 5 + Math.floor(wave * 1.5)
+    const baseCount = Math.max(
+      5,
+      Math.min(
+        70,
+        Math.round(rawBaseCount * (threat.countMultiplier || 1) * (waveModifier?.countMultiplier || 1))
+      )
+    )
+
     // 获取当前波次可用的怪物类型
-    const availableTypes = Object.keys(MONSTER_TYPES).filter(t => {
+    const availableTypes = Object.keys(MONSTER_TYPES).filter((t) => {
       const config = MONSTER_TYPES[t]
       return !config.isBoss && config.unlockWave <= wave
     })
-    
-    // 怪物生命值倍率：每波增加20%
-    const hpMultiplier = 1 + (wave - 1) * 0.2
-    
+
+    // 怪物生命值倍率：每波+35%、每关+20%，让中后期能跟上塔的指数输出；护甲按波次/关卡累加
+    const level = Math.ceil(wave / 10)
+    const baseArmor = Math.min(0.55, (wave - 1) * 0.016 + (level - 1) * 0.07)
+    const hpMultiplier = (1 + (wave - 1) * 0.35) * (1 + (level - 1) * 0.3) * (threat.hpMultiplier || 1) * (waveModifier?.hpMultiplier || 1)
+    const speedMultiplier = (threat.speedMultiplier || 1) * (waveModifier?.speedMultiplier || 1)
+    const goldMultiplier = waveModifier?.goldMultiplier || 1
+
     for (let i = 0; i < baseCount; i++) {
-      // 高级怪物出现概率随波次增加
       let type
       if (availableTypes.length === 1) {
         type = availableTypes[0]
       } else {
-        // 优先生成较新解锁的怪物
-        const weights = availableTypes.map(t => {
+        const weights = availableTypes.map((t) => {
           const unlockWave = MONSTER_TYPES[t].unlockWave
           return Math.max(1, wave - unlockWave + 2)
         })
@@ -1336,39 +3002,69 @@ Page({
         }
         type = availableTypes[typeIndex]
       }
-      
+
       const config = MONSTER_TYPES[type]
       this.waveMonsters.push({
         type,
         ...config,
         hp: Math.floor(config.baseHp * hpMultiplier),
         maxHp: Math.floor(config.baseHp * hpMultiplier),
-        goldDrop: Math.floor(config.goldDrop * (1 + (wave - 1) * 0.1))
+        speed: Number((config.speed * speedMultiplier).toFixed(2)),
+        goldDrop: Math.floor(config.goldDrop * (1 + (wave - 1) * 0.06) * goldMultiplier),
+        armor: Math.min(0.55, baseArmor + (config.armor || 0))
       })
     }
-    
+
+    const eliteCount = Math.min((threat.eliteCount || 0) + (waveModifier?.extraEliteCount || 0), this.waveMonsters.length)
+    const eliteCandidates = this.waveMonsters
+      .map((monster, index) => ({ monster, index }))
+      .filter(({ monster }) => !monster.isBoss)
+
+    for (let i = 0; i < eliteCount && eliteCandidates.length > 0; i++) {
+      const randomIndex = Math.floor(Math.random() * eliteCandidates.length)
+      const picked = eliteCandidates.splice(randomIndex, 1)[0]
+      if (!picked) break
+
+      const eliteMonster = this.waveMonsters[picked.index]
+      const nextEliteHp = Math.floor(eliteMonster.maxHp * (threat.eliteHpMultiplier || 2.2) * (waveModifier?.eliteHpMultiplier || 1))
+      this.waveMonsters[picked.index] = {
+        ...eliteMonster,
+        isElite: true,
+        eliteRewardPoints: (threat.eliteRewardPoints || 1) + (waveModifier?.eliteRewardPoints || 0),
+        hp: nextEliteHp,
+        maxHp: nextEliteHp,
+        speed: Number((eliteMonster.speed * (threat.eliteSpeedMultiplier || 1.08)).toFixed(2)),
+        goldDrop: eliteMonster.goldDrop + (threat.eliteGoldBonus || 15) + (waveModifier?.eliteGoldBonus || 0),
+        armor: Math.min(0.55, (eliteMonster.armor || 0) + 0.2)
+      }
+    }
+
     // 每5波出Boss - 不同关卡不同Boss
     if (wave % 5 === 0) {
-      const level = Math.ceil(wave / 10)
+      // 复用 generateWave 顶部声明的 level
       const bossTypes = ['dragon', 'treant', 'lich', 'phoenix']
       const bossType = bossTypes[(level - 1) % bossTypes.length]
       const bossConfig = MONSTER_TYPES[bossType]
-      const bossHpMultiplier = 1 + (wave - 1) * 0.3
+      const bossHpMultiplier = (1 + (wave - 1) * 0.3) * (threat.bossHpMultiplier || 1)
       this.waveMonsters.push({
         type: bossType,
         ...bossConfig,
         hp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
         maxHp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
-        goldDrop: bossConfig.goldDrop * Math.ceil(wave / 5)
+        speed: Number((bossConfig.speed * speedMultiplier).toFixed(2)),
+        goldDrop: bossConfig.goldDrop * Math.ceil(wave / 5) + (threat.bossGoldBonus || 0),
+        bossRewardPoints: threat.bossRewardPoints || 0,
+        armor: Math.min(0.55, baseArmor + 0.4)
       })
     }
-    
+
     // 随机打乱顺序
     this.waveMonsters.sort(() => Math.random() - 0.5)
-    
+
     this.spawnIndex = 0
     this.waveComplete = false
     this.lastSpawnTime = Date.now()
+    this.waveStartLives = this.data.lives
   },
 
   startGame() {
@@ -1376,18 +3072,27 @@ Page({
       clearInterval(this.gameLoop)
     }
 
+    this.lastFrameRenderAt = 0
+    this.updatePerformanceProfile(Date.now(), true)
+    this.syncAmbientTrack()
+
     this.gameLoop = setInterval(() => {
+      const now = Date.now()
+
       if (this.data.gameState === 'playing') {
-        this.update()
-        this.render()
+        this.update(now)
+        if (this.shouldRenderFrame(now)) {
+          this.render()
+          this.lastFrameRenderAt = now
+        }
         return
       }
 
-      const now = Date.now()
       if (this.needsRender || now - this.lastIdleRenderAt >= IDLE_RENDER_INTERVAL) {
         this.render()
         this.needsRender = false
         this.lastIdleRenderAt = now
+        this.lastFrameRenderAt = now
       }
     }, 1000 / 60)
   },
@@ -1397,47 +3102,91 @@ Page({
       clearInterval(this.gameLoop)
       this.gameLoop = null
     }
+    this.lastFrameRenderAt = 0
     this.clearScheduledTimeouts()
   },
 
-  update() {
+  update(now = Date.now()) {
     if (this.data.gameState !== 'playing') return
-    
-    const now = Date.now()
-    
+
+    this.safeUpdate('perfProfile', this.updatePerformanceProfile, now)
+
     if (this.spawnIndex < this.waveMonsters.length) {
       if (now - this.lastSpawnTime > CONFIG.spawnInterval) {
-        this.spawnMonster(this.waveMonsters[this.spawnIndex])
+        this.safeUpdate('spawn', () => {
+          this.spawnMonster(this.waveMonsters[this.spawnIndex])
+        })
         this.spawnIndex++
         this.lastSpawnTime = now
       }
     }
-    
-    this.updateMonsters()
-    this.updateTowers(now)
-    this.updateProjectiles()
-    this.updateParticles()
-    this.updateFloatingTexts()
-    this.updateLightningEffects()
-    this.updateFireEffects()
-    this.updateIceEffects()
-    this.updatePoisonEffects()
-    this.updateArcaneEffects()
-    this.updateMergeEffects()
-    this.enforcePerformanceCaps()
-    
+
+    this.safeUpdate('monsters', this.updateMonsters)
+    this.safeUpdate('commander', this.updateCommander, now)
+    this.safeUpdate('towers', this.updateTowers, now)
+    this.safeUpdate('projectiles', this.updateProjectiles)
+    this.safeUpdate('particles', this.updateParticles)
+    this.safeUpdate('floatingTexts', this.updateFloatingTexts)
+    this.safeUpdate('lightningEffects', this.updateLightningEffects)
+    this.safeUpdate('fireEffects', this.updateFireEffects)
+    this.safeUpdate('iceEffects', this.updateIceEffects)
+    this.safeUpdate('poisonEffects', this.updatePoisonEffects)
+    this.safeUpdate('arcaneEffects', this.updateArcaneEffects)
+    this.safeUpdate('mergeEffects', this.updateMergeEffects)
+    this.safeUpdate('performanceCaps', this.enforcePerformanceCaps)
+    this.safeUpdate('flushStats', this.flushQueuedStats)
+    this.safeUpdate('persistProgress', this.persistRunProgress)
+
     if (this.spawnIndex >= this.waveMonsters.length && this.monsters.length === 0 && !this.waveComplete) {
       this.waveComplete = true
       this.nextWave()
     }
-    
+
+    // Boss 在场时塔攻击力 -35%（动态维护 runBossDamagePenalty，applyDamage 读取）
+    this.runBossDamagePenalty = this.hasBossOnField() ? 0.65 : 1
+
+    // 看门狗：波次推进卡在 choice 分支（overlay 未真正切入 choice 状态）时，超时兜底推进，避免整局冻结
+    if (this.pendingWaveAdvance && this.data.gameState === 'playing') {
+      this._pendingWaveStuckAt = this._pendingWaveStuckAt || Date.now()
+      if (Date.now() - this._pendingWaveStuckAt > 2500) {
+        const pw = this.pendingWaveAdvance
+        this.pendingWaveAdvance = null
+        this._pendingWaveStuckAt = 0
+        this.setData({
+          showWaveChoice: false,
+          waveChoiceMode: '',
+          waveChoicePanelTitle: '战术补给',
+          waveChoiceTitle: '',
+          waveChoiceHint: '',
+          waveChoiceOptions: [],
+          pendingSpecializationTowerId: null,
+          pendingSpecializationSource: '',
+          choiceReturnState: 'playing',
+          wave: pw.wave,
+          level: pw.level,
+          waveInLevel: pw.waveInLevel,
+          totalWavesInLevel: 10,
+          nextSupplyWave: this.getNextSupplyWave(pw.wave),
+          gameState: 'playing',
+          commanderAiming: false
+        }, () => {
+          this.generateWave(pw.wave)
+          this.lastSpawnTime = Date.now() + 300
+          this.requestRender()
+        })
+        console.warn('watchdog: force-advance wave (choice overlay did not enter choice state)', pw)
+      }
+    } else {
+      this._pendingWaveStuckAt = 0
+    }
+
     if (this.data.lives <= 0) {
-      this.gameOver()
+      this.safeUpdate('gameOver', this.gameOver)
     }
   },
 
   spawnMonster(template) {
-    this.monsters.push({
+    const monster = {
       ...template,
       x: this.pathPoints[0].x,
       y: this.pathPoints[0].y,
@@ -1446,21 +3195,190 @@ Page({
       burnTimer: 0,
       burnDamage: 0,
       slowTimer: 0,
+      freezeTimer: 0,
+      freezeCharge: 0,
       vineTimer: 0,        // 藤蔓缠绕计时器
       vineVulnerability: 0, // 藤蔓造成的易伤比例
       // 动画
       animFrame: 0,
       animTimer: 0
+    }
+
+    this.monsters.push(monster)
+
+    if (monster.isElite && !monster.isBoss) {
+      this.floatingTexts.push({
+        x: monster.x + 20,
+        y: monster.y - 18,
+        text: '👑 精英',
+        color: '#ffe07a',
+        life: 80,
+        maxLife: 80,
+        vy: -0.2,
+        vx: 0,
+        scale: 1.05,
+        isBold: true
+      })
+      this.requestRender()
+    }
+
+    if (monster.isBoss) {
+      const now = Date.now()
+      this.lastBossSeenAt = now
+      this.updatePerformanceProfile(now, true)
+      this.playSound('boss', { cooldown: 0 })
+      this.requestRender()
+    }
+  },
+
+  toggleCommanderTargeting() {
+    this.flushQueuedStats()
+
+    if (this.data.gameState !== 'playing') {
+      wx.showToast({ title: '战斗中才能下达指挥', icon: 'none' })
+      return
+    }
+
+    if ((this.data.commandPoints || 0) < COMMANDER_COST) {
+      wx.showToast({ title: `至少需要 ${COMMANDER_COST} 点战术点`, icon: 'none' })
+      return
+    }
+
+    const nextAiming = !this.data.commanderAiming
+    this.setData({ commanderAiming: nextAiming })
+    this.playSound('ui', { cooldown: 0, volume: 0.3 })
+    if (nextAiming) {
+      wx.showToast({ title: '点地图投放集火区：优先攻击并增伤', icon: 'none' })
+    }
+  },
+
+  deployCommanderMark(x, y) {
+    this.flushQueuedStats()
+    if ((this.data.commandPoints || 0) < COMMANDER_COST) return false
+
+    this.commanderZone = {
+      x,
+      y,
+      radius: COMMANDER_MARK_RADIUS,
+      expiresAt: Date.now() + COMMANDER_MARK_DURATION,
+      lastPulseAt: 0
+    }
+
+    this.setData({
+      commandPoints: Math.max(0, (this.data.commandPoints || 0) - COMMANDER_COST),
+      commanderAiming: false
     })
+
+    const burstDamage = COMMANDER_PULSE_DAMAGE + Math.floor(this.data.wave * 0.5)
+    const burstTargets = this.monsters
+      .filter((monster) => this.isMonsterInCommanderZone(monster))
+      .sort((a, b) => b.pathIndex - a.pathIndex)
+      .slice(0, 4)
+
+    burstTargets.forEach((monster) => {
+      this.applyDamage(monster, burstDamage, 'commander')
+      this.arcaneEffects.push({
+        x: monster.x,
+        y: monster.y,
+        size: 10,
+        life: 16,
+        maxLife: 16,
+        angle: Math.random() * Math.PI * 2,
+        dist: 0,
+        speed: 3.5
+      })
+    })
+
+    this.playSound('commander', { cooldown: 0 })
+    this.floatingTexts.push({
+      x,
+      y: y - 18,
+      text: '🛰️ 集火区已锁定',
+      color: '#9ee6ff',
+      life: 96,
+      maxLife: 96,
+      vy: -0.45,
+      vx: 0,
+      scale: 1.12,
+      isBold: true
+    })
+    this.floatingTexts.push({
+      x,
+      y: y + 12,
+      text: '优先攻击 · 伤害提升',
+      color: '#d8f6ff',
+      life: 88,
+      maxLife: 88,
+      vy: -0.36,
+      vx: 0,
+      scale: 0.92,
+      isBold: false
+    })
+    wx.showToast({ title: '集火区生效：优先攻击并增伤', icon: 'none' })
+    this.requestRender()
+    return true
+  },
+
+  isMonsterInCommanderZone(monster, zone = this.commanderZone) {
+    if (!monster || !zone) return false
+    const dx = monster.x - zone.x
+    const dy = monster.y - zone.y
+    return Math.sqrt(dx * dx + dy * dy) <= zone.radius
+  },
+
+  updateCommander(now) {
+    const zone = this.commanderZone
+    if (!zone) return
+
+    if (now >= zone.expiresAt) {
+      this.commanderZone = null
+      this.requestRender()
+      return
+    }
+
+    if (now - (zone.lastPulseAt || 0) < COMMANDER_PULSE_INTERVAL) {
+      return
+    }
+
+    zone.lastPulseAt = now
+    let target = null
+    this.monsters.forEach((monster) => {
+      if (!this.isMonsterInCommanderZone(monster, zone)) return
+      if (!target || monster.pathIndex > target.pathIndex) {
+        target = monster
+      }
+    })
+
+    if (!target) return
+
+    this.applyDamage(target, COMMANDER_PULSE_DAMAGE + Math.floor(this.data.wave * 0.6), 'commander')
+    this.arcaneEffects.push({
+      x: target.x,
+      y: target.y,
+      size: 9,
+      life: 16,
+      maxLife: 16,
+      angle: Math.random() * Math.PI * 2,
+      dist: 0,
+      speed: 3.2
+    })
+    this.requestRender()
   },
 
   updateMonsters() {
+    const hadBossBeforeUpdate = this.hasBossOnField()
+
     this.monsters = this.monsters.filter(monster => {
       // 动画计时
       monster.animTimer++
       if (monster.animTimer > 10) {
         monster.animTimer = 0
         monster.animFrame = (monster.animFrame + 1) % 4
+      }
+
+      // 生命回复（巨魔等坦克怪）
+      if (monster.regenPerSec && monster.regenPerSec > 0) {
+        monster.hp = Math.min(monster.maxHp, monster.hp + monster.regenPerSec / 60)
       }
       
       // 灼烧效果
@@ -1494,6 +3412,21 @@ Page({
           })
         }
       }
+
+      if (monster.freezeTimer > 0) {
+        speedMod = 0
+        monster.freezeTimer--
+        if (monster.freezeTimer % 10 === 0) {
+          this.iceEffects.push({
+            x: monster.x,
+            y: monster.y,
+            size: 8,
+            life: 20,
+            maxLife: 20,
+            angle: Math.random() * Math.PI * 2
+          })
+        }
+      }
       
       // 藤蔓缠绕效果 - 减速30% + 易伤
       if (monster.vineTimer > 0) {
@@ -1519,7 +3452,7 @@ Page({
       
       const target = this.pathPoints[monster.pathIndex + 1]
       if (!target) {
-        this.setData({ lives: this.data.lives - (monster.isBoss ? 5 : 1) })
+        this.queueStatDelta({ lives: -(monster.isBoss ? 5 : 1) })
         this.createParticles(monster.x, monster.y, '#ff0000', 20)
         return false
       }
@@ -1543,14 +3476,34 @@ Page({
       
       return true
     })
+
+    const hasBossAfterUpdate = this.hasBossOnField()
+    if (hadBossBeforeUpdate !== hasBossAfterUpdate) {
+      this.updatePerformanceProfile(Date.now(), true)
+      this.requestRender()
+    }
   },
 
   onMonsterKilled(monster) {
     const gold = monster.goldDrop
-    this.setData({ 
-      gold: this.data.gold + gold,
-      score: this.data.score + gold * 10
+    this.queueStatDelta({
+      gold,
+      score: gold * 10
     })
+    this.trackThreatMissionKill(monster)
+
+    const bonusCommandPoints = (monster.eliteRewardPoints || 0) + (monster.bossRewardPoints || 0)
+    if (bonusCommandPoints > 0) {
+      this.grantCommandPoints(bonusCommandPoints, {
+        x: monster.x,
+        y: monster.y - 34,
+        text: monster.isBoss ? '☄️ 斩首成功 +1战术点' : '👑 精英击破 +1战术点',
+        color: monster.isBoss ? '#ffd0a8' : '#ffe07a',
+        scale: 1.05,
+        life: 88
+      })
+      this.playSound(monster.isBoss ? 'boss' : 'reward', { cooldown: 0, volume: monster.isBoss ? 0.58 : 0.46 })
+    }
     
     // 金币飘字动画 - 缩减数量，避免击杀密集时文字洪峰
     for (let i = 0; i < 3; i++) {
@@ -1589,6 +3542,24 @@ Page({
   // 差异化怪物死亡特效
   createMonsterDeathEffect(monster) {
     const size = monster.isBoss ? 22 : 14
+    const profile = this.getActivePerformanceProfile()
+
+    if (profile.simplifyMonsters) {
+      const config = MONSTER_TYPES[monster.type]
+      this.createParticles(monster.x, monster.y, monster.bodyColor, monster.isBoss ? 18 : 8)
+      this.floatingTexts.push({
+        x: monster.x,
+        y: monster.y - 10,
+        text: config.emoji,
+        color: '#ffffff',
+        life: monster.isBoss ? 65 : 35,
+        maxLife: monster.isBoss ? 65 : 35,
+        vy: -1.2,
+        vx: 0,
+        scale: monster.isBoss ? 1.4 : 0.9
+      })
+      return
+    }
     
     switch (monster.type) {
       case 'slime':
@@ -1950,60 +3921,78 @@ Page({
   },
 
   updateTowers(now) {
-    this.towers.forEach(tower => {
+    const commanderZone = this.commanderZone
+
+    this.towers.forEach((tower) => {
       if (now - tower.lastAttack < tower.attackSpeed) return
-      
+
       let target = null
-      
-      this.monsters.forEach(monster => {
+      let fallbackTarget = null
+
+      this.monsters.forEach((monster) => {
         const dx = monster.x - tower.x
         const dy = monster.y - tower.y
         const dist = Math.sqrt(dx * dx + dy * dy)
-        
-        if (dist < tower.range) {
-          if (!target || monster.pathIndex > target.pathIndex) {
-            target = monster
-          }
+        if (dist >= tower.range) return
+
+        if (!fallbackTarget || monster.pathIndex > fallbackTarget.pathIndex) {
+          fallbackTarget = monster
+        }
+
+        if (commanderZone && this.isMonsterInCommanderZone(monster, commanderZone) && (!target || monster.pathIndex > target.pathIndex)) {
+          target = monster
         }
       })
-      
-      if (target) {
-        this.towerAttack(tower, target)
-        tower.lastAttack = now
+
+      const finalTarget = target || fallbackTarget
+      if (finalTarget) {
+        const targetInCommanderZone = this.isMonsterInCommanderZone(finalTarget, commanderZone)
+        this.towerAttack(tower, finalTarget)
+        tower.lastAttack = targetInCommanderZone
+          ? now - tower.attackSpeed * (1 - COMMANDER_ZONE_ATTACK_SPEED_FACTOR)
+          : now
       }
     })
   },
 
   towerAttack(tower, target) {
     const config = TOWER_TYPES[tower.type]
+    const specialization = this.getTowerSpecializationConfig(tower.type, tower.specializationKey)
+    const commanderBoosted = this.isMonsterInCommanderZone(target)
+    const damageMultiplier = commanderBoosted ? (1 + COMMANDER_ZONE_DAMAGE_BONUS) : 1
     
     if (tower.type === 'lightning') {
-      this.lightningAttack(tower, target)
+      this.lightningAttack(tower, target, damageMultiplier)
     } else {
       this.projectiles.push({
         x: tower.x,
         y: tower.y - 10,
         targetId: this.monsters.indexOf(target),
-        damage: tower.damage,
+        damage: tower.damage * damageMultiplier,
         towerType: tower.type,
         towerLevel: tower.level,
-        color: config.color,
+        specializationKey: tower.specializationKey || '',
+        color: commanderBoosted ? '#d8f6ff' : config.color,
         speed: tower.type === 'arcane' ? 10 : 7,
         piercing: tower.type === 'arcane' ? 2 + tower.level : 0,
-        size: 4 + tower.level * 1.2,
+        size: 4 + tower.level * 1.2 + (commanderBoosted ? 0.8 : 0),
         angle: 0,
-        trail: []
+        trail: [],
+        commanderBoosted
       })
     }
     
-    this.createParticles(tower.x, tower.y - 15, config.color, 2)
+    this.playTowerAttackSound(tower)
+    this.createParticles(tower.x, tower.y - 15, commanderBoosted ? '#d8f6ff' : (specialization?.icon ? '#ffe9a6' : config.color), commanderBoosted ? 4 : 2)
   },
 
-  lightningAttack(tower, target) {
+  lightningAttack(tower, target, damageMultiplier = 1) {
     const lv = tower.level || 1
-    const chainCount = Math.min(3, 1 + Math.floor((lv + 1) / 2))  // 高等级仍有连锁，但不再指数堆特效
+    const bossPressure = this.hasBossOnField()
+    const chainCap = bossPressure ? 2 : 3
+    const chainCount = Math.min(chainCap, 1 + Math.floor((lv + 1) / 2))
     
-    this.applyDamage(target, tower.damage, 'lightning')
+    this.applyDamage(target, tower.damage * damageMultiplier, 'lightning')
     
     // 闪电主链 - 等级影响颜色、粗细、持续时间
     const mainColor = lv >= 5 ? '#ffffff' : lv >= 4 ? '#ffffcc' : lv >= 3 ? '#ffff88' : lv >= 2 ? '#ffff44' : '#dddd00'
@@ -2041,7 +4030,7 @@ Page({
       })
       
       if (nearestMonster) {
-        this.applyDamage(nearestMonster, tower.damage * (0.6 + lv * 0.05), 'lightning')
+        this.applyDamage(nearestMonster, tower.damage * (0.6 + lv * 0.05) * damageMultiplier, 'lightning')
         
         const chainColor = lv >= 4 ? '#ffff88' : lv >= 3 ? '#ffff66' : lv >= 2 ? '#eeee33' : '#cccc00'
         this.lightningEffects.push({
@@ -2065,7 +4054,9 @@ Page({
 
   createElectricBurst(x, y, level) {
     const lv = level || 1
-    const burstCount = Math.min(4, 2 + Math.floor(lv / 2))
+    const burstCount = this.hasBossOnField()
+      ? Math.min(2, 1 + Math.floor(lv / 3))
+      : Math.min(4, 2 + Math.floor(lv / 2))
     const burstDist = 8 + lv * 2.2
     for (let i = 0; i < burstCount; i++) {
       const angle = (Math.PI * 2 / burstCount) * i
@@ -2083,10 +4074,46 @@ Page({
   },
 
   applyDamage(monster, damage, type) {
+    monster.lastHitTowerType = type
+
+    // 闪避判定（高机动怪：幽影等）—— 完全不受伤害
+    if (monster.evasionChance && Math.random() < monster.evasionChance) {
+      this.floatingTexts.push({
+        x: monster.x + (Math.random() - 0.5) * 18,
+        y: monster.y - 22,
+        text: '闪避',
+        color: '#aaaaff',
+        life: 18,
+        maxLife: 18,
+        vy: -1.2,
+        vx: (Math.random() - 0.5) * 0.6,
+        scale: 0.85
+      })
+      return
+    }
+
+    // 暴击判定（暴击先于抗性减伤，保证暴击能部分穿透高护甲）
+    let isCrit = false
+    const critRate = this.runCritBonus || 0
+    if (critRate > 0 && Math.random() < critRate) {
+      damage = Math.floor(damage * 2)
+      isCrit = true
+    }
+
+    // 护甲/抗性减伤（精英/Boss/中后期怪自带 armor）
+    let armoredDamage = damage
+    if (monster.armor && monster.armor > 0) {
+      armoredDamage = Math.floor(damage * (1 - monster.armor))
+    }
+
+    // Boss 在场时全场塔攻击力 -35%（boss 威胁感、避免无脑碾压；update 动态维护 runBossDamagePenalty）
+    const bossPenalty = this.runBossDamagePenalty || 1
+    const bossPenalized = bossPenalty !== 1 ? Math.floor(armoredDamage * bossPenalty) : armoredDamage
+
     // 藤蔓易伤效果：增加受到的伤害
-    let finalDamage = damage
+    let finalDamage = bossPenalized
     if (monster.vineVulnerability > 0) {
-      finalDamage = damage * (1 + monster.vineVulnerability)
+      finalDamage = bossPenalized * (1 + monster.vineVulnerability)
     }
     
     monster.hp -= finalDamage
@@ -2096,24 +4123,42 @@ Page({
       ice: '#00ccff',
       nature: '#44ff44',
       arcane: '#aa44ff',
-      lightning: '#ffff00'
+      lightning: '#ffff00',
+      commander: '#9ee6ff'
     }
     
     // 如果有易伤加成，显示额外伤害
     const displayDamage = Math.floor(finalDamage)
-    const text = monster.vineVulnerability > 0 ? `-${displayDamage}!` : `-${displayDamage}`
-    
-    this.floatingTexts.push({
-      x: monster.x + (Math.random() - 0.5) * 20,
-      y: monster.y - 20,
-      text: text,
-      color: colors[type] || '#fff',
-      life: 30,
-      maxLife: 30,
-      vy: -1.5,
-      vx: (Math.random() - 0.5) * 1,
-      scale: monster.vineVulnerability > 0 ? 1.1 : 0.9  // 易伤伤害显示更大
-    })
+    const critPrefix = isCrit ? '暴击! ' : ''
+    const text = isCrit ? `${critPrefix}-${displayDamage}💥` : (monster.vineVulnerability > 0 ? `-${displayDamage}!` : `-${displayDamage}`)
+    const profile = this.getActivePerformanceProfile()
+    const damageTextStride = this.getDamageTextStride()
+    const currentFrame = this.renderFrameCount || 0
+    const now = Date.now()
+    const bossTextCooldown = monster.isBoss ? (profile.bossDamageTextCooldown || 0) : 0
+    const canShowBossText = !monster.isBoss || (
+      monster.lastDamageTextFrame !== currentFrame &&
+      (!monster.lastDamageTextAt || now - monster.lastDamageTextAt >= bossTextCooldown)
+    )
+
+    if ((currentFrame % damageTextStride) === 0 && canShowBossText) {
+      if (monster.isBoss) {
+        monster.lastDamageTextAt = now
+        monster.lastDamageTextFrame = currentFrame
+      }
+
+      this.floatingTexts.push({
+        x: monster.x + (Math.random() - 0.5) * (monster.isBoss ? 12 : 20),
+        y: monster.y - (monster.isBoss ? 26 : 20),
+        text: text,
+        color: colors[type] || '#fff',
+        life: monster.isBoss ? 20 : 30,
+        maxLife: monster.isBoss ? 20 : 30,
+        vy: -1.5,
+        vx: (Math.random() - 0.5) * (monster.isBoss ? 0.6 : 1),
+        scale: monster.vineVulnerability > 0 ? 1.1 : 0.9  // 易伤伤害显示更大
+      })
+    }
   },
 
   updateProjectiles() {
@@ -2140,9 +4185,26 @@ Page({
       const dist = Math.sqrt(dx * dx + dy * dy)
       
       if (dist < 15) {
-        this.applyDamage(currentTarget, proj.damage, proj.towerType)
-        this.applyTowerEffect(currentTarget, proj.towerType, proj.damage, proj.towerLevel)
+        let impactDamage = proj.damage
+        if (proj.towerType === 'ice' && proj.specializationKey === 'shatter' && (currentTarget.slowTimer > 0 || currentTarget.freezeTimer > 0)) {
+          impactDamage *= SPECIALIZATION_OPTIONS.ice[1].shatterMultiplier
+        }
+
+        this.applyDamage(currentTarget, impactDamage, proj.towerType)
+        this.applyTowerEffect(currentTarget, proj.towerType, impactDamage, proj.towerLevel, proj.specializationKey)
         this.createHitEffect(currentTarget.x, currentTarget.y, proj.towerType, proj.towerLevel)
+
+        if (proj.towerType === 'fire' && proj.specializationKey === 'volatile') {
+          this.monsters.forEach((monster) => {
+            if (monster === currentTarget) return
+            const splashDx = monster.x - currentTarget.x
+            const splashDy = monster.y - currentTarget.y
+            const splashDist = Math.sqrt(splashDx * splashDx + splashDy * splashDy)
+            if (splashDist > SPECIALIZATION_OPTIONS.fire[1].splashRadius) return
+            this.applyDamage(monster, impactDamage * SPECIALIZATION_OPTIONS.fire[1].splashRatio, 'fire')
+          })
+          this.createParticles(currentTarget.x, currentTarget.y, '#ffd27a', 6)
+        }
         
         if (proj.piercing > 0) {
           proj.piercing--
@@ -2157,14 +4219,35 @@ Page({
       proj.y += (dy / dist) * proj.speed
       
       // 记录轨迹
-      proj.trail.push({ x: proj.x, y: proj.y })
-      if (proj.trail.length > 8) proj.trail.shift()
+      const trailLimit = this.getProjectileTrailLimit()
+      if (trailLimit > 0) {
+        proj.trail.push({ x: proj.x, y: proj.y })
+        if (proj.trail.length > trailLimit) proj.trail.shift()
+      } else {
+        proj.trail.length = 0
+      }
       
       return true
     })
   },
 
   createHitEffect(x, y, type, level = 1) {
+    const profile = this.getActivePerformanceProfile()
+    if (profile.effectRenderStride >= 3) {
+      this.particles.push({
+        x,
+        y,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: -0.8,
+        size: 3,
+        color: TOWER_TYPES[type]?.color || '#ffffff',
+        life: 12,
+        maxLife: 12,
+        alpha: 1
+      })
+      return
+    }
+
     // 根据等级调整特效规模
     const scale = 0.5 + level * 0.15  // 等级1=0.65, 等级5=1.25
     
@@ -2267,17 +4350,29 @@ Page({
     }
   },
 
-  applyTowerEffect(monster, type, damage, level) {
+  applyTowerEffect(monster, type, damage, level, specializationKey = '') {
     switch (type) {
-      case 'fire':
+      case 'fire': {
         // 灼烧：持续伤害
-        monster.burnTimer = 180
-        monster.burnDamage = damage * 0.1 * level
+        const specialization = this.getTowerSpecializationConfig('fire', specializationKey)
+        // 专精「炼狱焦芯」对精英/Boss 灼烧伤害+60%，让烧硬骨头明显
+        const burnEliteBossBoost = (monster.isBoss || monster.isElite) ? 1.6 : 1
+        monster.burnTimer = 180 + (specialization?.burnDurationBonus || 0)
+        monster.burnDamage = damage * 0.1 * level * (specialization?.burnDamageMultiplier || 1) * burnEliteBossBoost
         break
-      case 'ice':
+      }
+      case 'ice': {
         // 冰冻：减速50%
         monster.slowTimer = 120
+        if (specializationKey === 'frostlock') {
+          monster.freezeCharge = (monster.freezeCharge || 0) + 1
+          if (monster.freezeCharge >= (SPECIALIZATION_OPTIONS.ice[0].freezeHits || 3)) {
+            monster.freezeCharge = 0
+            monster.freezeTimer = SPECIALIZATION_OPTIONS.ice[0].freezeDuration || 34
+          }
+        }
         break
+      }
       case 'nature':
         // 藤蔓：减速30% + 受伤加深25%（易伤效果）
         monster.vineTimer = 180  // 3秒
@@ -2435,64 +4530,173 @@ Page({
     }
   },
 
+  safeRender(step, fn) {
+    try {
+      fn.call(this)
+    } catch (error) {
+      if (!this._renderStepFailures) this._renderStepFailures = {}
+      const rec = this._renderStepFailures[step] || (this._renderStepFailures[step] = { count: 0, firstMessage: '', firstStack: '' })
+      rec.count += 1
+      if (!rec.firstMessage) {
+        rec.firstMessage = (error && error.message) || String(error)
+        rec.firstStack = (error && error.stack) || rec.firstMessage
+      }
+      const now = Date.now()
+      if (now - (this.lastRenderStepWarnAt || 0) >= 2000) {
+        this.lastRenderStepWarnAt = now
+        console.warn('render step failed: ' + step, rec.firstStack)
+      }
+      // 单步绘制失败不影响整帧，避免一处异常导致整块战场冻死
+    }
+  },
+
+  safeUpdate(step, fn, ...args) {
+    try {
+      fn.apply(this, args)
+    } catch (error) {
+      if (!this._updateStepFailures) this._updateStepFailures = {}
+      const rec = this._updateStepFailures[step] || (this._updateStepFailures[step] = { count: 0, firstMessage: '', firstStack: '' })
+      rec.count += 1
+      if (!rec.firstMessage) {
+        rec.firstMessage = (error && error.message) || String(error)
+        rec.firstStack = (error && error.stack) || rec.firstMessage
+      }
+      const now = Date.now()
+      if (now - (this.lastUpdateStepWarnAt || 0) >= 2000) {
+        this.lastUpdateStepWarnAt = now
+        console.warn('update step failed: ' + step, rec.firstStack)
+      }
+      // 单步逻辑更新失败不影响整局，避免一处异常导致 update 链中断、整局数据冻结（“停住不动”）
+    }
+  },
+
+  getRenderDiagnostics() {
+    return {
+      renderFrameCount: this.renderFrameCount || 0,
+      stepFailures: this._renderStepFailures || {},
+      lastRenderWarnAt: this.lastRenderWarnAt || 0,
+      lastRenderStepWarnAt: this.lastRenderStepWarnAt || 0,
+      cachedBgGradientKey: this._cachedBgGradientKey || ''
+    }
+  },
+
+  getUpdateDiagnostics() {
+    return {
+      stepFailures: this._updateStepFailures || {},
+      lastUpdateStepWarnAt: this.lastUpdateStepWarnAt || 0,
+      pendingWaveAdvance: this.pendingWaveAdvance ? JSON.stringify(this.pendingWaveAdvance) : null,
+      pendingWaveStuckAt: this._pendingWaveStuckAt || 0,
+      gameState: this.data.gameState,
+      wave: this.data.wave,
+      spawnIndex: this.spawnIndex,
+      waveMonstersLen: (this.waveMonsters || []).length,
+      monstersLen: (this.monsters || []).length,
+      waveComplete: !!this.waveComplete
+    }
+  },
+
   render() {
     const ctx = this.ctx
     if (!ctx) return
-    this.needsRender = false
-    
-    const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-    
-    // 背景渐变（根据主题）
-    const bgGradient = ctx.createLinearGradient(0, 0, 0, CONFIG.canvasHeight)
-    bgGradient.addColorStop(0, theme.bgColors[0])
-    bgGradient.addColorStop(0.5, theme.bgColors[1])
-    bgGradient.addColorStop(1, theme.bgColors[2])
-    ctx.fillStyle = bgGradient
-    ctx.fillRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight)
-    
-    this.drawDecorations()
-    this.drawGrid()
-    this.drawPath()
-    this.drawTowers()
-    this.drawMonsters()
-    this.drawProjectiles()
-    this.drawFireEffects()
-    this.drawIceEffects()
-    this.drawPoisonEffects()
-    this.drawArcaneEffects()
-    this.drawLightningEffects()
-    this.drawMergeEffects()
-    this.drawParticles()
-    this.drawFloatingTexts()
-    this.drawDraggingTower()
-    this.drawWaveHUD()
+
+    try {
+      this.safeRender('battlefieldState', this.ensureBattlefieldState)
+      this.needsRender = false
+      this.renderFrameCount += 1
+
+      // 关键：每帧重置 shadowBlur / globalAlpha / lineDash，防止某个 draw 启用后残留导致后续 draw 全部模糊/变色
+      ctx.shadowBlur = 0
+      ctx.globalAlpha = 1
+      ctx.setLineDash([])
+
+      // 背景渐变（按主题缓存，避免每帧重建 CanvasGradient）
+      const themeKey = this.data.currentTheme || 'forest'
+      const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
+      if (!this._cachedBgGradientKey || this._cachedBgGradientKey !== themeKey) {
+        this._cachedBgGradientKey = themeKey
+        try {
+          this._cachedBgGradient = ctx.createLinearGradient(0, 0, 0, CONFIG.canvasHeight)
+          this._cachedBgGradient.addColorStop(0, theme.bgColors[0])
+          this._cachedBgGradient.addColorStop(0.5, theme.bgColors[1])
+          this._cachedBgGradient.addColorStop(1, theme.bgColors[2])
+        } catch (gradErr) {
+          // 渐变创建失败时降级为纯色填充，避免每帧抛错
+          this._cachedBgGradient = null
+        }
+      }
+      if (this._cachedBgGradient) {
+        ctx.fillStyle = this._cachedBgGradient
+      } else {
+        ctx.fillStyle = theme.bgColors ? theme.bgColors[0] : '#0a1a0a'
+      }
+      ctx.fillRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight)
+      
+      this.safeRender('decorations', this.drawDecorations)
+      this.safeRender('grid', this.drawGrid)
+      this.safeRender('path', this.drawPath)
+      this.safeRender('towers', this.drawTowers)
+      this.safeRender('monsters', this.drawMonsters)
+      this.safeRender('projectiles', this.drawProjectiles)
+      this.safeRender('fireEffects', this.drawFireEffects)
+      this.safeRender('iceEffects', this.drawIceEffects)
+      this.safeRender('poisonEffects', this.drawPoisonEffects)
+      this.safeRender('arcaneEffects', this.drawArcaneEffects)
+      this.safeRender('lightningEffects', this.drawLightningEffects)
+      this.safeRender('mergeEffects', this.drawMergeEffects)
+      this.safeRender('particles', this.drawParticles)
+      this.safeRender('floatingTexts', this.drawFloatingTexts)
+      this.safeRender('draggingTower', this.drawDraggingTower)
+      this.safeRender('commanderZone', this.drawCommanderZone)
+      this.safeRender('waveHUD', this.drawWaveHUD)
+    } catch (error) {
+      const now = Date.now()
+      if (now - (this.lastRenderWarnAt || 0) >= 2000) {
+        this.lastRenderWarnAt = now
+        console.warn('render outer failed (guarded)', (error && (error.stack || error.message)) || String(error))
+      }
+      // 自愈仅在战场状态真正损坏时发生，且 1s 内最多一次；杜绝异常态下每帧/每 240ms 无限重建导致内存堆积与 OOM
+      const pathInvalid = !Array.isArray(this.pathPoints) || this.pathPoints.length < 2
+      const gridInvalid = !Array.isArray(this.grid) || this.grid.length !== CONFIG.gridRows
+      if ((pathInvalid || gridInvalid) && now - (this.lastRenderRecoveryAt || 0) >= 1000) {
+        this.lastRenderRecoveryAt = now
+        try {
+          this.generatePath(this.data.currentTheme)
+          this.rebuildGridFromTowers()
+        } catch (e2) {
+          // 二次自愈失败则放弃，避免连环抛错
+        }
+      }
+    }
   },
 
   drawDecorations() {
     const ctx = this.ctx
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-    
-    // 背景纹理点
+    const profile = this.getActivePerformanceProfile()
+
+    // 静态地图装饰保持稳定绘制，避免性能档位切换时出现“一闪没了又回来”的错觉
     ctx.fillStyle = theme.grassColor
     if (this.grassDots) {
-      this.grassDots.forEach(dot => {
+      for (let i = 0; i < this.grassDots.length; i++) {
+        const dot = this.grassDots[i]
         ctx.beginPath()
         ctx.arc(dot.x, dot.y, dot.size, 0, Math.PI * 2)
         ctx.fill()
-      })
+      }
     }
-    
-    // 小草丛绘制
+
     if (this.grassTufts) {
       const time = Date.now() * 0.002
-      this.grassTufts.forEach(tuft => {
+      this.grassTufts.forEach((tuft) => {
         ctx.save()
         ctx.strokeStyle = theme.grassColor.replace('0.15', '0.35').replace('0.1', '0.3').replace('0.08', '0.25')
         ctx.lineWidth = 1.2
         ctx.lineCap = 'round'
         for (let i = 0; i < tuft.blades; i++) {
           const angle = -Math.PI / 2 + (i - tuft.blades / 2) * 0.25
-          const sway = Math.sin(time + tuft.sway + i * 0.5) * 2
+          const sway = profile.animatedDecorations
+            ? Math.sin(time + tuft.sway + i * 0.5) * 2
+            : 0
           ctx.beginPath()
           ctx.moveTo(tuft.x, tuft.y)
           ctx.quadraticCurveTo(
@@ -2506,11 +4710,10 @@ Page({
         ctx.restore()
       })
     }
-    
-    // 装饰物
+
     if (this.mapDecorations) {
-      this.mapDecorations.forEach(d => {
-        this.drawDecoration(ctx, d)
+      this.mapDecorations.forEach((decoration) => {
+        this.drawDecoration(ctx, decoration)
       })
     }
   },
@@ -2671,22 +4874,26 @@ Page({
         ctx.fill()
         break
         
-      case 'fire_vent':
+      case 'fire_vent': {
         ctx.fillStyle = '#222'
         ctx.beginPath()
         ctx.ellipse(d.x, d.y, 8 * s, 4 * s, 0, 0, Math.PI * 2)
         ctx.fill()
-        // 火焰
-        if (Math.random() > 0.3) {
-          ctx.fillStyle = 'rgba(255, 150, 50, 0.8)'
-          ctx.beginPath()
-          ctx.moveTo(d.x, d.y - 15 * s)
-          ctx.lineTo(d.x + 5 * s, d.y)
-          ctx.lineTo(d.x - 5 * s, d.y)
-          ctx.closePath()
-          ctx.fill()
-        }
+
+        const phase = d.phase || 0
+        const pulse = (Math.sin(Date.now() * 0.01 + phase) + 1) / 2
+        const flameHeight = (9 + pulse * 7) * s
+        const flameWidth = (4.5 + pulse * 1.4) * s
+        const flameAlpha = 0.35 + pulse * 0.45
+        ctx.fillStyle = `rgba(255, 150, 50, ${flameAlpha})`
+        ctx.beginPath()
+        ctx.moveTo(d.x, d.y - flameHeight)
+        ctx.lineTo(d.x + flameWidth, d.y)
+        ctx.lineTo(d.x - flameWidth, d.y)
+        ctx.closePath()
+        ctx.fill()
         break
+      }
         
       case 'ash_pile':
         ctx.fillStyle = '#444'
@@ -2711,37 +4918,13 @@ Page({
   },
 
   drawGrid() {
-    const ctx = this.ctx
-    const offsetX = this.data.gridOffsetX
-    const offsetY = this.data.gridOffsetY
-    const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-    
-    // 只绘制空的塔位
-    theme.towerSlots.forEach(slot => {
-      const x = offsetX + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
-      const y = offsetY + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2
-      const hasTower = this.grid[slot.row] && this.grid[slot.row][slot.col]
-      
-      if (!hasTower) {
-        // 简洁的塔位标记 - 圆形虚线边框
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'
-        ctx.lineWidth = 1.5
-        ctx.setLineDash([4, 4])
-        ctx.beginPath()
-        ctx.arc(x, y, 12, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.setLineDash([])
-        
-        // 中心小点
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'
-        ctx.beginPath()
-        ctx.arc(x, y, 3, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    })
+    // 塔位圈改由 WXML prep-slot-layer 渲染（虚线 54rpx 圆）——避免与 canvas 重复造成"两种圈"
+    // 原 canvas 端画 12px 虚线圆 + 中心小点已删除，WXML 唯一负责塔位可视化
   },
 
   drawPath() {
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) return
+
     const ctx = this.ctx
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
     const pathColors = theme.pathColors
@@ -2782,11 +4965,12 @@ Page({
     // 路径装饰：小石子（使用预生成的）
     ctx.fillStyle = pathColors[1]
     if (this.pathDecorations) {
-      this.pathDecorations.forEach(stone => {
+      for (let i = 0; i < this.pathDecorations.length; i++) {
+        const stone = this.pathDecorations[i]
         ctx.beginPath()
         ctx.arc(stone.x, stone.y, stone.size, 0, Math.PI * 2)
         ctx.fill()
-      })
+      }
     }
     
     // 路径中心线（虚线）
@@ -2843,15 +5027,54 @@ Page({
   },
 
   drawTowers() {
+    const profile = this.getActivePerformanceProfile()
     this.towers.forEach(tower => {
-      // 如果正在拖动这个塔（从场上拖动），用半透明显示原位置
-      if (this.isDragging && !this.draggingFromInventory && 
-          this.draggingTowerId === tower.id && this.hasMoved) {
-        this.drawSingleTower(this.ctx, tower.x, tower.y, tower.type, tower.level, 0.3)
+      const alpha = this.isDragging && !this.draggingFromInventory &&
+        this.draggingTowerId === tower.id && this.hasMoved ? 0.3 : 1
+
+      if (profile.simplifyTowers) {
+        this.drawCompactTower(this.ctx, tower.x, tower.y, tower.type, tower.level, alpha)
       } else {
-        this.drawSingleTower(this.ctx, tower.x, tower.y, tower.type, tower.level)
+        this.drawSingleTower(this.ctx, tower.x, tower.y, tower.type, tower.level, alpha)
       }
     })
+  },
+
+  drawCompactTower(ctx, x, y, type, level, alpha = 1) {
+    const config = TOWER_TYPES[type]
+
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
+    ctx.beginPath()
+    ctx.ellipse(x, y + 12, 15, 5, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = config.color
+    ctx.beginPath()
+    ctx.arc(x, y, 13, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '14px Arial'
+    ctx.fillText(config.emoji, x, y)
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.82)'
+    ctx.beginPath()
+    drawRoundRect(ctx, x - 12, y + 10, 24, 12, 4)
+    ctx.fill()
+
+    ctx.fillStyle = '#ffd700'
+    ctx.font = 'bold 9px Arial'
+    ctx.fillText(`Lv.${level}`, x, y + 16)
+    ctx.restore()
   },
 
   // 绘制单个塔（复用于场上塔和拖动塔）
@@ -3790,9 +6013,14 @@ Page({
     const y = Math.max(0, Math.min(CONFIG.canvasHeight, this.dragY))
     
     const ctx = this.ctx
+    const profile = this.getActivePerformanceProfile()
     
     // 绘制半透明的塔跟随手指
-    this.drawSingleTower(ctx, x, y, this.draggingTower.type, this.draggingTower.level, 0.85)
+    if (profile.simplifyTowers) {
+      this.drawCompactTower(ctx, x, y, this.draggingTower.type, this.draggingTower.level, 0.85)
+    } else {
+      this.drawSingleTower(ctx, x, y, this.draggingTower.type, this.draggingTower.level, 0.85)
+    }
     
     // 如果有合成目标，绘制连接线和提示
     if (this.mergeTarget && this.mergeTargetType === 'tower') {
@@ -3816,6 +6044,60 @@ Page({
       ctx.stroke()
       ctx.restore()
     }
+  },
+
+  drawCommanderZone() {
+    const ctx = this.ctx
+    const zone = this.commanderZone
+    if (!ctx || !zone) return
+
+    const remain = Math.max(0, zone.expiresAt - Date.now())
+    const remainRatio = remain / COMMANDER_MARK_DURATION
+    const alpha = 0.32 + remainRatio * 0.22
+
+    // 关键：完全不依赖 save/restore，显式重置所有 ctx 状态（真机上 fillStyle 字符串可能因前一个 draw 残留被忽略，必须显式设）
+    ctx.shadowBlur = 0
+    ctx.shadowColor = 'rgba(0,0,0,0)'
+    ctx.globalAlpha = 1
+    ctx.setLineDash([])
+
+    // 蓝色实色 fill（真机最稳写法：实色 + globalAlpha）
+    ctx.globalAlpha = Math.max(0.12, alpha - 0.14)
+    ctx.fillStyle = '#46a0ff'
+    ctx.beginPath()
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2)
+    ctx.fill()
+
+    // 虚线边框
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = '#82e1ff'
+    ctx.lineWidth = 2.5
+    ctx.setLineDash([7, 5])
+    ctx.beginPath()
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // 中心十字
+    ctx.globalAlpha = Math.min(0.92, alpha + 0.12)
+    ctx.strokeStyle = '#d8f6ff'
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.moveTo(zone.x - 10, zone.y)
+    ctx.lineTo(zone.x + 10, zone.y)
+    ctx.moveTo(zone.x, zone.y - 10)
+    ctx.lineTo(zone.x, zone.y + 10)
+    ctx.stroke()
+
+    // 文字
+    ctx.globalAlpha = 1
+    ctx.fillStyle = '#d8f6ff'
+    ctx.font = 'bold 10px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('集火', zone.x, zone.y - 14)
+    ctx.font = '9px Arial'
+    ctx.fillText('+45% 伤害', zone.x, zone.y + 14)
   },
 
   drawWaveHUD() {
@@ -3868,93 +6150,179 @@ Page({
   },
 
   drawMonsters() {
+    const profile = this.getActivePerformanceProfile()
+
     this.monsters.forEach(monster => {
       const ctx = this.ctx
       const config = MONSTER_TYPES[monster.type]
       const size = monster.isBoss ? 22 : 14
-      
+      const useCompactMonster = profile.simplifyMonsters && !monster.isBoss
+
       // 阴影
       ctx.fillStyle = 'rgba(0,0,0,0.4)'
       ctx.beginPath()
       ctx.ellipse(monster.x, monster.y + size + 4, size * 0.8, size * 0.3, 0, 0, Math.PI * 2)
       ctx.fill()
-      
-      // 状态光环
-      if (monster.slowTimer > 0) {
+
+      if (monster.isElite && !monster.isBoss) {
         ctx.save()
-        ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
-        ctx.lineWidth = 3
-        ctx.shadowBlur = 15
-        ctx.shadowColor = '#00ccff'
-        ctx.beginPath()
-        ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.restore()
-      }
-      if (monster.vineTimer > 0) {
-        // 藤蔓缠绕效果 - 绿色藤蔓环绕
-        ctx.save()
-        ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
+        ctx.strokeStyle = 'rgba(255, 215, 120, 0.9)'
         ctx.lineWidth = 2
-        ctx.shadowBlur = 10
-        ctx.shadowColor = '#44ff44'
-        // 绘制缠绕的藤蔓
-        const time = Date.now()
-        for (let i = 0; i < 3; i++) {
-          const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
-          const waveOffset = Math.sin(time * 0.005 + i) * 2
-          ctx.beginPath()
-          ctx.arc(monster.x, monster.y, size + 3 + waveOffset, angle, angle + Math.PI * 0.6)
-          ctx.stroke()
-        }
-        // 易伤标记
-        ctx.fillStyle = '#ffff00'
+        ctx.shadowBlur = 12
+        ctx.shadowColor = '#ffd76a'
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y, size + 6, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.fillStyle = '#fff0b5'
         ctx.font = 'bold 10px Arial'
         ctx.textAlign = 'center'
-        ctx.fillText('⬇️', monster.x, monster.y - size - 8)
+        ctx.fillText('✦', monster.x, monster.y - size - 8)
         ctx.restore()
       }
-      
-      // 根据怪物类型绘制不同外观
-      this.drawMonsterByType(ctx, monster, size)
-      
-      // 燃烧效果 - 绘制在怪物身上
-      if (monster.burnTimer > 0) {
-        this.drawBurningEffect(ctx, monster, size)
+
+      if (useCompactMonster) {
+        this.drawCompactMonster(ctx, monster, size, config)
+      } else {
+        // 状态光环
+        if (monster.slowTimer > 0) {
+          ctx.save()
+          ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
+          ctx.lineWidth = 3
+          ctx.shadowBlur = 15
+          ctx.shadowColor = '#00ccff'
+          ctx.beginPath()
+          ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
+        if (monster.vineTimer > 0) {
+          // 藤蔓缠绕效果 - 绿色藤蔓环绕
+          ctx.save()
+          ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
+          ctx.lineWidth = 2
+          ctx.shadowBlur = 10
+          ctx.shadowColor = '#44ff44'
+          // 绘制缠绕的藤蔓
+          const time = Date.now()
+          for (let i = 0; i < 3; i++) {
+            const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
+            const waveOffset = Math.sin(time * 0.005 + i) * 2
+            ctx.beginPath()
+            ctx.arc(monster.x, monster.y, size + 3 + waveOffset, angle, angle + Math.PI * 0.6)
+            ctx.stroke()
+          }
+          // 易伤标记
+          ctx.fillStyle = '#ffff00'
+          ctx.font = 'bold 10px Arial'
+          ctx.textAlign = 'center'
+          ctx.fillText('⬇️', monster.x, monster.y - size - 8)
+          ctx.restore()
+        }
+
+        // 根据怪物类型绘制不同外观
+        this.drawMonsterByType(ctx, monster, size)
+
+        // 燃烧效果 - 绘制在怪物身上
+        if (monster.burnTimer > 0) {
+          this.drawBurningEffect(ctx, monster, size)
+        }
       }
-      
+
       // 血条背景
       const barWidth = monster.isBoss ? 55 : 35
       const barHeight = 7
       const barY = monster.y - size - 16
       const hpPercent = Math.max(0, monster.hp / monster.maxHp)
-      
+      const showHpPercent = !(monster.isBoss && profile.compactBossHp)
+
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
       ctx.beginPath()
       drawRoundRect(ctx, monster.x - barWidth / 2 - 2, barY - 2, barWidth + 4, barHeight + 4, 3)
       ctx.fill()
-      
+
       // 血条
       const hpColor = hpPercent > 0.6 ? '#44ff44' : hpPercent > 0.3 ? '#ffaa00' : '#ff4444'
       ctx.fillStyle = hpColor
       ctx.beginPath()
       drawRoundRect(ctx, monster.x - barWidth / 2, barY, Math.max(1, barWidth * hpPercent), barHeight, 2)
       ctx.fill()
-      
-      // 血量百分比
-      ctx.fillStyle = '#fff'
-      ctx.font = 'bold 9px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText(`${Math.floor(hpPercent * 100)}%`, monster.x, barY + barHeight + 10)
+
+      if (showHpPercent) {
+        // 血量百分比
+        ctx.fillStyle = '#fff'
+        ctx.font = 'bold 9px Arial'
+        ctx.textAlign = 'center'
+        ctx.fillText(`${Math.floor(hpPercent * 100)}%`, monster.x, barY + barHeight + 10)
+      }
     })
+  },
+
+  drawCompactMonster(ctx, monster, size, config) {
+    ctx.save()
+
+    let auraColor = ''
+    if (monster.slowTimer > 0) {
+      auraColor = 'rgba(100, 200, 255, 0.55)'
+    } else if (monster.vineTimer > 0) {
+      auraColor = 'rgba(100, 220, 100, 0.55)'
+    } else if (monster.burnTimer > 0) {
+      auraColor = 'rgba(255, 140, 60, 0.45)'
+    }
+
+    if (auraColor) {
+      ctx.strokeStyle = auraColor
+      ctx.lineWidth = monster.isBoss ? 3 : 2
+      ctx.beginPath()
+      ctx.arc(monster.x, monster.y, size + 4, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+
+    ctx.fillStyle = config.bodyColor
+    ctx.beginPath()
+    ctx.arc(monster.x, monster.y, size, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = config.outlineColor
+    ctx.lineWidth = monster.isBoss ? 2.5 : 1.5
+    ctx.stroke()
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `${monster.isBoss ? '18px' : '14px'} Arial`
+    ctx.fillText(config.emoji, monster.x, monster.y + 0.5)
+    ctx.restore()
   },
 
   // 绘制燃烧效果 - 更逼真的火焰
   drawBurningEffect(ctx, monster, size) {
     ctx.save()
     
+    const profile = this.getActivePerformanceProfile()
     const intensity = Math.min(1, monster.burnTimer / 120) // 燃烧强度
     const time = Date.now()
+
+    if (monster.isBoss) {  // 永远 simplified boss 火焰——避开每帧 18 个 createRadialGradient，真机严重卡顿发热
+      const flameRadius = size * 1.15 + Math.sin(time * 0.01) * 2
+      // 真机 Canvas 2D 兼容：globalAlpha + 实色，替代 rgba 模板（真机 parse 失败时 fillStyle 保留为前一个 draw 的金币黄 → 整个 boss 区域 fill 大黄实心圆覆盖屏幕，这是"boss 出现地图变黄"的根因）
+      ctx.globalAlpha = 0.16 + intensity * 0.18
+      ctx.fillStyle = '#ff821e'
+      ctx.beginPath()
+      ctx.arc(monster.x, monster.y, flameRadius, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 0.38 + intensity * 0.2
+      ctx.strokeStyle = '#ffdc82'
+      ctx.lineWidth = 2
+      for (let i = 0; i < 3; i++) {
+        const start = time * 0.004 + i * (Math.PI * 2 / 3)
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y, flameRadius + i * 2, start, start + Math.PI * 0.55)
+        ctx.stroke()
+      }
+      ctx.globalAlpha = 1
+      ctx.restore()
+      return
+    }
+
     const flameCount = monster.isBoss ? 10 : 6
     
     // 1. 底部火焰光环
@@ -4741,9 +7109,16 @@ Page({
   },
 
   drawProjectiles() {
+    const useCompactProjectiles = this.shouldUseSimplifiedProjectiles()
+
     this.projectiles.forEach(proj => {
       const ctx = this.ctx
       const lv = proj.towerLevel || 1
+
+      if (useCompactProjectiles) {
+        this.drawCompactProjectile(ctx, proj, lv)
+        return
+      }
       
       ctx.save()
       
@@ -5096,29 +7471,95 @@ Page({
     })
   },
 
-  drawFireEffects() {
-    this.fireEffects.forEach(f => {
-      const ctx = this.ctx
-      ctx.save()
-      ctx.globalAlpha = f.alpha
-      
-      const gradient = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.size)
-      gradient.addColorStop(0, '#fff')
-      gradient.addColorStop(0.3, '#ffaa00')
-      gradient.addColorStop(0.7, '#ff4400')
-      gradient.addColorStop(1, 'rgba(255, 68, 0, 0)')
-      
-      ctx.fillStyle = gradient
+  drawCompactProjectile(ctx, proj, level = 1) {
+    const trailLimit = this.getProjectileTrailLimit()
+    const visibleTrail = proj.trail.slice(Math.max(0, proj.trail.length - trailLimit))
+
+    ctx.save()
+    ctx.strokeStyle = proj.color
+    ctx.fillStyle = proj.color
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.globalAlpha = 0.92
+
+    if (visibleTrail.length > 1) {
       ctx.beginPath()
-      ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2)
+      ctx.moveTo(visibleTrail[0].x, visibleTrail[0].y)
+      for (let i = 1; i < visibleTrail.length; i++) {
+        ctx.lineTo(visibleTrail[i].x, visibleTrail[i].y)
+      }
+      ctx.lineWidth = Math.max(1.6, proj.size * 0.4)
+      ctx.strokeStyle = proj.color
+      ctx.globalAlpha = 0.35
+      ctx.stroke()
+      ctx.globalAlpha = 0.92
+    }
+
+    if (proj.towerType === 'lightning') {
+      ctx.strokeStyle = '#fff6a0'
+      ctx.lineWidth = Math.max(2, 1.2 + level * 0.35)
+      ctx.beginPath()
+      ctx.moveTo(proj.x - Math.cos(proj.angle) * 7, proj.y - Math.sin(proj.angle) * 7)
+      ctx.lineTo(proj.x, proj.y)
+      ctx.stroke()
+    } else if (proj.towerType === 'arcane') {
+      ctx.beginPath()
+      ctx.arc(proj.x, proj.y, Math.max(3.5, proj.size * 0.72), 0, Math.PI * 2)
       ctx.fill()
-      
-      ctx.restore()
-    })
+      ctx.strokeStyle = '#f0d4ff'
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+    } else if (proj.towerType === 'nature') {
+      ctx.beginPath()
+      ctx.arc(proj.x, proj.y, Math.max(3.2, proj.size * 0.65), 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = '#d7ffb2'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(proj.x - 2, proj.y + 1)
+      ctx.lineTo(proj.x, proj.y - 3)
+      ctx.lineTo(proj.x + 2.4, proj.y + 1)
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.arc(proj.x, proj.y, Math.max(3, proj.size * 0.68), 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    ctx.restore()
+  },
+
+  drawFireEffects() {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.fireEffects.length; index += stride) {
+      const f = this.fireEffects[index]
+      const ctx = this.ctx
+      const r = f.size
+      // 真机 Canvas 2D 兼容：3 层实色叠加模拟径向渐变
+      // 原因：createRadialGradient + addColorStop + rgba 模板每帧每个粒子创建渐变对象，
+      // boss 周围累积几十个 fireEffect 时 GPU 吃满 + 真机 rgba parse 失败 → 整屏金黄（"boss 出现全变黄"真凶）
+      ctx.globalAlpha = f.alpha * 0.4
+      ctx.fillStyle = '#ff4400'
+      ctx.beginPath()
+      ctx.arc(f.x, f.y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = f.alpha * 0.7
+      ctx.fillStyle = '#ffaa00'
+      ctx.beginPath()
+      ctx.arc(f.x, f.y, r * 0.7, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = f.alpha
+      ctx.fillStyle = '#fff'
+      ctx.beginPath()
+      ctx.arc(f.x, f.y, r * 0.3, 0, Math.PI * 2)
+      ctx.fill()
+    }
   },
 
   drawIceEffects() {
-    this.iceEffects.forEach(i => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.iceEffects.length; index += stride) {
+      const i = this.iceEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = i.alpha
@@ -5146,11 +7587,13 @@ Page({
       }
       
       ctx.restore()
-    })
+    }
   },
 
   drawPoisonEffects() {
-    this.poisonEffects.forEach(p => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.poisonEffects.length; index += stride) {
+      const p = this.poisonEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = p.alpha
@@ -5192,11 +7635,13 @@ Page({
       }
       
       ctx.restore()
-    })
+    }
   },
 
   drawArcaneEffects() {
-    this.arcaneEffects.forEach(a => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.arcaneEffects.length; index += stride) {
+      const a = this.arcaneEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = a.alpha
@@ -5212,11 +7657,13 @@ Page({
       ctx.fill()
       
       ctx.restore()
-    })
+    }
   },
 
   drawLightningEffects() {
-    this.lightningEffects.forEach(l => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.lightningEffects.length; index += stride) {
+      const l = this.lightningEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = l.alpha
@@ -5251,7 +7698,7 @@ Page({
       ctx.stroke()
       
       ctx.restore()
-    })
+    }
   },
 
   drawMergeEffects() {
@@ -5281,7 +7728,9 @@ Page({
   },
 
   drawParticles() {
-    this.particles.forEach(p => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.particles.length; index += stride) {
+      const p = this.particles[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = p.alpha
@@ -5292,25 +7741,30 @@ Page({
       ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2)
       ctx.fill()
       ctx.restore()
-    })
+    }
   },
 
   drawFloatingTexts() {
-    this.floatingTexts.forEach(t => {
+    const profile = this.getActivePerformanceProfile()
+    const stride = profile.effectRenderStride >= 3 && this.floatingTexts.length > 12 ? 2 : 1
+
+    for (let index = 0; index < this.floatingTexts.length; index += stride) {
+      const t = this.floatingTexts[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = t.alpha
       ctx.fillStyle = t.color
       ctx.font = `${t.isBold ? 'bold ' : ''}${14 * (t.scale || 1)}px Arial`
       ctx.textAlign = 'center'
-      ctx.shadowBlur = 8
+      ctx.shadowBlur = profile.effectRenderStride >= 3 ? 0 : 8
       ctx.shadowColor = t.color
       ctx.fillText(t.text, t.x, t.y)
       ctx.restore()
-    })
+    }
   },
 
   isOnPath(row, col) {
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) return false
     const offsetX = this.data.gridOffsetX
     const offsetY = this.data.gridOffsetY
     const cellCenterX = offsetX + col * CONFIG.cellSize + CONFIG.cellSize / 2
@@ -5322,7 +7776,7 @@ Page({
         this.pathPoints[i].x, this.pathPoints[i].y,
         this.pathPoints[i + 1].x, this.pathPoints[i + 1].y
       )
-      if (dist < 28) return true
+      if (dist < CONFIG.cellSize * 0.65) return true
     }
     return false
   },
@@ -5345,6 +7799,77 @@ Page({
     else { xx = x1 + param * C; yy = y1 + param * D }
     
     return Math.sqrt((px - xx) ** 2 + (py - yy) ** 2)
+  },
+
+  getNearestTowerSlot(x, y, options = {}) {
+    const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
+    const maxDistance = options.maxDistance || Math.max(TOWER_SLOT_SNAP_RADIUS, CONFIG.cellSize * 0.85)
+    let bestSlot = null
+    let bestDistance = maxDistance
+
+    theme.towerSlots.forEach((slot) => {
+      if (options.excludeOccupied && this.grid[slot.row] && this.grid[slot.row][slot.col]) {
+        return
+      }
+      if (options.ignoreTowerId) {
+        const slotTower = this.grid[slot.row] && this.grid[slot.row][slot.col]
+        if (slotTower && slotTower.id === options.ignoreTowerId) {
+          return
+        }
+      }
+
+      const slotX = this.data.gridOffsetX + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
+      const slotY = this.data.gridOffsetY + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2
+      const distance = Math.sqrt((x - slotX) ** 2 + (y - slotY) ** 2)
+
+      if (distance <= bestDistance) {
+        bestDistance = distance
+        bestSlot = { row: slot.row, col: slot.col, x: slotX, y: slotY, distance }
+      }
+    })
+
+    return bestSlot
+  },
+
+  callSupplyDrop() {
+    this.flushQueuedStats()
+
+    if ((this.data.commandPoints || 0) < 2) {
+      wx.showToast({ title: '至少需要 2 点战术点', icon: 'none' })
+      return
+    }
+
+    const nextPoints = this.data.commandPoints - 2
+    if (this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS) {
+      this.setData({
+        commandPoints: nextPoints,
+        gold: this.data.gold + 25
+      })
+      this.playSound('reward', { cooldown: 0 })
+      wx.showToast({ title: '仓库已满，改为空投金币 +25', icon: 'none' })
+      return
+    }
+
+    const pool = this.getSupplyDropPool()
+    const type = pool[Math.floor(Math.random() * pool.length)]
+    this.inventory.unshift(this.createTowerData(type))
+    this.setData({ commandPoints: nextPoints })
+    this.updateInventoryDisplay()
+    this.playSound('reward', { cooldown: 0 })
+
+    this.floatingTexts.push({
+      x: CONFIG.canvasWidth / 2,
+      y: CONFIG.canvasHeight / 2 - 14,
+      text: `🛰️ 空投抵达：${TOWER_TYPES[type].name}`,
+      color: '#a8f2ff',
+      life: 90,
+      maxLife: 90,
+      vy: -0.34,
+      vx: 0,
+      scale: 1.16,
+      isBold: true
+    })
+    wx.showToast({ title: `空投 ${TOWER_TYPES[type].name}`, icon: 'none' })
   },
 
   // 召唤新塔
@@ -5397,6 +7922,7 @@ Page({
     this.draggingTower = { ...tower }
     this.dragStartClientX = startClientX
     this.dragStartClientY = startClientY
+    this.touchStartTime = Date.now()
     this.lastTouchClientX = startClientX
     this.lastTouchClientY = startClientY
     this.lastDragUiUpdateAt = 0
@@ -5414,9 +7940,12 @@ Page({
       this.dragY = -100
     }
     
-    this.setData({ 
+    this.setData({
       draggingSlotIndex: index,
       selectedInventoryIndex: index,
+      dragFloating: false,
+      dragFloatingX: startClientX,
+      dragFloatingY: startClientY,
       dragFloatingEmoji: TOWER_TYPES[tower.type].emoji,
       dragFloatingColor: TOWER_TYPES[tower.type].color,
       dragFloatingLevel: tower.level,
@@ -5445,12 +7974,17 @@ Page({
     } else {
       return
     }
+
+    if (this.data.commanderAiming) {
+      this.deployCommanderMark(x, y)
+      return
+    }
     
     // 检查是否点击了场上的塔
     for (const tower of this.towers) {
       const dx = x - tower.x
       const dy = y - tower.y
-      if (Math.sqrt(dx * dx + dy * dy) < 24) {
+      if (Math.sqrt(dx * dx + dy * dy) <= Math.max(FIELD_DRAG_PICK_RADIUS, CONFIG.cellSize * 0.8)) {
         this.pendingDragTower = { ...tower }
         this.draggingTower = { ...tower }
         this.draggingFromInventory = false
@@ -5462,14 +7996,21 @@ Page({
         this.dragStartY = y
         this.dragX = x
         this.dragY = y
+        this.dragStartClientX = touch.clientX
+        this.dragStartClientY = touch.clientY
+        this.touchStartTime = Date.now()
         this.lastTouchClientX = touch.clientX
         this.lastTouchClientY = touch.clientY
         this.setData({
+          dragFloating: false,
+          dragFloatingX: touch.clientX,
+          dragFloatingY: touch.clientY,
           dragFloatingEmoji: TOWER_TYPES[tower.type].emoji,
           dragFloatingColor: TOWER_TYPES[tower.type].color,
           dragFloatingLevel: tower.level,
           dragFloatingType: tower.type
         })
+        this.requestRender()
         return
       }
     }
@@ -5494,6 +8035,13 @@ Page({
     if (!this.pendingDragTower) return
     
     const touch = e.touches[0]
+    const moveDistance = Math.hypot(
+      touch.clientX - this.dragStartClientX,
+      touch.clientY - this.dragStartClientY
+    )
+    if (!this.hasMoved && moveDistance < this.dragThreshold) {
+      return
+    }
     this.hasMoved = true
     
     if (!this.isDragging || !this.draggingTower) return
@@ -5512,15 +8060,17 @@ Page({
       this.dragY = cssY * scaleY
     }
     
-    // 更新浮层位置（节流，避免 touchmove 期间疯狂 setData）
+    // 拖拽预览以 canvas 为主，同时用轻量浮层补回跨区域跟手反馈
     const now = Date.now()
-    if (now - this.lastDragUiUpdateAt >= DRAG_UI_INTERVAL) {
+    const dragUiInterval = Math.min(DRAG_UI_INTERVAL, this.getAdaptiveRenderInterval())
+    if (now - this.lastDragUiUpdateAt >= dragUiInterval) {
       this.lastDragUiUpdateAt = now
       this.setData({
         dragFloating: true,
         dragFloatingX: touch.clientX,
         dragFloatingY: touch.clientY
       })
+      this.requestRender()
     }
     
     // 检查合成目标
@@ -5532,83 +8082,197 @@ Page({
     this.mergeTarget = null
     this.mergeTargetInventoryIndex = -1
     this.mergeTargetType = null
+
+    const maxFieldMergeRadius = Math.max(FIELD_MERGE_RADIUS, CONFIG.cellSize * 1.3)
+    let bestFieldTarget = null
+    let bestFieldDistance = maxFieldMergeRadius
     
     // 检查场上的塔（合成目标）- 不能和自己合成
     for (const tower of this.towers) {
       // 如果是从场上拖动的塔，跳过自己
       if (!this.draggingFromInventory && tower.id === this.draggingTower.id) continue
+      if (tower.type !== this.draggingTower.type || tower.level !== this.draggingTower.level || tower.level >= MAX_TOWER_LEVEL) continue
       
       const dx = this.dragX - tower.x
       const dy = this.dragY - tower.y
-      if (Math.sqrt(dx * dx + dy * dy) < 45) {
-        if (tower.type === this.draggingTower.type && 
-            tower.level === this.draggingTower.level && 
-            tower.level < 5) {
-          this.mergeTarget = tower
-          this.mergeTargetType = 'tower'
-          break
-        }
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      if (distance <= bestFieldDistance) {
+        bestFieldDistance = distance
+        bestFieldTarget = tower
       }
+    }
+
+    if (bestFieldTarget) {
+      this.mergeTarget = bestFieldTarget
+      this.mergeTargetType = 'tower'
     }
     
     // 检查仓库内其他塔（合成目标）- 无论从哪里拖动都检查
     if (!this.mergeTarget) {
-      const targetIndex = this.getInventorySlotIndex(touch.clientX, touch.clientY)
-      if (targetIndex !== null && 
-          targetIndex !== this.draggingInventoryIndex && 
-          targetIndex < this.inventory.length) {
-        const targetTower = this.inventory[targetIndex]
-        if (targetTower && 
-            targetTower.type === this.draggingTower.type && 
-            targetTower.level === this.draggingTower.level && 
-            targetTower.level < 5) {
-          this.mergeTargetInventoryIndex = targetIndex
-          this.mergeTarget = targetTower
-          this.mergeTargetType = 'inventory'
-        }
+      const inventoryMatch = this.findNearestInventorySlot(touch.clientX, touch.clientY, {
+        ignoreIndex: this.draggingFromInventory ? this.draggingInventoryIndex : -1,
+        onlyOccupied: true,
+        onlyCompatible: this.draggingTower,
+        maxDistance: INVENTORY_MERGE_RADIUS,
+        tolerance: INVENTORY_HIT_TOLERANCE
+      })
+
+      if (inventoryMatch && inventoryMatch.index < this.inventory.length) {
+        this.mergeTargetInventoryIndex = inventoryMatch.index
+        this.mergeTarget = inventoryMatch.tower
+        this.mergeTargetType = 'inventory'
       }
     }
     
     const showMergeHint = !!this.mergeTarget
-    if (showMergeHint !== this.lastMergeHintVisible || this.mergeTargetInventoryIndex !== this.lastMergeHintSlotIndex) {
+    const nextLevel = showMergeHint ? (this.mergeTarget.level || 1) + 1 : 0
+    const mergeCost = showMergeHint
+      ? TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+      : 0
+
+    if (showMergeHint !== this.lastMergeHintVisible ||
+        this.mergeTargetInventoryIndex !== this.lastMergeHintSlotIndex ||
+        mergeCost !== this.lastMergeCost ||
+        nextLevel !== this.lastMergeTargetNextLevel) {
       this.lastMergeHintVisible = showMergeHint
       this.lastMergeHintSlotIndex = this.mergeTargetInventoryIndex
-      this.setData({ 
+      this.lastMergeCost = mergeCost
+      this.lastMergeTargetNextLevel = nextLevel
+      this.setData({
         showMergeHint,
-        mergeTargetSlotIndex: this.mergeTargetInventoryIndex
+        mergeTargetSlotIndex: this.mergeTargetInventoryIndex,
+        mergeCost,
+        mergeTargetNextLevel: nextLevel
       })
     }
   },
 
-  // 获取仓库格子索引
-  getInventorySlotIndex(clientX, clientY) {
-    if (!this.inventoryRect) {
+  getInventorySlotCenter(index) {
+    const rect = this.inventorySlotRects[index]
+    if (!rect) return null
+
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    }
+  },
+
+  isPointInsideInventorySlotCore(clientX, clientY, rect) {
+    if (!rect) return false
+    const insetX = Math.min(rect.width * INVENTORY_MERGE_CORE_RATIO, 18)
+    const insetY = Math.min(rect.height * INVENTORY_MERGE_CORE_RATIO, 18)
+    return clientX >= rect.left + insetX &&
+      clientX <= rect.left + rect.width - insetX &&
+      clientY >= rect.top + insetY &&
+      clientY <= rect.top + rect.height - insetY
+  },
+
+  findInventoryMergeMatch(clientX, clientY, options = {}) {
+    const match = this.findNearestInventorySlot(clientX, clientY, {
+      ...options,
+      maxDistance: options.commit ? INVENTORY_MERGE_COMMIT_RADIUS : INVENTORY_MERGE_RADIUS,
+      tolerance: INVENTORY_HIT_TOLERANCE
+    })
+
+    if (!match) {
+      return null
+    }
+
+    if (match.rect) {
+      return this.isPointInsideInventorySlotCore(clientX, clientY, match.rect) ? match : null
+    }
+
+    if (options.commit) {
+      return match.distance <= INVENTORY_MERGE_COMMIT_RADIUS ? match : null
+    }
+
+    return match.distance <= Math.min(INVENTORY_MERGE_RADIUS, INVENTORY_MERGE_COMMIT_RADIUS + 6) ? match : null
+  },
+
+  findNearestInventorySlot(clientX, clientY, options = {}) {
+    if ((!this.inventorySlotRects || this.inventorySlotRects.length === 0) && !this.inventoryRect) {
       this.refreshInventoryRect()
       return null
     }
-    
-    const rect = this.inventoryRect
-    const tolerance = 8
-    const relX = clientX - rect.left + tolerance
-    const relY = clientY - rect.top + tolerance
-    
-    if (relX < -tolerance || relY < -tolerance || relX > rect.width + tolerance * 2 || relY > rect.height + tolerance * 2) {
+
+    const tolerance = options.tolerance || INVENTORY_HIT_TOLERANCE
+    const maxDistance = options.maxDistance || INVENTORY_MERGE_RADIUS
+    let bestMatch = null
+
+    if (this.inventorySlotRects && this.inventorySlotRects.length > 0) {
+      this.inventorySlotRects.forEach((rect, index) => {
+        if (!rect) return
+        if (options.ignoreIndex === index) return
+
+        const tower = this.inventory[index]
+        if (options.onlyOccupied && !tower) return
+        if (options.onlyCompatible) {
+          if (!tower || tower.type !== options.onlyCompatible.type || tower.level !== options.onlyCompatible.level || tower.level >= MAX_TOWER_LEVEL) {
+            return
+          }
+        }
+
+        const centerX = rect.left + rect.width / 2
+        const centerY = rect.top + rect.height / 2
+        const insideRect = clientX >= rect.left - tolerance &&
+          clientX <= rect.left + rect.width + tolerance &&
+          clientY >= rect.top - tolerance &&
+          clientY <= rect.top + rect.height + tolerance
+        const distance = insideRect ? 0 : Math.hypot(clientX - centerX, clientY - centerY)
+
+        if (insideRect || distance <= maxDistance) {
+          if (!bestMatch || distance < bestMatch.distance) {
+            bestMatch = { index, tower, rect, centerX, centerY, distance }
+          }
+        }
+      })
+    }
+
+    if (bestMatch) {
+      return bestMatch
+    }
+
+    if (!this.inventoryRect) {
       return null
     }
-    
-    const scale = this.windowWidth / 375
-    const slotSize = 50 * scale  // 100rpx
-    const gap = 3 * scale        // 6rpx
-    const cellTotal = slotSize + gap
-    
-    const col = Math.floor(relX / cellTotal)
-    const row = Math.floor(relY / cellTotal)
-    
+
+    const rect = this.inventoryRect
+    const relX = clientX - rect.left
+    const relY = clientY - rect.top
+
+    if (relX < -tolerance || relY < -tolerance || relX > rect.width + tolerance || relY > rect.height + tolerance) {
+      return null
+    }
+
+    const cellWidth = rect.width / INVENTORY_COLS
+    const cellHeight = rect.height / INVENTORY_ROWS
+    const normalizedX = Math.max(0, Math.min(rect.width - 1, relX))
+    const normalizedY = Math.max(0, Math.min(rect.height - 1, relY))
+    const col = Math.floor(normalizedX / cellWidth)
+    const row = Math.floor(normalizedY / cellHeight)
+
     if (col < 0 || col >= INVENTORY_COLS || row < 0 || row >= INVENTORY_ROWS) {
       return null
     }
-    
-    return row * INVENTORY_COLS + col
+
+    const index = row * INVENTORY_COLS + col
+    const tower = this.inventory[index]
+    if (options.ignoreIndex === index) return null
+    if (options.onlyOccupied && !tower) return null
+    if (options.onlyCompatible && (!tower || tower.type !== options.onlyCompatible.type || tower.level !== options.onlyCompatible.level || tower.level >= MAX_TOWER_LEVEL)) {
+      return null
+    }
+
+    return { index, tower, rect: null, centerX: rect.left + (col + 0.5) * cellWidth, centerY: rect.top + (row + 0.5) * cellHeight, distance: 0 }
+  },
+
+  // 获取仓库格子索引
+  getInventorySlotIndex(clientX, clientY) {
+    const slot = this.findNearestInventorySlot(clientX, clientY, {
+      maxDistance: INVENTORY_HIT_TOLERANCE + 10,
+      tolerance: INVENTORY_HIT_TOLERANCE
+    })
+    return slot ? slot.index : null
   },
 
   onTouchEnd(e) {
@@ -5627,6 +8291,17 @@ Page({
     if (!this.isDragging || !this.hasMoved) {
       this.resetDrag()
       return
+    }
+
+    const releaseTouch = (e && e.changedTouches && e.changedTouches[0]) || (e && e.touches && e.touches[0])
+    const finalTouch = releaseTouch || {
+      clientX: this.lastTouchClientX,
+      clientY: this.lastTouchClientY
+    }
+    if (finalTouch && finalTouch.clientX !== undefined && finalTouch.clientY !== undefined) {
+      this.lastTouchClientX = finalTouch.clientX
+      this.lastTouchClientY = finalTouch.clientY
+      this.checkMergeTarget(finalTouch)
     }
     
     const offsetX = this.data.gridOffsetX
@@ -5647,34 +8322,53 @@ Page({
         this.mergeTowers(this.draggingTower, this.mergeTarget)
       }
     } else if (this.draggingFromInventory) {
-      // 从仓库拖到场上放置 - 只能放在塔位上
-      const col = Math.floor((this.dragX - offsetX) / CONFIG.cellSize)
-      const row = Math.floor((this.dragY - offsetY) / CONFIG.cellSize)
-      
-      if (row >= 0 && row < CONFIG.gridRows && col >= 0 && col < CONFIG.gridCols) {
-        // 检查是否是有效塔位且没有塔
-        if (this.isTowerSlot(row, col) && !this.grid[row][col]) {
-          this.placeTowerFromInventory(row, col)
+      // 从仓库拖到场上放置 - 优先吸附到最近空塔位
+      const slot = this.getNearestTowerSlot(this.dragX, this.dragY, { excludeOccupied: true })
+      if (slot) {
+        this.placeTowerFromInventory(slot.row, slot.col)
+      } else {
+        const col = Math.floor((this.dragX - offsetX) / CONFIG.cellSize)
+        const row = Math.floor((this.dragY - offsetY) / CONFIG.cellSize)
+
+        if (row >= 0 && row < CONFIG.gridRows && col >= 0 && col < CONFIG.gridCols) {
+          if (this.isTowerSlot(row, col) && !this.grid[row][col]) {
+            this.placeTowerFromInventory(row, col)
+          }
         }
       }
     } else {
-      // 场上塔拖动到新位置 - 只能放在塔位上
-      const col = Math.floor((this.dragX - offsetX) / CONFIG.cellSize)
-      const row = Math.floor((this.dragY - offsetY) / CONFIG.cellSize)
-      
-      if (row >= 0 && row < CONFIG.gridRows && col >= 0 && col < CONFIG.gridCols) {
-        // 检查是否是有效塔位且没有塔
-        if (this.isTowerSlot(row, col) && !this.grid[row][col]) {
-          const actualTower = this.towers.find(t => t.id === this.pendingDragTower.id)
-          if (actualTower) {
-            // 清除旧位置
+      // 场上塔拖动到新位置 - 优先吸附到最近空塔位
+      const actualTower = this.towers.find(t => t.id === this.pendingDragTower.id)
+      const slot = this.getNearestTowerSlot(this.dragX, this.dragY, {
+        excludeOccupied: true,
+        ignoreTowerId: this.pendingDragTower.id
+      })
+
+      if (slot && actualTower) {
+        const oldRow = actualTower.row
+        const oldCol = actualTower.col
+        if (oldRow !== undefined && oldCol !== undefined) {
+          this.grid[oldRow][oldCol] = null
+        }
+
+        actualTower.row = slot.row
+        actualTower.col = slot.col
+        actualTower.x = slot.x
+        actualTower.y = slot.y
+        this.grid[slot.row][slot.col] = actualTower
+        this.createParticles(actualTower.x, actualTower.y, TOWER_TYPES[actualTower.type].color, 8)
+      } else {
+        const col = Math.floor((this.dragX - offsetX) / CONFIG.cellSize)
+        const row = Math.floor((this.dragY - offsetY) / CONFIG.cellSize)
+        
+        if (row >= 0 && row < CONFIG.gridRows && col >= 0 && col < CONFIG.gridCols) {
+          if (this.isTowerSlot(row, col) && !this.grid[row][col] && actualTower) {
             const oldRow = actualTower.row
             const oldCol = actualTower.col
             if (oldRow !== undefined && oldCol !== undefined) {
               this.grid[oldRow][oldCol] = null
             }
             
-            // 更新塔位置
             actualTower.row = row
             actualTower.col = col
             actualTower.x = offsetX + col * CONFIG.cellSize + CONFIG.cellSize / 2
@@ -5695,16 +8389,25 @@ Page({
     const tower1 = this.inventory[fromIndex]
     const tower2 = this.inventory[toIndex]
     
-    if (tower2.level >= 5) {
-      wx.showToast({ title: '已达最高等级!', icon: 'none' })
+    if (tower2.level >= MAX_TOWER_LEVEL) {
+      wx.showToast({ title: `已达最高等级(Lv.${MAX_TOWER_LEVEL})!`, icon: 'none' })
       return
     }
-    
+
+    const nextLevel = tower2.level + 1
+    const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+    if (this.data.gold < upgradeCost) {
+      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      return
+    }
+
+    this.setData({ gold: this.data.gold - upgradeCost })
+
     const config = TOWER_TYPES[tower1.type]
-    
+
     // 升级tower2
-    tower2.level++
-    Object.assign(tower2, this.getTowerStatsForLevel(tower1.type, tower2.level, 'inventory'))
+    tower2.level = nextLevel
+    Object.assign(tower2, this.getTowerStatsForLevel(tower1.type, tower2.level, 'inventory', this.data.selectedBlessingKey, tower2.specializationKey))
     
     // 移除tower1（注意：如果fromIndex > toIndex，删除后toIndex不变；否则toIndex要-1）
     if (fromIndex > toIndex) {
@@ -5714,13 +8417,13 @@ Page({
     }
     
     this.updateInventoryDisplay()
-    
-    this.setData({ score: this.data.score + 300 * tower2.level })
+    this.queueStatDelta({ score: 300 * tower2.level })
     
     // 震动反馈
     wx.vibrateShort({ type: 'medium' }).catch(() => {})
     
-    wx.showToast({ title: `合成成功! Lv.${tower2.level}`, icon: 'none' })
+    wx.showToast({ title: `合成成功! Lv.${tower2.level} (-${upgradeCost}金)`, icon: 'none' })
+    this.maybePromptTowerSpecialization(tower2, 'inventory')
   },
 
   // 场上塔合成到仓库塔
@@ -5730,16 +8433,25 @@ Page({
     
     if (!fieldTower || !invTower) return
     
-    if (invTower.level >= 5) {
-      wx.showToast({ title: '已达最高等级!', icon: 'none' })
+    if (invTower.level >= MAX_TOWER_LEVEL) {
+      wx.showToast({ title: `已达最高等级(Lv.${MAX_TOWER_LEVEL})!`, icon: 'none' })
       return
     }
-    
+
+    const nextLevel = invTower.level + 1
+    const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+    if (this.data.gold < upgradeCost) {
+      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      return
+    }
+
+    this.setData({ gold: this.data.gold - upgradeCost })
+
     const config = TOWER_TYPES[invTower.type]
-    
+
     // 升级仓库塔
-    invTower.level++
-    Object.assign(invTower, this.getTowerStatsForLevel(invTower.type, invTower.level, 'inventory'))
+    invTower.level = nextLevel
+    Object.assign(invTower, this.getTowerStatsForLevel(invTower.type, invTower.level, 'inventory', this.data.selectedBlessingKey, invTower.specializationKey))
     
     // 移除场上塔
     const towerIndex = this.towers.indexOf(fieldTower)
@@ -5754,11 +8466,11 @@ Page({
     
     this.updateInventoryDisplay()
     this.createParticles(this.dragX, this.dragY, config.color, 15)
-    
-    this.setData({ score: this.data.score + 300 * invTower.level })
+    this.queueStatDelta({ score: 300 * invTower.level })
     
     wx.vibrateShort({ type: 'medium' }).catch(() => {})
-    wx.showToast({ title: `合成成功! Lv.${invTower.level}`, icon: 'none' })
+    wx.showToast({ title: `合成成功! Lv.${invTower.level} (-${upgradeCost}金)`, icon: 'none' })
+    this.maybePromptTowerSpecialization(invTower, 'inventory')
   },
 
   resetDrag() {
@@ -5775,8 +8487,10 @@ Page({
     this.lastDragUiUpdateAt = 0
     this.lastMergeHintVisible = false
     this.lastMergeHintSlotIndex = -1
-    this.setData({ 
-      showMergeHint: false, 
+    this.lastMergeCost = 0
+    this.lastMergeTargetNextLevel = 0
+    this.setData({
+      showMergeHint: false,
       draggingSlotIndex: -1,
       mergeTargetSlotIndex: -1,
       dragFloating: false
@@ -5809,6 +8523,7 @@ Page({
     this.syncFieldTowerCount()
     
     this.createParticles(placedTower.x, placedTower.y, config.color, 15)
+    this.playSound('place', { cooldown: 0 })
     
     // 放置音效提示
     wx.showToast({ title: '放置成功!', icon: 'none', duration: 800 })
@@ -5819,16 +8534,25 @@ Page({
     const actualTarget = this.towers.find(t => t.id === tower2.id)
     if (!actualTarget) return
     
-    if (actualTarget.level >= 5) {
-      wx.showToast({ title: '已达最高等级!', icon: 'none' })
+    if (actualTarget.level >= MAX_TOWER_LEVEL) {
+      wx.showToast({ title: `已达最高等级(Lv.${MAX_TOWER_LEVEL})!`, icon: 'none' })
       return
     }
-    
+
+    const nextLevel = actualTarget.level + 1
+    const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+    if (this.data.gold < upgradeCost) {
+      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      return
+    }
+
+    this.setData({ gold: this.data.gold - upgradeCost })
+
     const config = TOWER_TYPES[tower1.type]
-    
+
     // 升级目标塔
-    actualTarget.level++
-    Object.assign(actualTarget, this.getTowerStatsForLevel(tower1.type, actualTarget.level, 'field'))
+    actualTarget.level = nextLevel
+    Object.assign(actualTarget, this.getTowerStatsForLevel(tower1.type, actualTarget.level, 'field', this.data.selectedBlessingKey, actualTarget.specializationKey))
     
     // 移除tower1
     if (this.draggingFromInventory) {
@@ -5848,8 +8572,8 @@ Page({
     this.createMergeEffect(actualTarget.x, actualTarget.y, config.color)
     this.createParticles(actualTarget.x, actualTarget.y, config.color, 15)
     this.createParticles(actualTarget.x, actualTarget.y, '#ffd700', 10)
-    
-    this.setData({ score: this.data.score + 300 * actualTarget.level })
+    this.queueStatDelta({ score: 300 * actualTarget.level })
+    this.playSound('merge', { cooldown: 0 })
     
     // 升级文字
     this.floatingTexts.push({
@@ -5865,20 +8589,37 @@ Page({
       isBold: true
     })
     
-    wx.showToast({ title: `合成成功! Lv.${actualTarget.level}`, icon: 'none' })
+    wx.showToast({ title: `合成成功! Lv.${actualTarget.level} (-${upgradeCost}金)`, icon: 'none' })
+    this.maybePromptTowerSpecialization(actualTarget, 'field')
   },
 
   nextWave() {
+    this.playSound('wave', { cooldown: 0, volume: 0.58 })
     const completedWave = this.data.wave
     const newWave = completedWave + 1
-    const waveBonus = 30 + newWave * 15
+    const waveBonus = 20 + newWave * 10
     const shouldOfferSupply = completedWave % 3 === 0
+    const shouldOfferThreatChain = this.canOfferThreatChain(completedWave)
+    const flawlessDefense = this.data.lives >= this.waveStartLives
+    
+    if (flawlessDefense) {
+      this.grantCommandPoints(1, {
+        x: CONFIG.canvasWidth / 2,
+        y: CONFIG.canvasHeight / 2 + 20,
+        text: '🛰️ 无漏怪防线 +1战术点',
+        color: '#9ee6ff',
+        scale: 1.12,
+        life: 88
+      })
+    }
     
     // 计算关卡和关内波次
     const newLevel = Math.ceil(newWave / 10)
     const newWaveInLevel = ((newWave - 1) % 10) + 1
-    
-    this.setData({ 
+    // 进入新关卡（newLevel > this.data.level）时进入 prep 阶段，让玩家有时间布阵/空投
+    const isNewLevel = newLevel > this.data.level
+
+    this.setData({
       gold: this.data.gold + waveBonus,
       score: this.data.score + waveBonus * 5
     })
@@ -5931,10 +8672,10 @@ Page({
         
         this.changeTheme(nextTheme)
         this.requestRender()
-      }, 1500)
+      }, 900)
     }
     
-    if (shouldOfferSupply) {
+    if (shouldOfferThreatChain || shouldOfferSupply) {
       this.pendingWaveAdvance = {
         wave: newWave,
         level: newLevel,
@@ -5942,28 +8683,79 @@ Page({
       }
 
       this.scheduleTimeout(() => {
+        try {
+          if (shouldOfferThreatChain) {
+            this.openChoiceOverlay({
+              mode: 'threatChain',
+              panelTitle: '威胁连锁',
+              title: `压制成功：改写第${newWave}波的战场规则`,
+              hint: '先决定下一波怎么来，再决定自己怎么扛。',
+              options: this.buildThreatChainOptions(newWave),
+              returnState: 'playing'
+            })
+            return
+          }
+
+          this.openChoiceOverlay({
+            mode: 'supply',
+            panelTitle: '战术补给',
+            title: `第${newWave}波前，选 1 个战术补给`,
+            hint: '稳一手资源，还是赌更快成型。',
+            options: this.buildWaveChoiceOptions(),
+            returnState: 'playing'
+          })
+        } catch (e) {
+          // overlay 弹出失败（如 options 构建异常）时立即兜底推进，避免整局卡在等待选择
+          console.warn('advanceWave choice open failed, force advancing', (e && e.stack) || e)
+          const pw = this.pendingWaveAdvance
+          this.pendingWaveAdvance = null
+          this._pendingWaveStuckAt = 0
         this.setData({
-          gameState: 'choice',
-          showWaveChoice: true,
-          waveChoiceTitle: `第${newWave}波前，选 1 个战术补给`,
-          waveChoiceOptions: this.buildWaveChoiceOptions()
+          showWaveChoice: false,
+          waveChoiceMode: '',
+          waveChoicePanelTitle: '战术补给',
+          waveChoiceTitle: '',
+          waveChoiceHint: '',
+          waveChoiceOptions: [],
+          pendingSpecializationTowerId: null,
+          pendingSpecializationSource: '',
+          choiceReturnState: 'playing',
+          wave: pw ? pw.wave : newWave,
+          level: pw ? pw.level : newLevel,
+          waveInLevel: pw ? pw.waveInLevel : newWaveInLevel,
+          totalWavesInLevel: 10,
+          nextSupplyWave: this.getNextSupplyWave(pw ? pw.wave : newWave),
+          // 新关卡进 prep 阶段让玩家布阵（与第1关流程一致）
+          gameState: isNewLevel ? 'prep' : 'playing',
+          commanderAiming: false
+        }, () => {
+          this.generateWave(pw ? pw.wave : newWave)
+          this.lastSpawnTime = isNewLevel ? Date.now() + 60000 : Date.now() + 300
+          this.requestRender()
         })
-        this.requestRender()
-      }, 1300)
+        }
+      }, 850)
       return
     }
-    
+
     this.scheduleTimeout(() => {
-      this.setData({ 
+      this.setData({
         wave: newWave,
         level: newLevel,
         waveInLevel: newWaveInLevel,
         totalWavesInLevel: 10,
-        nextSupplyWave: this.getNextSupplyWave(newWave)
+        nextSupplyWave: this.getNextSupplyWave(newWave),
+        // 新关卡进 prep 阶段让玩家布阵（与第1关流程一致）
+        gameState: isNewLevel ? 'prep' : 'playing',
+        commanderAiming: false
       })
       this.generateWave(newWave)
+      // 新关 prep 阶段不立即 spawn，等玩家点"开始第一波"
+      if (isNewLevel) {
+        this.lastSpawnTime = Date.now() + 60000
+      }
       this.requestRender()
-    }, 3500)
+    }, 1800)
   },
 
   // 切换地形主题
@@ -5985,7 +8777,8 @@ Page({
     }
     
     // 更新主题
-    this.setData({ currentTheme: themeKey })
+    this.setData({ currentTheme: themeKey, commanderAiming: false })
+    this.syncAmbientTrack(themeKey)
     
     // 重新生成路径和装饰
     this.generatePath(themeKey)
@@ -5993,9 +8786,10 @@ Page({
     
     // 重新放置塔（检查新位置是否是有效塔位）
     this.towers = []
-    savedTowers.forEach(t => {
+    let inventoryChanged = false
+    savedTowers.forEach((t) => {
       // 检查是否在新主题的塔位上
-      const isValidSlot = theme.towerSlots.some(slot => slot.row === t.relRow && slot.col === t.relCol)
+      const isValidSlot = theme.towerSlots.some((slot) => slot.row === t.relRow && slot.col === t.relCol)
       
       if (isValidSlot) {
         const newTower = {
@@ -6014,12 +8808,15 @@ Page({
             id: t.id,
             type: t.type,
             level: t.level,
+            specializationKey: t.specializationKey || '',
+            specializationTitle: t.specializationTitle || '',
+            specializationShort: t.specializationShort || '',
             damage: t.damage,
             range: t.range,
             attackSpeed: t.attackSpeed,
             lastAttack: 0
           })
-          this.updateInventoryDisplay()
+          inventoryChanged = true
           
           this.floatingTexts.push({
             x: CONFIG.canvasWidth / 2,
@@ -6035,10 +8832,14 @@ Page({
         }
       }
     })
+
+    if (inventoryChanged) {
+      this.updateInventoryDisplay()
+    }
     this.syncFieldTowerCount()
     
     // 地形切换特效
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 26; i++) {
       this.particles.push({
         x: Math.random() * CONFIG.canvasWidth,
         y: Math.random() * CONFIG.canvasHeight,
@@ -6058,6 +8859,8 @@ Page({
   },
 
   gameOver() {
+    this.playSound('gameover', { cooldown: 0 })
+    this.clearRunProgress()
     this.stopGame()
     
     const highScore = wx.getStorageSync('highScore') || 0
@@ -6082,7 +8885,9 @@ Page({
     }
 
     if (this.data.gameState === 'playing') {
-      this.setData({ gameState: 'paused' })
+      this.playSound('ui', { cooldown: 0, volume: 0.32 })
+      this.setData({ gameState: 'paused', commanderAiming: false })
+      this.persistRunProgress({ immediate: true })
       this.requestRender()
       return
     }
@@ -6093,17 +8898,23 @@ Page({
   },
 
   resumeGame() {
-    this.setData({ gameState: 'playing' })
+    this.playSound('ui', { cooldown: 0, volume: 0.32 })
+    this.setData({ gameState: 'playing', commanderAiming: false })
+    this.syncAmbientTrack()
     this.requestRender()
   },
 
   restartGame() {
+    this.stopAllSounds()
+    this.clearRunProgress()
     this.stopGame()
     this.initGame()
     this.startGame()
   },
 
   backToMenu() {
+    this.persistRunProgress({ immediate: true })
+    this.stopAllSounds()
     this.stopGame()
     wx.navigateBack()
   }
