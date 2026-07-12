@@ -1216,16 +1216,57 @@ Page({
   },
 
   syncPrepTowerSlots(themeKey = this.data.currentTheme) {
-    const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
-    const prepTowerSlots = theme.towerSlots.map((slot) => ({
-      key: `${slot.row}-${slot.col}`,
-      row: slot.row,
-      col: slot.col,
-      left: this.data.gridOffsetX + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
-      top: this.data.gridOffsetY + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
-      occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
-    }))
-    this.setData({ prepTowerSlots })
+    // 防御：开发者工具模拟器偶发 canvas res width/height=0 → CONFIG.cellSize / gridOffsetX/Y 变成 NaN
+    // 此时算出的 left/top 全是 NaN，setData NaN 会被外层两次 catch 兜底到 []，导致玩家看不到任何圈
+    // 修复：无效尺寸时直接 return，**保留** 上次 prepTowerSlots（不主动清空，避免"圈又没了"假象）
+    if (!Number.isFinite(CONFIG.cellSize) || CONFIG.cellSize <= 0
+        || !Number.isFinite(this.data.gridOffsetX) || !Number.isFinite(this.data.gridOffsetY)) {
+      return
+    }
+    // 关键：整个函数 try-catch 包裹，任何 setData NaN/undefined 异常都不能阻断 render——否则 fillRect 不画，canvas 完全空（"地图直接没了"）
+    try {
+      const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
+      if (!theme || !Array.isArray(theme.towerSlots)) {
+        this.setData({ prepTowerSlots: [] })
+        return
+      }
+      const ox = this.data.gridOffsetX || 0
+      const oy = this.data.gridOffsetY || 0
+      const prepTowerSlots = theme.towerSlots
+        .map((slot) => ({
+          key: `${slot.row}-${slot.col}`,
+          row: slot.row,
+          col: slot.col,
+          left: ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
+          top: oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
+          occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
+        }))
+      this.setData({ prepTowerSlots })
+    } catch (error) {
+      // fallback：保留所有塔位——绝对不能让 prep 圈消失，玩家需要圈来放塔
+      console.warn('syncPrepTowerSlots failed, fallback to all slots', (error && error.stack) || error)
+      try {
+        const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
+        if (theme && Array.isArray(theme.towerSlots)) {
+          const ox = this.data.gridOffsetX || 0
+          const oy = this.data.gridOffsetY || 0
+          const prepTowerSlots = theme.towerSlots.map((slot) => ({
+            key: `${slot.row}-${slot.col}`,
+            row: slot.row,
+            col: slot.col,
+            left: ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
+            top: oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
+            occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
+          }))
+          this.setData({ prepTowerSlots })
+        } else {
+          this.setData({ prepTowerSlots: [] })
+        }
+      } catch (e2) {
+        console.warn('syncPrepTowerSlots fallback also failed', e2)
+        this.setData({ prepTowerSlots: [] })
+      }
+    }
   },
 
   getNextSelectedInventoryIndex(removedIndex) {
@@ -1511,6 +1552,37 @@ Page({
     }
   },
 
+  rebuildGridFromTowers() {
+    this.grid = []
+    for (let row = 0; row < CONFIG.gridRows; row++) {
+      this.grid[row] = []
+      for (let col = 0; col < CONFIG.gridCols; col++) {
+        this.grid[row][col] = null
+      }
+    }
+
+    this.towers.forEach((tower) => {
+      if (tower.row >= 0 && tower.row < CONFIG.gridRows && tower.col >= 0 && tower.col < CONFIG.gridCols) {
+        tower.x = this.data.gridOffsetX + tower.col * CONFIG.cellSize + CONFIG.cellSize / 2
+        tower.y = this.data.gridOffsetY + tower.row * CONFIG.cellSize + CONFIG.cellSize / 2
+        this.grid[tower.row][tower.col] = tower
+      }
+    })
+  },
+
+  ensureBattlefieldState() {
+    const pathInvalid = !Array.isArray(this.pathPoints) || this.pathPoints.length < 2
+    const gridInvalid = !Array.isArray(this.grid) || this.grid.length !== CONFIG.gridRows
+    if (!pathInvalid && !gridInvalid) {
+      return true
+    }
+
+    this.generatePath(this.data.currentTheme)
+    this.rebuildGridFromTowers()
+    this.syncPrepTowerSlots(this.data.currentTheme)
+    return false
+  },
+
   generateMapDecorations(themeKey) {
     const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
     this.mapDecorations = []
@@ -1648,39 +1720,96 @@ Page({
     this.clearScheduledTimeouts()
   },
 
+  safeUpdate(step, fn, ...args) {
+    try {
+      fn.apply(this, args)
+    } catch (error) {
+      if (!this._updateStepFailures) this._updateStepFailures = {}
+      const rec = this._updateStepFailures[step] || (this._updateStepFailures[step] = { count: 0, firstMessage: '', firstStack: '' })
+      rec.count += 1
+      if (!rec.firstMessage) {
+        rec.firstMessage = (error && error.message) || String(error)
+        rec.firstStack = (error && error.stack) || rec.firstMessage
+      }
+      const now = Date.now()
+      if (now - (this.lastUpdateStepWarnAt || 0) >= 2000) {
+        this.lastUpdateStepWarnAt = now
+        console.warn('update step failed: ' + step, rec.firstStack)
+      }
+      // 单步逻辑更新失败不影响整局，避免一处异常导致 update 链中断、整局数据冻结（"停住不动"）
+    }
+  },
+
   update() {
     if (this.data.gameState !== 'playing') return
-    
+
     const now = Date.now()
     
     if (this.spawnIndex < this.waveMonsters.length) {
       if (now - this.lastSpawnTime > CONFIG.spawnInterval) {
-        this.spawnMonster(this.waveMonsters[this.spawnIndex])
+        this.safeUpdate('spawn', () => {
+          this.spawnMonster(this.waveMonsters[this.spawnIndex])
+        })
         this.spawnIndex++
         this.lastSpawnTime = now
       }
     }
-    
-    this.updateMonsters()
-    this.updateTowers(now)
-    this.updateProjectiles()
-    this.updateParticles()
-    this.updateFloatingTexts()
-    this.updateLightningEffects()
-    this.updateFireEffects()
-    this.updateIceEffects()
-    this.updatePoisonEffects()
-    this.updateArcaneEffects()
-    this.updateMergeEffects()
-    this.enforcePerformanceCaps()
-    
+
+    this.safeUpdate('monsters', this.updateMonsters)
+    this.safeUpdate('towers', this.updateTowers, now)
+    this.safeUpdate('projectiles', this.updateProjectiles)
+    this.safeUpdate('particles', this.updateParticles)
+    this.safeUpdate('floatingTexts', this.updateFloatingTexts)
+    this.safeUpdate('lightningEffects', this.updateLightningEffects)
+    this.safeUpdate('fireEffects', this.updateFireEffects)
+    this.safeUpdate('iceEffects', this.updateIceEffects)
+    this.safeUpdate('poisonEffects', this.updatePoisonEffects)
+    this.safeUpdate('arcaneEffects', this.updateArcaneEffects)
+    this.safeUpdate('mergeEffects', this.updateMergeEffects)
+    this.safeUpdate('performanceCaps', this.enforcePerformanceCaps)
+
     if (this.spawnIndex >= this.waveMonsters.length && this.monsters.length === 0 && !this.waveComplete) {
       this.waveComplete = true
       this.nextWave()
     }
-    
+
+    // 看门狗：波次推进卡在 choice 分支（overlay 未真正切入 choice 状态）时，超时兜底推进，避免整局冻结
+    if (this.pendingWaveAdvance && this.data.gameState === 'playing') {
+      this._pendingWaveStuckAt = this._pendingWaveStuckAt || Date.now()
+      if (Date.now() - this._pendingWaveStuckAt > 2500) {
+        const pw = this.pendingWaveAdvance
+        this.pendingWaveAdvance = null
+        this._pendingWaveStuckAt = 0
+        this.setData({
+          showWaveChoice: false,
+          waveChoiceMode: '',
+          waveChoicePanelTitle: '战术补给',
+          waveChoiceTitle: '',
+          waveChoiceHint: '',
+          waveChoiceOptions: [],
+          pendingSpecializationTowerId: null,
+          pendingSpecializationSource: '',
+          choiceReturnState: 'playing',
+          wave: pw.wave,
+          level: pw.level,
+          waveInLevel: pw.waveInLevel,
+          totalWavesInLevel: 10,
+          nextSupplyWave: this.getNextSupplyWave(pw.wave),
+          gameState: 'playing',
+          commanderAiming: false
+        }, () => {
+          this.generateWave(pw.wave)
+          this.lastSpawnTime = Date.now() + 300
+          this.requestRender()
+        })
+        console.warn('watchdog: force-advance wave (choice overlay did not enter choice state)', pw)
+      }
+    } else {
+      this._pendingWaveStuckAt = 0
+    }
+
     if (this.data.lives <= 0) {
-      this.gameOver()
+      this.safeUpdate('gameOver', this.gameOver)
     }
   },
 
@@ -2683,37 +2812,122 @@ Page({
     }
   },
 
+  safeRender(step, fn) {
+    try {
+      fn.call(this)
+    } catch (error) {
+      if (!this._renderStepFailures) this._renderStepFailures = {}
+      const rec = this._renderStepFailures[step] || (this._renderStepFailures[step] = { count: 0, firstMessage: '', firstStack: '' })
+      rec.count += 1
+      if (!rec.firstMessage) {
+        rec.firstMessage = (error && error.message) || String(error)
+        rec.firstStack = (error && error.stack) || rec.firstMessage
+      }
+      const now = Date.now()
+      if (now - (this.lastRenderStepWarnAt || 0) >= 2000) {
+        this.lastRenderStepWarnAt = now
+        console.warn('render step failed: ' + step, rec.firstStack)
+      }
+      // 单步绘制失败不影响整帧，避免一处异常导致整块战场冻死
+    }
+  },
+
+  getRenderDiagnostics() {
+    return {
+      renderFrameCount: this.renderFrameCount || 0,
+      stepFailures: this._renderStepFailures || {},
+      lastRenderWarnAt: this.lastRenderWarnAt || 0,
+      lastRenderStepWarnAt: this.lastRenderStepWarnAt || 0,
+      cachedBgGradientKey: this._cachedBgGradientKey || ''
+    }
+  },
+
+  getUpdateDiagnostics() {
+    return {
+      stepFailures: this._updateStepFailures || {},
+      lastUpdateStepWarnAt: this.lastUpdateStepWarnAt || 0,
+      pendingWaveAdvance: this.pendingWaveAdvance ? JSON.stringify(this.pendingWaveAdvance) : null,
+      pendingWaveStuckAt: this._pendingWaveStuckAt || 0,
+      gameState: this.data.gameState,
+      wave: this.data.wave,
+      spawnIndex: this.spawnIndex,
+      waveMonstersLen: (this.waveMonsters || []).length,
+      monstersLen: (this.monsters || []).length,
+      waveComplete: !!this.waveComplete
+    }
+  },
+
   render() {
     const ctx = this.ctx
     if (!ctx) return
-    this.needsRender = false
-    
-    const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-    
-    // 背景渐变（根据主题）
-    const bgGradient = ctx.createLinearGradient(0, 0, 0, CONFIG.canvasHeight)
-    bgGradient.addColorStop(0, theme.bgColors[0])
-    bgGradient.addColorStop(0.5, theme.bgColors[1])
-    bgGradient.addColorStop(1, theme.bgColors[2])
-    ctx.fillStyle = bgGradient
-    ctx.fillRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight)
-    
-    this.drawDecorations()
-    this.drawGrid()
-    this.drawPath()
-    this.drawTowers()
-    this.drawMonsters()
-    this.drawProjectiles()
-    this.drawFireEffects()
-    this.drawIceEffects()
-    this.drawPoisonEffects()
-    this.drawArcaneEffects()
-    this.drawLightningEffects()
-    this.drawMergeEffects()
-    this.drawParticles()
-    this.drawFloatingTexts()
-    this.drawDraggingTower()
-    this.drawWaveHUD()
+
+    try {
+      this.safeRender('battlefieldState', this.ensureBattlefieldState)
+      this.needsRender = false
+      this.renderFrameCount += 1
+
+      // 关键：每帧重置 shadowBlur / globalAlpha / lineDash，防止某个 draw 启用后残留导致后续 draw 全部模糊/变色
+      ctx.shadowBlur = 0
+      ctx.globalAlpha = 1
+      ctx.setLineDash([])
+
+      // 背景渐变（按主题缓存，避免每帧重建 CanvasGradient）
+      const themeKey = this.data.currentTheme || 'forest'
+      const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
+      if (!this._cachedBgGradientKey || this._cachedBgGradientKey !== themeKey) {
+        this._cachedBgGradientKey = themeKey
+        try {
+          this._cachedBgGradient = ctx.createLinearGradient(0, 0, 0, CONFIG.canvasHeight)
+          this._cachedBgGradient.addColorStop(0, theme.bgColors[0])
+          this._cachedBgGradient.addColorStop(0.5, theme.bgColors[1])
+          this._cachedBgGradient.addColorStop(1, theme.bgColors[2])
+        } catch (gradErr) {
+          // 渐变创建失败时降级为纯色填充，避免每帧抛错
+          this._cachedBgGradient = null
+        }
+      }
+      if (this._cachedBgGradient) {
+        ctx.fillStyle = this._cachedBgGradient
+      } else {
+        ctx.fillStyle = theme.bgColors ? theme.bgColors[0] : '#0a1a0a'
+      }
+      ctx.fillRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight)
+
+      this.safeRender('decorations', this.drawDecorations)
+      this.safeRender('grid', this.drawGrid)
+      this.safeRender('path', this.drawPath)
+      this.safeRender('towers', this.drawTowers)
+      this.safeRender('monsters', this.drawMonsters)
+      this.safeRender('projectiles', this.drawProjectiles)
+      this.safeRender('fireEffects', this.drawFireEffects)
+      this.safeRender('iceEffects', this.drawIceEffects)
+      this.safeRender('poisonEffects', this.drawPoisonEffects)
+      this.safeRender('arcaneEffects', this.drawArcaneEffects)
+      this.safeRender('lightningEffects', this.drawLightningEffects)
+      this.safeRender('mergeEffects', this.drawMergeEffects)
+      this.safeRender('particles', this.drawParticles)
+      this.safeRender('floatingTexts', this.drawFloatingTexts)
+      this.safeRender('draggingTower', this.drawDraggingTower)
+      this.safeRender('waveHUD', this.drawWaveHUD)
+    } catch (error) {
+      const now = Date.now()
+      if (now - (this.lastRenderWarnAt || 0) >= 2000) {
+        this.lastRenderWarnAt = now
+        console.warn('render outer failed (guarded)', (error && (error.stack || error.message)) || String(error))
+      }
+      // 自愈仅在战场状态真正损坏时发生，且 1s 内最多一次；杜绝异常态下每帧/每 240ms 无限重建导致内存堆积与 OOM
+      const pathInvalid = !Array.isArray(this.pathPoints) || this.pathPoints.length < 2
+      const gridInvalid = !Array.isArray(this.grid) || this.grid.length !== CONFIG.gridRows
+      if ((pathInvalid || gridInvalid) && now - (this.lastRenderRecoveryAt || 0) >= 1000) {
+        this.lastRenderRecoveryAt = now
+        try {
+          this.generatePath(this.data.currentTheme)
+          this.rebuildGridFromTowers()
+        } catch (e2) {
+          // 二次自愈失败则放弃，避免连环抛错
+        }
+      }
+    }
   },
 
   drawDecorations() {
