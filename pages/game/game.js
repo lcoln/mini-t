@@ -1055,20 +1055,38 @@ Page({
   },
 
   enforcePerformanceCaps() {
-    this.trimEffectQueue('particles', PERFORMANCE_LIMITS.particles)
-    this.trimEffectQueue('floatingTexts', PERFORMANCE_LIMITS.floatingTexts)
-    this.trimEffectQueue('lightningEffects', PERFORMANCE_LIMITS.lightningEffects)
-    this.trimEffectQueue('fireEffects', PERFORMANCE_LIMITS.fireEffects)
-    this.trimEffectQueue('iceEffects', PERFORMANCE_LIMITS.iceEffects)
-    this.trimEffectQueue('poisonEffects', PERFORMANCE_LIMITS.poisonEffects)
-    this.trimEffectQueue('arcaneEffects', PERFORMANCE_LIMITS.arcaneEffects)
+    const hasBoss = this.hasBossOnField()
+    const effectCapFactor = hasBoss ? 0.72 : 1
+
+    this.trimEffectQueue('particles', Math.max(40, Math.floor(PERFORMANCE_LIMITS.particles * effectCapFactor)))
+    this.trimEffectQueue('floatingTexts', Math.max(10, Math.floor(PERFORMANCE_LIMITS.floatingTexts * effectCapFactor)))
+    this.trimEffectQueue('lightningEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.lightningEffects * effectCapFactor)))
+    this.trimEffectQueue('fireEffects', Math.max(20, Math.floor(PERFORMANCE_LIMITS.fireEffects * effectCapFactor)))
+    this.trimEffectQueue('iceEffects', Math.max(16, Math.floor(PERFORMANCE_LIMITS.iceEffects * effectCapFactor)))
+    this.trimEffectQueue('poisonEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.poisonEffects * effectCapFactor)))
+    this.trimEffectQueue('arcaneEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.arcaneEffects * effectCapFactor)))
     this.trimEffectQueue('mergeEffects', PERFORMANCE_LIMITS.mergeEffects)
 
+    const trailLimit = this.getProjectileTrailLimit()
     this.projectiles.forEach((proj) => {
-      if (proj.trail.length > PERFORMANCE_LIMITS.trailPoints) {
-        proj.trail.splice(0, proj.trail.length - PERFORMANCE_LIMITS.trailPoints)
+      if (proj.trail.length > trailLimit) {
+        proj.trail.splice(0, proj.trail.length - trailLimit)
       }
     })
+
+    // 防御性硬上限：防止后期/Boss 波弹丸与怪物瞬时堆积把堆冲爆
+    const MAX_PROJECTILES_HARD = 180
+    if (this.projectiles.length > MAX_PROJECTILES_HARD) {
+      this.projectiles.splice(0, this.projectiles.length - MAX_PROJECTILES_HARD)
+    }
+    const MAX_MONSTERS_HARD = 80
+    if (this.monsters.length > MAX_MONSTERS_HARD) {
+      this.monsters.splice(0, this.monsters.length - MAX_MONSTERS_HARD)
+    }
+    // 主动提示 V8 立即 GC 释放被 trim 掉的对象
+    if (typeof wx !== 'undefined' && typeof wx.triggerGC === 'function') {
+      try { wx.triggerGC() } catch (e) {}
+    }
   },
 
   getNextSupplyWave(baseWave = this.data.wave) {
@@ -1494,8 +1512,136 @@ Page({
     }
   },
 
+  setPerformanceProfile(nextKey) {
+    if (!PERFORMANCE_PROFILES[nextKey]) {
+      nextKey = 'relaxed'
+    }
+    if (nextKey !== this.performanceProfileKey || !this.activePerformanceProfile) {
+      this.performanceProfileKey = nextKey
+      this.activePerformanceProfile = PERFORMANCE_PROFILES[nextKey]
+    }
+  },
+
+  calculateScenePressure() {
+    const effectLoad = this.particles.length + this.fireEffects.length + this.iceEffects.length +
+      this.poisonEffects.length + this.arcaneEffects.length + this.lightningEffects.length +
+      this.mergeEffects.length
+    const bossCount = this.monsters.filter((monster) => monster.isBoss).length
+
+    return this.monsters.length * 3.6 +
+      bossCount * BOSS_PRESSURE_BONUS +
+      this.projectiles.length * 2.35 +
+      this.towers.length * 0.95 +
+      effectLoad * 0.26 +
+      this.floatingTexts.length * 0.7 +
+      (this.isDragging ? 12 : 0)
+  },
+
+  resolvePerformanceProfileKey(pressure, hasBoss, now = Date.now()) {
+    const bossPressureActive = hasBoss || (
+      this.lastBossSeenAt > 0 && now - this.lastBossSeenAt <= BOSS_PROFILE_GRACE_MS
+    )
+    const currentKey = this.performanceProfileKey || 'relaxed'
+
+    if (currentKey === 'intense') {
+      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.intenseExit &&
+        (!bossPressureActive || pressure <= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseExit)) {
+        return pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit && !bossPressureActive ? 'relaxed' : 'busy'
+      }
+      return this.isDragging ? 'busy' : 'intense'
+    }
+
+    if (currentKey === 'busy') {
+      if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter ||
+        (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseEnter)) {
+        return this.isDragging ? 'busy' : 'intense'
+      }
+      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit && !bossPressureActive) {
+        return 'relaxed'
+      }
+      return 'busy'
+    }
+
+    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter ||
+      (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseEnter)) {
+      return this.isDragging ? 'busy' : 'intense'
+    }
+
+    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.busyEnter ||
+      (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossBusyFloor)) {
+      return 'busy'
+    }
+
+    return 'relaxed'
+  },
+
+  updatePerformanceProfile(now = Date.now(), force = false) {
+    const pressure = this.calculateScenePressure()
+    const hasBoss = this.hasBossOnField()
+
+    if (hasBoss) {
+      this.lastBossSeenAt = now
+    }
+
+    const checkInterval = hasBoss || this.performanceProfileKey !== 'relaxed' || pressure >= 48
+      ? PERFORMANCE_PROFILE_INTERVALS.elevated
+      : PERFORMANCE_PROFILE_INTERVALS.relaxed
+
+    if (!force && now - this.lastPerformanceProfileCheckAt < checkInterval) {
+      return
+    }
+
+    this.lastPerformanceProfileCheckAt = now
+    const nextKey = this.resolvePerformanceProfileKey(pressure, hasBoss, now)
+    this.setPerformanceProfile(nextKey)
+  },
+
+  getAdaptiveRenderInterval() {
+    const profile = this.getActivePerformanceProfile()
+    if (this.isDragging) {
+      return Math.min(profile.renderInterval, 34)
+    }
+    return profile.renderInterval
+  },
+
+  shouldRenderFrame(now = Date.now()) {
+    if (this.needsRender) {
+      return true
+    }
+    return now - this.lastFrameRenderAt >= this.getAdaptiveRenderInterval()
+  },
+
   hasBossOnField() {
     return this.monsters.some((monster) => monster.isBoss)
+  },
+
+  shouldUseSimplifiedProjectiles() {
+    const profile = this.getActivePerformanceProfile()
+    return profile.simplifyProjectiles || this.hasBossOnField()
+  },
+
+  getEffectRenderStride() {
+    const profile = this.getActivePerformanceProfile()
+    const stride = this.hasBossOnField()
+      ? Math.max(profile.effectRenderStride, 2)
+      : profile.effectRenderStride
+    return this.isDragging ? Math.min(stride, 2) : stride
+  },
+
+  getProjectileTrailLimit() {
+    const profile = this.getActivePerformanceProfile()
+    if (this.hasBossOnField()) {
+      return Math.min(profile.projectileTrailPoints || PERFORMANCE_LIMITS.trailPoints, 2)
+    }
+    return profile.projectileTrailPoints || PERFORMANCE_LIMITS.trailPoints
+  },
+
+  getDamageTextStride() {
+    const profile = this.getActivePerformanceProfile()
+    if (this.hasBossOnField()) {
+      return Math.max(profile.damageTextStride || 1, 2)
+    }
+    return profile.damageTextStride || 1
   },
 
   getTowerSpecializationConfig(type, specializationKey = '') {
@@ -1624,7 +1770,10 @@ Page({
       }
       const ox = this.data.gridOffsetX || 0
       const oy = this.data.gridOffsetY || 0
+      // 过滤路径上的塔位——用 pointToSegmentDist 检查到路径「线段」的距离
+      const hasPath = Array.isArray(this.pathPoints) && this.pathPoints.length >= 2
       const prepTowerSlots = theme.towerSlots
+        .filter(slot => !hasPath || !this.isOnPath(slot.row, slot.col))
         .map((slot) => ({
           key: `${slot.row}-${slot.col}`,
           row: slot.row,
@@ -2108,18 +2257,26 @@ Page({
       clearInterval(this.gameLoop)
     }
 
+    this.lastFrameRenderAt = 0
+    this.updatePerformanceProfile(Date.now(), true)
+
     this.gameLoop = setInterval(() => {
+      const now = Date.now()
+
       if (this.data.gameState === 'playing') {
-        this.update()
-        this.render()
+        this.update(now)
+        if (this.shouldRenderFrame(now)) {
+          this.render()
+          this.lastFrameRenderAt = now
+        }
         return
       }
 
-      const now = Date.now()
       if (this.needsRender || now - this.lastIdleRenderAt >= IDLE_RENDER_INTERVAL) {
         this.render()
         this.needsRender = false
         this.lastIdleRenderAt = now
+        this.lastFrameRenderAt = now
       }
     }, 1000 / 60)
   },
@@ -2129,6 +2286,7 @@ Page({
       clearInterval(this.gameLoop)
       this.gameLoop = null
     }
+    this.lastFrameRenderAt = 0
     this.clearScheduledTimeouts()
   },
 
@@ -2152,11 +2310,11 @@ Page({
     }
   },
 
-  update() {
+  update(now = Date.now()) {
     if (this.data.gameState !== 'playing') return
 
-    const now = Date.now()
-    
+    this.safeUpdate('perfProfile', this.updatePerformanceProfile, now)
+
     if (this.spawnIndex < this.waveMonsters.length) {
       if (now - this.lastSpawnTime > CONFIG.spawnInterval) {
         this.safeUpdate('spawn', () => {
@@ -3631,34 +3789,34 @@ Page({
   },
 
   drawGrid() {
+    // prep 状态由 WXML prep-slot-layer 渲染，playing 状态需要 canvas 绘制塔位圈
+    if (this.data.gameState === 'prep') return
+
     const ctx = this.ctx
     const offsetX = this.data.gridOffsetX
     const offsetY = this.data.gridOffsetY
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-    
-    // 只绘制空的塔位
+
     theme.towerSlots.forEach(slot => {
       const x = offsetX + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
       const y = offsetY + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2
       const hasTower = this.grid[slot.row] && this.grid[slot.row][slot.col]
-      
+
       if (!hasTower) {
-        // 简洁的塔位标记 - 圆形虚线边框
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'
         ctx.lineWidth = 1.5
         ctx.setLineDash([4, 4])
         ctx.beginPath()
         ctx.arc(x, y, 12, 0, Math.PI * 2)
         ctx.stroke()
-        ctx.setLineDash([])
-        
-        // 中心小点
+
         ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'
         ctx.beginPath()
         ctx.arc(x, y, 3, 0, Math.PI * 2)
         ctx.fill()
       }
     })
+    ctx.setLineDash([])
   },
 
   drawPath() {
@@ -3763,13 +3921,15 @@ Page({
   },
 
   drawTowers() {
+    const profile = this.getActivePerformanceProfile()
     this.towers.forEach(tower => {
-      // 如果正在拖动这个塔（从场上拖动），用半透明显示原位置
-      if (this.isDragging && !this.draggingFromInventory && 
-          this.draggingTowerId === tower.id && this.hasMoved) {
-        this.drawSingleTower(this.ctx, tower.x, tower.y, tower.type, tower.level, 0.3)
+      const alpha = this.isDragging && !this.draggingFromInventory &&
+        this.draggingTowerId === tower.id && this.hasMoved ? 0.3 : 1
+
+      if (profile.simplifyTowers) {
+        this.drawCompactTower(this.ctx, tower.x, tower.y, tower.type, tower.level, alpha)
       } else {
-        this.drawSingleTower(this.ctx, tower.x, tower.y, tower.type, tower.level)
+        this.drawSingleTower(this.ctx, tower.x, tower.y, tower.type, tower.level, alpha)
       }
     })
   },
@@ -4921,14 +5081,132 @@ Page({
     ctx.restore()
   },
 
+  drawCompactTower(ctx, x, y, type, level, alpha = 1) {
+    const config = TOWER_TYPES[type]
+
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
+    ctx.beginPath()
+    ctx.ellipse(x, y + 12, 15, 5, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = config.color
+    ctx.beginPath()
+    ctx.arc(x, y, 13, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '14px Arial'
+    ctx.fillText(config.emoji, x, y)
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.82)'
+    ctx.beginPath()
+    drawRoundRect(ctx, x - 12, y + 10, 24, 12, 4)
+    ctx.fill()
+
+    ctx.fillStyle = '#ffd700'
+    ctx.font = 'bold 9px Arial'
+    ctx.fillText(`Lv.${level}`, x, y + 16)
+    ctx.restore()
+  },
+
+  drawCompactProjectile(ctx, proj, level = 1) {
+    const trailLimit = this.getProjectileTrailLimit()
+    const visibleTrail = proj.trail.slice(Math.max(0, proj.trail.length - trailLimit))
+
+    ctx.save()
+    ctx.strokeStyle = proj.color
+    ctx.fillStyle = proj.color
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.globalAlpha = 0.92
+
+    if (visibleTrail.length > 1) {
+      ctx.beginPath()
+      ctx.moveTo(visibleTrail[0].x, visibleTrail[0].y)
+      for (let i = 1; i < visibleTrail.length; i++) {
+        ctx.lineTo(visibleTrail[i].x, visibleTrail[i].y)
+      }
+      ctx.lineWidth = Math.max(1.6, proj.size * 0.4)
+      ctx.strokeStyle = proj.color
+      ctx.globalAlpha = 0.35
+      ctx.stroke()
+      ctx.globalAlpha = 0.92
+    }
+
+    if (proj.towerType === 'lightning') {
+      ctx.strokeStyle = '#fff6a0'
+      ctx.lineWidth = Math.max(2, 1.2 + level * 0.35)
+      ctx.beginPath()
+      ctx.moveTo(proj.x - Math.cos(proj.angle) * 7, proj.y - Math.sin(proj.angle) * 7)
+      ctx.lineTo(proj.x, proj.y)
+      ctx.stroke()
+    } else if (proj.towerType === 'arcane') {
+      ctx.beginPath()
+      ctx.arc(proj.x, proj.y, Math.max(3.5, proj.size * 0.72), 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = '#f0d4ff'
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+    } else if (proj.towerType === 'nature') {
+      ctx.beginPath()
+      ctx.arc(proj.x, proj.y, Math.max(3.2, proj.size * 0.65), 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = '#d7ffb2'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(proj.x - 2, proj.y + 1)
+      ctx.lineTo(proj.x, proj.y - 3)
+      ctx.lineTo(proj.x + 2.4, proj.y + 1)
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.arc(proj.x, proj.y, Math.max(3, proj.size * 0.68), 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    ctx.restore()
+  },
+
   // 绘制燃烧效果 - 更逼真的火焰
   drawBurningEffect(ctx, monster, size) {
     ctx.save()
-    
-    const intensity = Math.min(1, monster.burnTimer / 120) // 燃烧强度
+
+    const profile = this.getActivePerformanceProfile()
+    const intensity = Math.min(1, monster.burnTimer / 120)
     const time = Date.now()
-    const flameCount = monster.isBoss ? 10 : 6
-    
+
+    if (monster.isBoss) {
+      // 真机 Canvas 2D 兼容：globalAlpha + 实色，替代 rgba 模板
+      const flameRadius = size * 1.15 + Math.sin(time * 0.01) * 2
+      ctx.globalAlpha = 0.16 + intensity * 0.18
+      ctx.fillStyle = '#ff821e'
+      ctx.beginPath()
+      ctx.arc(monster.x, monster.y, flameRadius, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 0.38 + intensity * 0.2
+      ctx.strokeStyle = '#ffdc82'
+      ctx.lineWidth = 2
+      for (let i = 0; i < 3; i++) {
+        const start = time * 0.004 + i * (Math.PI * 2 / 3)
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y, flameRadius + i * 2, start, start + Math.PI * 0.55)
+        ctx.stroke()
+      }
+      ctx.globalAlpha = 1
+      ctx.restore()
+      return
+    }
+
+    const flameCount = 6
     // 1. 底部火焰光环
     const glowRadius = size * 1.5 + Math.sin(time * 0.008) * 5
     const glowGrad = ctx.createRadialGradient(monster.x, monster.y + size * 0.5, 0, monster.x, monster.y + size * 0.5, glowRadius)
@@ -5713,9 +5991,16 @@ Page({
   },
 
   drawProjectiles() {
+    const useCompactProjectiles = this.shouldUseSimplifiedProjectiles()
+
     this.projectiles.forEach(proj => {
       const ctx = this.ctx
       const lv = proj.towerLevel || 1
+
+      if (useCompactProjectiles) {
+        this.drawCompactProjectile(ctx, proj, lv)
+        return
+      }
       
       ctx.save()
       
@@ -6069,41 +6354,47 @@ Page({
   },
 
   drawFireEffects() {
-    this.fireEffects.forEach(f => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.fireEffects.length; index += stride) {
+      const f = this.fireEffects[index]
       const ctx = this.ctx
-      ctx.save()
-      ctx.globalAlpha = f.alpha
-      
-      const gradient = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.size)
-      gradient.addColorStop(0, '#fff')
-      gradient.addColorStop(0.3, '#ffaa00')
-      gradient.addColorStop(0.7, '#ff4400')
-      gradient.addColorStop(1, 'rgba(255, 68, 0, 0)')
-      
-      ctx.fillStyle = gradient
+      const r = f.size
+      // 真机 Canvas 2D 兼容：3 层实色叠加模拟径向渐变
+      // 原因：createRadialGradient + addColorStop + rgba 模板每帧每个粒子创建渐变对象，
+      // boss 周围累积几十个 fireEffect 时 GPU 吃满 + 真机 rgba parse 失败 → 整屏金黄
+      ctx.globalAlpha = f.alpha * 0.4
+      ctx.fillStyle = '#ff4400'
       ctx.beginPath()
-      ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2)
+      ctx.arc(f.x, f.y, r, 0, Math.PI * 2)
       ctx.fill()
-      
-      ctx.restore()
-    })
+      ctx.globalAlpha = f.alpha * 0.7
+      ctx.fillStyle = '#ffaa00'
+      ctx.beginPath()
+      ctx.arc(f.x, f.y, r * 0.7, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = f.alpha
+      ctx.fillStyle = '#fff'
+      ctx.beginPath()
+      ctx.arc(f.x, f.y, r * 0.3, 0, Math.PI * 2)
+      ctx.fill()
+    }
   },
 
   drawIceEffects() {
-    this.iceEffects.forEach(i => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.iceEffects.length; index += stride) {
+      const i = this.iceEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = i.alpha
-      
+
       if (i.dist !== undefined) {
-        // 扩散冰晶
         const x = i.x + Math.cos(i.angle) * i.dist
         const y = i.y + Math.sin(i.angle) * i.dist
-        
+
         ctx.strokeStyle = '#aaeeff'
         ctx.lineWidth = 2
         ctx.beginPath()
-        // 雪花形状
         for (let j = 0; j < 6; j++) {
           const a = i.angle + (Math.PI * 2 / 6) * j
           ctx.moveTo(x, y)
@@ -6116,19 +6407,20 @@ Page({
         ctx.arc(i.x, i.y, i.size, 0, Math.PI * 2)
         ctx.fill()
       }
-      
+
       ctx.restore()
-    })
+    }
   },
 
   drawPoisonEffects() {
-    this.poisonEffects.forEach(p => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.poisonEffects.length; index += stride) {
+      const p = this.poisonEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = p.alpha
-      
+
       if (p.isVine) {
-        // 藤蔓效果 - 绘制为弯曲的藤蔓
         ctx.strokeStyle = '#44cc44'
         ctx.lineWidth = p.size * 0.6
         ctx.lineCap = 'round'
@@ -6141,8 +6433,6 @@ Page({
           p.y
         )
         ctx.stroke()
-        
-        // 藤蔓顶部的小叶子
         ctx.fillStyle = '#66ff66'
         ctx.beginPath()
         ctx.ellipse(p.x - 3, p.y - 2, 4, 2, -0.5, 0, Math.PI * 2)
@@ -6151,63 +6441,65 @@ Page({
         ctx.ellipse(p.x + 3, p.y - 2, 4, 2, 0.5, 0, Math.PI * 2)
         ctx.fill()
       } else {
-        // 普通绿色雾气效果
-        const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size)
-        gradient.addColorStop(0, 'rgba(100, 255, 100, 0.8)')
-        gradient.addColorStop(0.5, 'rgba(68, 200, 68, 0.5)')
-        gradient.addColorStop(1, 'rgba(68, 255, 68, 0)')
-        
-        ctx.fillStyle = gradient
+        // 真机兼容：globalAlpha + 实色，替代 createRadialGradient
+        ctx.fillStyle = '#44cc44'
         ctx.beginPath()
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
         ctx.fill()
+        ctx.globalAlpha = p.alpha * 0.6
+        ctx.fillStyle = '#88ee88'
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.size * 0.55, 0, Math.PI * 2)
+        ctx.fill()
       }
-      
+
       ctx.restore()
-    })
+    }
   },
 
   drawArcaneEffects() {
-    this.arcaneEffects.forEach(a => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.arcaneEffects.length; index += stride) {
+      const a = this.arcaneEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = a.alpha
-      
+
       const x = a.x + Math.cos(a.angle) * a.dist
       const y = a.y + Math.sin(a.angle) * a.dist
-      
+
       ctx.fillStyle = '#aa44ff'
       ctx.shadowBlur = 10
       ctx.shadowColor = '#aa44ff'
       ctx.beginPath()
       ctx.arc(x, y, a.size, 0, Math.PI * 2)
       ctx.fill()
-      
+
       ctx.restore()
-    })
+    }
   },
 
   drawLightningEffects() {
-    this.lightningEffects.forEach(l => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.lightningEffects.length; index += stride) {
+      const l = this.lightningEffects[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = l.alpha
-      
-      // 外发光
+
       ctx.strokeStyle = l.color
       ctx.lineWidth = l.width + 4
       ctx.shadowBlur = 25
       ctx.shadowColor = l.color
       ctx.lineCap = 'round'
-      
-      // 绘制锯齿状闪电
+
       ctx.beginPath()
       ctx.moveTo(l.x1, l.y1)
-      
+
       const segments = 6
       const dx = (l.x2 - l.x1) / segments
       const dy = (l.y2 - l.y1) / segments
-      
+
       for (let i = 1; i < segments; i++) {
         const x = l.x1 + dx * i + (Math.random() - 0.5) * 20
         const y = l.y1 + dy * i + (Math.random() - 0.5) * 20
@@ -6215,15 +6507,14 @@ Page({
       }
       ctx.lineTo(l.x2, l.y2)
       ctx.stroke()
-      
-      // 内部亮线
+
       ctx.strokeStyle = '#fff'
       ctx.lineWidth = l.width * 0.5
       ctx.shadowBlur = 0
       ctx.stroke()
-      
+
       ctx.restore()
-    })
+    }
   },
 
   drawMergeEffects() {
@@ -6231,8 +6522,7 @@ Page({
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = m.alpha
-      
-      // 扩散圆环
+
       ctx.strokeStyle = m.color
       ctx.lineWidth = 4
       ctx.shadowBlur = 20
@@ -6240,20 +6530,21 @@ Page({
       ctx.beginPath()
       ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2)
       ctx.stroke()
-      
-      // 内圈
+
       ctx.strokeStyle = '#ffd700'
       ctx.lineWidth = 2
       ctx.beginPath()
       ctx.arc(m.x, m.y, m.radius * 0.7, 0, Math.PI * 2)
       ctx.stroke()
-      
+
       ctx.restore()
     })
   },
 
   drawParticles() {
-    this.particles.forEach(p => {
+    const stride = this.getEffectRenderStride()
+    for (let index = 0; index < this.particles.length; index += stride) {
+      const p = this.particles[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = p.alpha
@@ -6264,22 +6555,26 @@ Page({
       ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2)
       ctx.fill()
       ctx.restore()
-    })
+    }
   },
 
   drawFloatingTexts() {
-    this.floatingTexts.forEach(t => {
+    const profile = this.getActivePerformanceProfile()
+    const stride = profile.effectRenderStride >= 3 && this.floatingTexts.length > 12 ? 2 : 1
+
+    for (let index = 0; index < this.floatingTexts.length; index += stride) {
+      const t = this.floatingTexts[index]
       const ctx = this.ctx
       ctx.save()
       ctx.globalAlpha = t.alpha
       ctx.fillStyle = t.color
       ctx.font = `${t.isBold ? 'bold ' : ''}${14 * (t.scale || 1)}px Arial`
       ctx.textAlign = 'center'
-      ctx.shadowBlur = 8
+      ctx.shadowBlur = profile.effectRenderStride >= 3 ? 0 : 8
       ctx.shadowColor = t.color
       ctx.fillText(t.text, t.x, t.y)
       ctx.restore()
-    })
+    }
   },
 
   isOnPath(row, col) {
