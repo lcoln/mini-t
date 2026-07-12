@@ -405,6 +405,121 @@ const SUPPLY_SYNERGY = {
   grove: 'radar'
 }
 
+const SPECIALIZATION_OPTIONS = {
+  fire: [
+    {
+      key: 'inferno',
+      icon: '🔥',
+      title: '炼狱焦芯',
+      description: '灼烧更久更痛，对精英/Boss 灼烧+60%，专烧硬骨头。',
+      shortName: '炼狱',
+      burnDurationBonus: 150,
+      burnDamageMultiplier: 1.85,
+      damageBonus: 5
+    },
+    {
+      key: 'volatile',
+      icon: '💥',
+      title: '爆燃弹芯',
+      description: '命中大范围溅射，攻速更快，专清虫潮。',
+      shortName: '爆燃',
+      splashRadius: 62,
+      splashRatio: 0.75,
+      rangeBonus: 2,
+      attackSpeedBonus: -50
+    }
+  ],
+  ice: [
+    {
+      key: 'frostlock',
+      icon: '🧊',
+      title: '霜锁线圈',
+      description: '连续命中后可短暂冻结目标。',
+      shortName: '霜锁',
+      freezeHits: 3,
+      freezeDuration: 34,
+      rangeBonus: 8
+    },
+    {
+      key: 'shatter',
+      icon: '💠',
+      title: '碎晶协议',
+      description: '对减速目标造成更高伤害。',
+      shortName: '碎晶',
+      shatterMultiplier: 1.38,
+      damageBonus: 2,
+      attackSpeedBonus: 40
+    }
+  ],
+  nature: [
+    {
+      key: 'overgrowth',
+      icon: '🌱',
+      title: '荆棘蔓延',
+      description: '藤蔓缠绕时间延长，易伤效果增强。',
+      shortName: '荆棘',
+      vineDurationBonus: 40,
+      vineVulnerabilityBonus: 0.12,
+      rangeBonus: 5
+    },
+    {
+      key: 'toxic',
+      icon: '☠️',
+      title: '毒沼之种',
+      description: '命中附带持续毒素伤害。',
+      shortName: '毒沼',
+      poisonPerSec: 5,
+      poisonDuration: 42,
+      damageBonus: 2,
+      attackSpeedBonus: 30
+    }
+  ],
+  arcane: [
+    {
+      key: 'astral',
+      icon: '⭐',
+      title: '星空棱镜',
+      description: '穿透数量增加，射程更远。',
+      shortName: '星空',
+      piercingExtra: 2,
+      rangeBonus: 12,
+      damageBonus: 3
+    },
+    {
+      key: 'converge',
+      icon: '🌀',
+      title: '聚力法阵',
+      description: '单目标伤害大幅提升，穿透能力减弱。',
+      shortName: '聚力',
+      damageBonus: 10,
+      attackSpeedBonus: -60,
+      piercingExtra: -1
+    }
+  ],
+  lightning: [
+    {
+      key: 'stormchain',
+      icon: '⛓️',
+      title: '雷霆锁链',
+      description: '连锁数量增加，连锁伤害提高。',
+      shortName: '雷霆',
+      chainExtraTargets: 2,
+      chainDamageBonus: 0.15,
+      damageBonus: 4
+    },
+    {
+      key: 'overcharge',
+      icon: '🔋',
+      title: '电涌核心',
+      description: '攻击频率更高，电弧更快。',
+      shortName: '电涌',
+      attackSpeedBonus: -120,
+      damageBonus: 1,
+      rangeBonus: 3
+    }
+  ]
+}
+
 // 怪物类型配置 - 添加独特外观
 const MONSTER_TYPES = {
   slime: { 
@@ -1169,7 +1284,36 @@ Page({
     }
   },
 
-  getTowerStatsForLevel(type, level, mode = 'field', blessingKey = this.data.selectedBlessingKey) {
+  hasBossOnField() {
+    return this.monsters.some((monster) => monster.isBoss)
+  },
+
+  getTowerSpecializationConfig(type, specializationKey = '') {
+    const options = SPECIALIZATION_OPTIONS[type] || []
+    return options.find((option) => option.key === specializationKey) || null
+  },
+
+  applySpecializationToTower(tower, specializationKey, mode = 'field') {
+    if (!tower) return null
+
+    const specialization = this.getTowerSpecializationConfig(tower.type, specializationKey)
+    if (!specialization) return null
+
+    tower.specializationKey = specialization.key
+    tower.specializationTitle = specialization.title
+    tower.specializationShort = specialization.shortName
+    Object.assign(tower, this.getTowerStatsForLevel(
+      tower.type,
+      tower.level,
+      mode,
+      this.data.selectedBlessingKey,
+      specialization.key
+    ))
+    tower.lastAttack = tower.lastAttack || 0
+    return specialization
+  },
+
+  getTowerStatsForLevel(type, level, mode = 'field', blessingKey = this.data.selectedBlessingKey, specializationKey = '') {
     const config = TOWER_TYPES[type]
     let damage = config.baseDamage
     let range = config.baseRange
@@ -1191,13 +1335,25 @@ Page({
     range += this.runRangeBonus
     attackSpeed = Math.max(300, attackSpeed - this.runAttackSpeedBonus)
 
-    return this.applyBlessingToTower({
+    const stats = this.applyBlessingToTower({
       type,
       level,
       damage,
       range,
       attackSpeed
     }, blessingKey)
+
+    // 专精加成
+    if (specializationKey) {
+      const specialization = this.getTowerSpecializationConfig(type, specializationKey)
+      if (specialization) {
+        stats.damage = (stats.damage || damage) + (specialization.damageBonus || 0)
+        stats.range = (stats.range || range) + (specialization.rangeBonus || 0)
+        stats.attackSpeed = Math.max(300, (stats.attackSpeed || attackSpeed) - (specialization.attackSpeedBonus || 0))
+      }
+    }
+
+    return stats
   },
 
   getPrepActionHint(selectedBlessingKey = this.data.selectedBlessingKey, fieldTowerCount = this.data.fieldTowerCount) {
@@ -1818,6 +1974,9 @@ Page({
       this.waveComplete = true
       this.nextWave()
     }
+
+    // Boss 在场时塔攻击力 -35%（动态维护 runBossDamagePenalty，applyDamage 读取）
+    this.runBossDamagePenalty = this.hasBossOnField() ? 0.65 : 1
 
     // 看门狗：波次推进卡在 choice 分支（overlay 未真正切入 choice 状态）时，超时兜底推进，避免整局冻结
     if (this.pendingWaveAdvance && this.data.gameState === 'playing') {
@@ -2543,10 +2702,14 @@ Page({
       armoredDamage = Math.floor(damage * (1 - monster.armor))
     }
 
+    // Boss 在场时全场塔攻击力 -35%（boss 威胁感、避免无脑碾压；update 动态维护 runBossDamagePenalty）
+    const bossPenalty = this.runBossDamagePenalty || 1
+    const bossPenalized = bossPenalty !== 1 ? Math.floor(armoredDamage * bossPenalty) : armoredDamage
+
     // 藤蔓易伤效果：增加受到的伤害
-    let finalDamage = armoredDamage
+    let finalDamage = bossPenalized
     if (monster.vineVulnerability > 0) {
-      finalDamage = armoredDamage * (1 + monster.vineVulnerability)
+      finalDamage = bossPenalized * (1 + monster.vineVulnerability)
     }
 
     monster.hp -= finalDamage
@@ -6130,50 +6293,59 @@ Page({
     this.mergeTarget = null
     this.mergeTargetInventoryIndex = -1
     this.mergeTargetType = null
-    
+
     // 检查场上的塔（合成目标）- 不能和自己合成
     for (const tower of this.towers) {
       // 如果是从场上拖动的塔，跳过自己
       if (!this.draggingFromInventory && tower.id === this.draggingTower.id) continue
-      
+      if (tower.type !== this.draggingTower.type || tower.level !== this.draggingTower.level || tower.level >= MAX_TOWER_LEVEL) continue
+
       const dx = this.dragX - tower.x
       const dy = this.dragY - tower.y
-      if (Math.sqrt(dx * dx + dy * dy) < 45) {
-        if (tower.type === this.draggingTower.type && 
-            tower.level === this.draggingTower.level && 
-            tower.level < 5) {
-          this.mergeTarget = tower
-          this.mergeTargetType = 'tower'
-          break
-        }
+      if (Math.sqrt(dx * dx + dy * dy) < FIELD_MERGE_RADIUS) {
+        this.mergeTarget = tower
+        this.mergeTargetType = 'tower'
+        break
       }
     }
-    
+
     // 检查仓库内其他塔（合成目标）- 无论从哪里拖动都检查
     if (!this.mergeTarget) {
       const targetIndex = this.getInventorySlotIndex(touch.clientX, touch.clientY)
-      if (targetIndex !== null && 
-          targetIndex !== this.draggingInventoryIndex && 
+      if (targetIndex !== null &&
+          targetIndex !== this.draggingInventoryIndex &&
           targetIndex < this.inventory.length) {
         const targetTower = this.inventory[targetIndex]
-        if (targetTower && 
-            targetTower.type === this.draggingTower.type && 
-            targetTower.level === this.draggingTower.level && 
-            targetTower.level < 5) {
+        if (targetTower &&
+            targetTower.type === this.draggingTower.type &&
+            targetTower.level === this.draggingTower.level &&
+            targetTower.level < MAX_TOWER_LEVEL) {
           this.mergeTargetInventoryIndex = targetIndex
           this.mergeTarget = targetTower
           this.mergeTargetType = 'inventory'
         }
       }
     }
-    
+
     const showMergeHint = !!this.mergeTarget
-    if (showMergeHint !== this.lastMergeHintVisible || this.mergeTargetInventoryIndex !== this.lastMergeHintSlotIndex) {
+    const nextLevel = showMergeHint ? (this.mergeTarget.level || 1) + 1 : 0
+    const mergeCost = showMergeHint
+      ? TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+      : 0
+
+    if (showMergeHint !== this.lastMergeHintVisible ||
+        this.mergeTargetInventoryIndex !== this.lastMergeHintSlotIndex ||
+        mergeCost !== this.lastMergeCost ||
+        nextLevel !== this.lastMergeTargetNextLevel) {
       this.lastMergeHintVisible = showMergeHint
       this.lastMergeHintSlotIndex = this.mergeTargetInventoryIndex
-      this.setData({ 
+      this.lastMergeCost = mergeCost
+      this.lastMergeTargetNextLevel = nextLevel
+      this.setData({
         showMergeHint,
-        mergeTargetSlotIndex: this.mergeTargetInventoryIndex
+        mergeTargetSlotIndex: this.mergeTargetInventoryIndex,
+        mergeCost,
+        mergeTargetNextLevel: nextLevel
       })
     }
   },
@@ -6292,32 +6464,40 @@ Page({
   mergeInventoryTowers(fromIndex, toIndex) {
     const tower1 = this.inventory[fromIndex]
     const tower2 = this.inventory[toIndex]
-    
-    if (tower2.level >= 5) {
-      wx.showToast({ title: '已达最高等级!', icon: 'none' })
+
+    if (tower2.level >= MAX_TOWER_LEVEL) {
+      wx.showToast({ title: `已达最高等级(Lv.${MAX_TOWER_LEVEL})!`, icon: 'none' })
       return
     }
-    
+
+    const nextLevel = tower2.level + 1
+    const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+    if (this.data.gold < upgradeCost) {
+      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      return
+    }
+
     const config = TOWER_TYPES[tower1.type]
-    
+
     // 升级tower2
-    tower2.level++
+    tower2.level = nextLevel
     Object.assign(tower2, this.getTowerStatsForLevel(tower1.type, tower2.level, 'inventory'))
-    
-    // 移除tower1（注意：如果fromIndex > toIndex，删除后toIndex不变；否则toIndex要-1）
+
+    // 移除tower1
     if (fromIndex > toIndex) {
       this.inventory.splice(fromIndex, 1)
     } else {
       this.inventory.splice(fromIndex, 1)
     }
-    
+
+    this.setData({ gold: this.data.gold - upgradeCost })
     this.updateInventoryDisplay()
-    
+
     this.setData({ score: this.data.score + 300 * tower2.level })
-    
+
     // 震动反馈
     wx.vibrateShort({ type: 'medium' }).catch(() => {})
-    
+
     wx.showToast({ title: `合成成功! Lv.${tower2.level}`, icon: 'none' })
   },
 
@@ -6325,20 +6505,27 @@ Page({
   mergeFieldToInventory(towerId, inventoryIndex) {
     const fieldTower = this.towers.find(t => t.id === towerId)
     const invTower = this.inventory[inventoryIndex]
-    
+
     if (!fieldTower || !invTower) return
-    
-    if (invTower.level >= 5) {
-      wx.showToast({ title: '已达最高等级!', icon: 'none' })
+
+    if (invTower.level >= MAX_TOWER_LEVEL) {
+      wx.showToast({ title: `已达最高等级(Lv.${MAX_TOWER_LEVEL})!`, icon: 'none' })
       return
     }
-    
+
+    const nextLevel = invTower.level + 1
+    const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+    if (this.data.gold < upgradeCost) {
+      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      return
+    }
+
     const config = TOWER_TYPES[invTower.type]
-    
+
     // 升级仓库塔
-    invTower.level++
+    invTower.level = nextLevel
     Object.assign(invTower, this.getTowerStatsForLevel(invTower.type, invTower.level, 'inventory'))
-    
+
     // 移除场上塔
     const towerIndex = this.towers.indexOf(fieldTower)
     if (towerIndex !== -1) {
@@ -6352,9 +6539,9 @@ Page({
     
     this.updateInventoryDisplay()
     this.createParticles(this.dragX, this.dragY, config.color, 15)
-    
-    this.setData({ score: this.data.score + 300 * invTower.level })
-    
+
+    this.setData({ gold: this.data.gold - upgradeCost, score: this.data.score + 300 * invTower.level })
+
     wx.vibrateShort({ type: 'medium' }).catch(() => {})
     wx.showToast({ title: `合成成功! Lv.${invTower.level}`, icon: 'none' })
   },
@@ -6416,16 +6603,23 @@ Page({
     // tower2 是场上的目标塔（需要找到实际对象）
     const actualTarget = this.towers.find(t => t.id === tower2.id)
     if (!actualTarget) return
-    
-    if (actualTarget.level >= 5) {
-      wx.showToast({ title: '已达最高等级!', icon: 'none' })
+
+    if (actualTarget.level >= MAX_TOWER_LEVEL) {
+      wx.showToast({ title: `已达最高等级(Lv.${MAX_TOWER_LEVEL})!`, icon: 'none' })
       return
     }
-    
+
+    const nextLevel = actualTarget.level + 1
+    const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+    if (this.data.gold < upgradeCost) {
+      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      return
+    }
+
     const config = TOWER_TYPES[tower1.type]
-    
+
     // 升级目标塔
-    actualTarget.level++
+    actualTarget.level = nextLevel
     Object.assign(actualTarget, this.getTowerStatsForLevel(tower1.type, actualTarget.level, 'field'))
     
     // 移除tower1
@@ -6446,8 +6640,8 @@ Page({
     this.createMergeEffect(actualTarget.x, actualTarget.y, config.color)
     this.createParticles(actualTarget.x, actualTarget.y, config.color, 15)
     this.createParticles(actualTarget.x, actualTarget.y, '#ffd700', 10)
-    
-    this.setData({ score: this.data.score + 300 * actualTarget.level })
+
+    this.setData({ gold: this.data.gold - upgradeCost, score: this.data.score + 300 * actualTarget.level })
     
     // 升级文字
     this.floatingTexts.push({
