@@ -3549,19 +3549,25 @@ Page({
   drawDecorations() {
     const ctx = this.ctx
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-    
+    const profile = this.getActivePerformanceProfile()
+
+    // 性能档位：skipDecorations=true（intense）时全部跳过；decorStride>1 时按 stride 抽样
+    if (profile.skipDecorations) return
+
     // 背景纹理点
     ctx.fillStyle = theme.grassColor
     if (this.grassDots) {
-      this.grassDots.forEach(dot => {
+      const stride = Math.max(1, profile.decorStride || 1)
+      for (let i = 0; i < this.grassDots.length; i += stride) {
+        const dot = this.grassDots[i]
         ctx.beginPath()
         ctx.arc(dot.x, dot.y, dot.size, 0, Math.PI * 2)
         ctx.fill()
-      })
+      }
     }
-    
-    // 小草丛绘制
-    if (this.grassTufts) {
+
+    // 小草丛绘制（busy 档下只画 1/2，跳过 sway 动画；intense 档上面已 return）
+    if (this.grassTufts && profile.animatedDecorations) {
       const time = Date.now() * 0.002
       this.grassTufts.forEach(tuft => {
         ctx.save()
@@ -3584,12 +3590,13 @@ Page({
         ctx.restore()
       })
     }
-    
+
     // 装饰物
     if (this.mapDecorations) {
-      this.mapDecorations.forEach(d => {
-        this.drawDecoration(ctx, d)
-      })
+      const stride = Math.max(1, profile.decorStride || 1)
+      for (let i = 0; i < this.mapDecorations.length; i += stride) {
+        this.drawDecoration(ctx, this.mapDecorations[i])
+      }
     }
   },
 
@@ -3823,50 +3830,70 @@ Page({
     const ctx = this.ctx
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
     const pathColors = theme.pathColors
-    
-    // 路径外边框（深色）
-    ctx.strokeStyle = pathColors[0]
-    ctx.lineWidth = 38
+
+    // 性能档位 + Boss 在场判定：bypass 3 层重描边和装饰绘制，1 层中等宽度即可
+    // 真机上 3 层 stroke + 100+ 石子装饰 + Boss 火/雷/奥/毒特效叠加 = 整屏卡顿发热主因
+    const profile = this.getActivePerformanceProfile()
+    const hasBoss = this.hasBossOnField()
+    const simplified = hasBoss || profile.effectRenderStride >= 2
+
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    
-    ctx.beginPath()
-    ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
-    for (let i = 1; i < this.pathPoints.length; i++) {
-      ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
+
+    if (simplified) {
+      // 单层描边 + 略窄线宽，减少 overdraw
+      ctx.strokeStyle = pathColors[1]
+      ctx.lineWidth = 30
+      ctx.beginPath()
+      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
+      for (let i = 1; i < this.pathPoints.length; i++) {
+        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
+      }
+      ctx.stroke()
+    } else {
+      // 路径外边框（深色）
+      ctx.strokeStyle = pathColors[0]
+      ctx.lineWidth = 38
+      ctx.beginPath()
+      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
+      for (let i = 1; i < this.pathPoints.length; i++) {
+        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
+      }
+      ctx.stroke()
+
+      // 路径主体
+      ctx.strokeStyle = pathColors[1]
+      ctx.lineWidth = 32
+      ctx.beginPath()
+      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
+      for (let i = 1; i < this.pathPoints.length; i++) {
+        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
+      }
+      ctx.stroke()
+
+      // 路径内部（浅色）
+      ctx.strokeStyle = pathColors[2]
+      ctx.lineWidth = 24
+      ctx.beginPath()
+      ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
+      for (let i = 1; i < this.pathPoints.length; i++) {
+        ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
-    
-    // 路径主体
-    ctx.strokeStyle = pathColors[1]
-    ctx.lineWidth = 32
-    ctx.beginPath()
-    ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
-    for (let i = 1; i < this.pathPoints.length; i++) {
-      ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
+
+    // 路径装饰：小石子（非简化档才画）
+    if (!simplified) {
+      ctx.fillStyle = pathColors[1]
+      if (this.pathDecorations) {
+        this.pathDecorations.forEach(stone => {
+          ctx.beginPath()
+          ctx.arc(stone.x, stone.y, stone.size, 0, Math.PI * 2)
+          ctx.fill()
+        })
+      }
     }
-    ctx.stroke()
-    
-    // 路径内部（浅色）
-    ctx.strokeStyle = pathColors[2]
-    ctx.lineWidth = 24
-    ctx.beginPath()
-    ctx.moveTo(this.pathPoints[0].x, this.pathPoints[0].y)
-    for (let i = 1; i < this.pathPoints.length; i++) {
-      ctx.lineTo(this.pathPoints[i].x, this.pathPoints[i].y)
-    }
-    ctx.stroke()
-    
-    // 路径装饰：小石子（使用预生成的）
-    ctx.fillStyle = pathColors[1]
-    if (this.pathDecorations) {
-      this.pathDecorations.forEach(stone => {
-        ctx.beginPath()
-        ctx.arc(stone.x, stone.y, stone.size, 0, Math.PI * 2)
-        ctx.fill()
-      })
-    }
-    
+
     // 路径中心线（虚线）
     ctx.strokeStyle = pathColors[2]
     ctx.lineWidth = 3
@@ -3878,7 +3905,7 @@ Page({
     }
     ctx.stroke()
     ctx.setLineDash([])
-    
+
     // 起点标记 - 怪物传送门
     const startX = this.pathPoints[0].x + 15
     const startY = this.pathPoints[0].y
