@@ -405,6 +405,43 @@ const SUPPLY_SYNERGY = {
   grove: 'radar'
 }
 
+const THREAT_CHAIN_RULES = {
+  blitz: {
+    key: 'blitz',
+    icon: '⚡',
+    title: '闪电突袭',
+    description: '敌人又快又脆，适合高攻速点杀流。',
+    detail: '数量 -28% · 速度 +30% · 血量 ×0.75 · 金币 +15%',
+    countMultiplier: 0.72,
+    speedMultiplier: 1.30,
+    hpMultiplier: 0.75,
+    goldMultiplier: 1.15
+  },
+  greed: {
+    key: 'greed',
+    icon: '💎',
+    title: '黄金潮汐',
+    description: '海量弱怪涌来，守住了就是一波肥。',
+    detail: '数量 +42% · 精英 +1 · 金币 +50% · 战术点 +1/精英',
+    countMultiplier: 1.42,
+    goldMultiplier: 1.50,
+    extraEliteCount: 1,
+    eliteRewardPoints: 1
+  },
+  fortress: {
+    key: 'fortress',
+    icon: '🛡️',
+    title: '钢铁堡垒',
+    description: '重甲慢速强敌，打穿一个就回本。',
+    detail: '血量 ×1.85 · 速度 -25% · 金币 +40% · 精英 +2 · 精英血量 ×1.5',
+    hpMultiplier: 1.85,
+    speedMultiplier: 0.75,
+    goldMultiplier: 1.40,
+    extraEliteCount: 2,
+    eliteHpMultiplier: 1.5
+  }
+}
+
 const SPECIALIZATION_OPTIONS = {
   fire: [
     {
@@ -1066,6 +1103,154 @@ Page({
     this.requestRender()
   },
 
+  playSound() {
+    // 音效系统尚未接入，预留接口
+  },
+
+  setActiveWaveModifierDisplay(modifier = null) {
+    this.activeWaveModifier = modifier || null
+    this.setData({
+      activeChainIcon: modifier?.icon || '',
+      activeChainTitle: modifier?.title || '',
+      activeChainDescription: modifier?.detail || ''
+    })
+  },
+
+  queueStatDelta(delta) {
+    if (!this._pendingStatDeltas) this._pendingStatDeltas = []
+    this._pendingStatDeltas.push(delta)
+  },
+
+  flushQueuedStats() {
+    const deltas = this._pendingStatDeltas
+    if (!deltas || !deltas.length) return
+    this._pendingStatDeltas = []
+
+    const merged = {}
+    deltas.forEach((d) => {
+      Object.keys(d).forEach((key) => {
+        merged[key] = (merged[key] || 0) + d[key]
+      })
+    })
+
+    const patch = {}
+    if (merged.commandPoints) {
+      patch.commandPoints = Math.max(0, this.data.commandPoints + merged.commandPoints)
+    }
+    if (merged.gold) {
+      patch.gold = Math.max(0, this.data.gold + merged.gold)
+    }
+
+    if (Object.keys(patch).length) {
+      this.setData(patch)
+    }
+  },
+
+  canOfferThreatChain(completedWave = this.data.wave) {
+    return completedWave >= 6 && !!this.currentThreatMissionCompleted
+  },
+
+  buildThreatChainOptions(nextWave = this.data.wave + 1) {
+    const favorSwarm = this.currentWaveThreat?.key === 'swarm'
+    const order = favorSwarm ? ['blitz', 'greed', 'hunt'] : ['hunt', 'blitz', 'greed']
+    return order.map((key) => {
+      const rule = THREAT_CHAIN_RULES[key]
+      return {
+        key: rule.key,
+        icon: rule.icon,
+        title: rule.title,
+        description: `第${nextWave}波：${rule.description} ${rule.detail}`
+      }
+    })
+  },
+
+  openChoiceOverlay({
+    mode,
+    panelTitle,
+    title,
+    hint = '',
+    options = [],
+    returnState = this.data.gameState,
+    pendingSpecializationTowerId = null,
+    pendingSpecializationSource = ''
+  }) {
+    const nextState = returnState === 'playing' ? 'choice' : returnState
+    this.setData({
+      showWaveChoice: true,
+      waveChoiceMode: mode,
+      waveChoicePanelTitle: panelTitle,
+      waveChoiceTitle: title,
+      waveChoiceHint: hint,
+      waveChoiceOptions: options,
+      pendingSpecializationTowerId,
+      pendingSpecializationSource,
+      choiceReturnState: returnState,
+      gameState: nextState,
+      commanderAiming: false
+    })
+    this.requestRender()
+  },
+
+  closeChoiceOverlay(nextState = this.data.choiceReturnState || 'playing') {
+    this.setData({
+      showWaveChoice: false,
+      waveChoiceMode: '',
+      waveChoicePanelTitle: '战术补给',
+      waveChoiceTitle: '',
+      waveChoiceHint: '',
+      waveChoiceOptions: [],
+      pendingSpecializationTowerId: null,
+      pendingSpecializationSource: '',
+      choiceReturnState: 'playing',
+      gameState: nextState === 'choice' ? 'playing' : nextState,
+      commanderAiming: false
+    })
+  },
+
+  applyThreatChainChoice(choiceKey) {
+    const modifier = THREAT_CHAIN_RULES[choiceKey]
+    if (!modifier || !this.pendingWaveAdvance) return
+
+    this.pendingNextWaveModifier = {
+      ...modifier,
+      targetWave: this.pendingWaveAdvance.wave
+    }
+    this.setActiveWaveModifierDisplay(modifier)
+    this.playSound('chainReady', { cooldown: 0 })
+    this.floatingTexts.push({
+      x: CONFIG.canvasWidth / 2,
+      y: CONFIG.canvasHeight / 2 - 20,
+      text: `${modifier.icon} ${modifier.title}`,
+      color: '#d8f6ff',
+      life: 92,
+      maxLife: 92,
+      vy: -0.45,
+      vx: 0,
+      scale: 1.28,
+      isBold: true
+    })
+  },
+
+  grantCommandPoints(amount = 1, options = {}) {
+    if (!amount || amount <= 0) return
+
+    this.queueStatDelta({ commandPoints: amount })
+
+    const text = options.text || `🛰️ 战术点 +${amount}`
+    this.floatingTexts.push({
+      x: options.x ?? (CONFIG.canvasWidth / 2),
+      y: options.y ?? (CONFIG.canvasHeight / 2 - 10),
+      text,
+      color: options.color || '#a8f2ff',
+      life: options.life || 95,
+      maxLife: options.life || 95,
+      vy: -0.42,
+      vx: 0,
+      scale: options.scale || 1.2,
+      isBold: true
+    })
+  },
+
   buildWaveChoiceOptions() {
     const selectedBlessingKey = this.data.selectedBlessingKey
     const synergyKey = SUPPLY_SYNERGY[selectedBlessingKey]
@@ -1162,6 +1347,31 @@ Page({
     const rewardKey = e.currentTarget.dataset.key
     const pendingWave = this.pendingWaveAdvance
     if (!rewardKey || !pendingWave) return
+
+    const isThreatChain = this.data.waveChoiceMode === 'threatChain'
+    if (isThreatChain) {
+      this.applyThreatChainChoice(rewardKey)
+      this.pendingWaveAdvance = null
+      this.setData({
+        showWaveChoice: false,
+        waveChoiceMode: '',
+        waveChoicePanelTitle: '战术补给',
+        waveChoiceTitle: '',
+        waveChoiceHint: '',
+        waveChoiceOptions: [],
+        wave: pendingWave.wave,
+        level: pendingWave.level,
+        waveInLevel: pendingWave.waveInLevel,
+        totalWavesInLevel: 10,
+        gameState: 'playing'
+      }, () => {
+        this.updateRunBuffSummary(pendingWave.wave)
+        this.generateWave(pendingWave.wave)
+        this.lastSpawnTime = Date.now() + 300
+        this.requestRender()
+      })
+      return
+    }
 
     this.applySupplyReward(rewardKey)
     this.pendingWaveAdvance = null
@@ -1969,6 +2179,7 @@ Page({
     this.safeUpdate('arcaneEffects', this.updateArcaneEffects)
     this.safeUpdate('mergeEffects', this.updateMergeEffects)
     this.safeUpdate('performanceCaps', this.enforcePerformanceCaps)
+    this.safeUpdate('flushStats', this.flushQueuedStats)
 
     if (this.spawnIndex >= this.waveMonsters.length && this.monsters.length === 0 && !this.waveComplete) {
       this.waveComplete = true
@@ -6661,15 +6872,19 @@ Page({
   },
 
   nextWave() {
+    this.playSound('wave', { cooldown: 0, volume: 0.58 })
     const completedWave = this.data.wave
     const newWave = completedWave + 1
-    const waveBonus = 30 + newWave * 15
+    const waveBonus = 20 + newWave * 10
     const shouldOfferSupply = completedWave % 3 === 0
-    
+    const shouldOfferThreatChain = this.canOfferThreatChain(completedWave)
+
     // 计算关卡和关内波次
     const newLevel = Math.ceil(newWave / 10)
     const newWaveInLevel = ((newWave - 1) % 10) + 1
-    
+    // 进入新关卡时进入 prep 阶段，让玩家有时间布阵
+    const isNewLevel = newLevel > this.data.level
+
     this.setData({ 
       gold: this.data.gold + waveBonus,
       score: this.data.score + waveBonus * 5
@@ -6723,10 +6938,10 @@ Page({
         
         this.changeTheme(nextTheme)
         this.requestRender()
-      }, 1500)
+      }, 900)
     }
-    
-    if (shouldOfferSupply) {
+
+    if (shouldOfferThreatChain || shouldOfferSupply) {
       this.pendingWaveAdvance = {
         wave: newWave,
         level: newLevel,
@@ -6734,14 +6949,56 @@ Page({
       }
 
       this.scheduleTimeout(() => {
-        this.setData({
-          gameState: 'choice',
-          showWaveChoice: true,
-          waveChoiceTitle: `第${newWave}波前，选 1 个战术补给`,
-          waveChoiceOptions: this.buildWaveChoiceOptions()
-        })
-        this.requestRender()
-      }, 1300)
+        try {
+          if (shouldOfferThreatChain) {
+            this.openChoiceOverlay({
+              mode: 'threatChain',
+              panelTitle: '威胁连锁',
+              title: `压制成功：改写第${newWave}波的战场规则`,
+              hint: '先决定下一波怎么来，再决定自己怎么扛。',
+              options: this.buildThreatChainOptions(newWave),
+              returnState: 'playing'
+            })
+            return
+          }
+
+          this.openChoiceOverlay({
+            mode: 'supply',
+            panelTitle: '战术补给',
+            title: `第${newWave}波前，选 1 个战术补给`,
+            hint: '稳一手资源，还是赌更快成型。',
+            options: this.buildWaveChoiceOptions(),
+            returnState: 'playing'
+          })
+        } catch (e) {
+          console.warn('advanceWave choice open failed, force advancing', (e && e.stack) || e)
+          const pw = this.pendingWaveAdvance
+          this.pendingWaveAdvance = null
+          this._pendingWaveStuckAt = 0
+          this.setData({
+            showWaveChoice: false,
+            waveChoiceMode: '',
+            waveChoicePanelTitle: '战术补给',
+            waveChoiceTitle: '',
+            waveChoiceHint: '',
+            waveChoiceOptions: [],
+            pendingSpecializationTowerId: null,
+            pendingSpecializationSource: '',
+            choiceReturnState: 'playing',
+            wave: pw ? pw.wave : newWave,
+            level: pw ? pw.level : newLevel,
+            waveInLevel: pw ? pw.waveInLevel : newWaveInLevel,
+            totalWavesInLevel: 10,
+            nextSupplyWave: this.getNextSupplyWave(pw ? pw.wave : newWave),
+            gameState: isNewLevel ? 'prep' : 'playing',
+            commanderAiming: false
+          }, () => {
+            this.generateWave(pw ? pw.wave : newWave)
+            this.lastSpawnTime = isNewLevel ? Date.now() + 60000 : Date.now() + 300
+            this.requestRender()
+          })
+        }
+      }, 850)
       return
     }
     
@@ -6751,11 +7008,16 @@ Page({
         level: newLevel,
         waveInLevel: newWaveInLevel,
         totalWavesInLevel: 10,
-        nextSupplyWave: this.getNextSupplyWave(newWave)
+        nextSupplyWave: this.getNextSupplyWave(newWave),
+        gameState: isNewLevel ? 'prep' : 'playing',
+        commanderAiming: false
       })
       this.generateWave(newWave)
+      if (isNewLevel) {
+        this.lastSpawnTime = Date.now() + 60000
+      }
       this.requestRender()
-    }, 3500)
+    }, 1800)
   },
 
   // 切换地形主题
