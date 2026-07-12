@@ -16,7 +16,7 @@ const CONFIG = {
   canvasWidth: 375,
   canvasHeight: 550,
   gridCols: 11,
-  gridRows: 10,
+  gridRows: 12,
   cellSize: 32,
   spawnInterval: 1800
 }
@@ -35,7 +35,208 @@ const PERFORMANCE_LIMITS = {
 
 const DRAG_UI_INTERVAL = 32
 const IDLE_RENDER_INTERVAL = 120
-const MIN_SUMMON_COST = 8
+const MIN_SUMMON_COST = 10
+const DRAG_START_THRESHOLD = 10
+const FIELD_DRAG_PICK_RADIUS = 28
+const FIELD_MERGE_RADIUS = 58
+const TOWER_SLOT_SNAP_RADIUS = 34
+const INVENTORY_HIT_TOLERANCE = 8
+const INVENTORY_MERGE_RADIUS = 22
+const INVENTORY_MERGE_COMMIT_RADIUS = 12
+const INVENTORY_MERGE_CORE_RATIO = 0.24
+const BOSS_PRESSURE_BONUS = 42
+const BOSS_PROFILE_GRACE_MS = 520
+const PERFORMANCE_PROFILE_INTERVALS = {
+  relaxed: 180,
+  elevated: 80
+}
+const PERFORMANCE_PROFILE_HYSTERESIS = {
+  busyEnter: 52,
+  busyExit: 38,
+  intenseEnter: 94,
+  intenseExit: 72,
+  bossBusyFloor: 48,
+  bossIntenseEnter: 60,
+  bossIntenseExit: 46
+}
+
+const AUDIO_SETTING_KEY = 'miniTSoundEnabled'
+const RUN_PROGRESS_KEY = 'miniTRunProgress'
+const RUN_PROGRESS_VERSION = 1
+const RUN_PROGRESS_INTERVAL = 1500
+const COMMANDER_COST = 3
+const COMMANDER_MARK_DURATION = 5600
+const COMMANDER_MARK_RADIUS = 76
+const COMMANDER_PULSE_INTERVAL = 420
+const COMMANDER_PULSE_DAMAGE = 12
+const COMMANDER_ZONE_DAMAGE_BONUS = 0.45
+const COMMANDER_ZONE_ATTACK_SPEED_FACTOR = 0.72
+const SOUND_ASSETS = {
+  ui: '/assets/audio/ui-tap.wav',
+  blessing: '/assets/audio/blessing.wav',
+  summon: '/assets/audio/summon.wav',
+  place: '/assets/audio/place.wav',
+  merge: '/assets/audio/merge.wav',
+  reward: '/assets/audio/reward.wav',
+  wave: '/assets/audio/wave-start.wav',
+  boss: '/assets/audio/boss-spawn.wav',
+  chainReady: '/assets/audio/chain-ready.wav',
+  specialize: '/assets/audio/specialize.wav',
+  commander: '/assets/audio/commander.wav',
+  fireAttack: '/assets/audio/fire-shot.wav',
+  fireAttackAlt: '/assets/audio/fire-shot-alt.wav',
+  iceAttack: '/assets/audio/ice-shot.wav',
+  iceAttackAlt: '/assets/audio/ice-shot-alt.wav',
+  natureAttack: '/assets/audio/nature-shot.wav',
+  natureAttackAlt: '/assets/audio/nature-shot-alt.wav',
+  arcaneAttack: '/assets/audio/arcane-shot.wav',
+  arcaneAttackAlt: '/assets/audio/arcane-shot-alt.wav',
+  lightningAttack: '/assets/audio/lightning-shot.wav',
+  lightningAttackAlt: '/assets/audio/lightning-shot-alt.wav',
+  forestAmbience: '/assets/audio/forest-ambience.wav',
+  desertAmbience: '/assets/audio/desert-ambience.wav',
+  iceAmbience: '/assets/audio/ice-ambience.wav',
+  volcanoAmbience: '/assets/audio/volcano-ambience.wav',
+  gameover: '/assets/audio/game-over.wav'
+}
+const SOUND_POOL_SIZES = {
+  ui: 2,
+  blessing: 2,
+  summon: 2,
+  place: 2,
+  merge: 2,
+  reward: 2,
+  wave: 2,
+  boss: 1,
+  chainReady: 1,
+  specialize: 1,
+  commander: 1,
+  fireAttack: 3,
+  fireAttackAlt: 3,
+  iceAttack: 3,
+  iceAttackAlt: 3,
+  natureAttack: 3,
+  natureAttackAlt: 3,
+  arcaneAttack: 3,
+  arcaneAttackAlt: 3,
+  lightningAttack: 2,
+  lightningAttackAlt: 2,
+  gameover: 1
+}
+const SOUND_VOLUMES = {
+  ui: 0.34,
+  blessing: 0.55,
+  summon: 0.45,
+  place: 0.42,
+  merge: 0.62,
+  reward: 0.48,
+  wave: 0.56,
+  boss: 0.68,
+  chainReady: 0.62,
+  specialize: 0.66,
+  commander: 0.58,
+  fireAttack: 0.2,
+  fireAttackAlt: 0.18,
+  iceAttack: 0.18,
+  iceAttackAlt: 0.18,
+  natureAttack: 0.19,
+  natureAttackAlt: 0.18,
+  arcaneAttack: 0.22,
+  arcaneAttackAlt: 0.22,
+  lightningAttack: 0.22,
+  lightningAttackAlt: 0.22,
+  forestAmbience: 0.16,
+  desertAmbience: 0.14,
+  iceAmbience: 0.14,
+  volcanoAmbience: 0.17,
+  gameover: 0.62
+}
+const SOUND_COOLDOWNS = {
+  fireAttack: 82,
+  fireAttackAlt: 82,
+  iceAttack: 96,
+  iceAttackAlt: 96,
+  natureAttack: 92,
+  natureAttackAlt: 92,
+  arcaneAttack: 110,
+  arcaneAttackAlt: 110,
+  lightningAttack: 110,
+  lightningAttackAlt: 110,
+  merge: 140,
+  chainReady: 420,
+  specialize: 400,
+  commander: 260,
+  boss: 420,
+  gameover: 800
+}
+const AMBIENT_TRACKS = {
+  forest: 'forestAmbience',
+  desert: 'desertAmbience',
+  ice: 'iceAmbience',
+  volcano: 'volcanoAmbience'
+}
+const TOWER_ATTACK_SOUNDS = {
+  fire: { keys: ['fireAttack', 'fireAttackAlt'], cooldownKey: 'fireAttack', levelBoost: 0.018 },
+  ice: { keys: ['iceAttack', 'iceAttackAlt'], cooldownKey: 'iceAttack', levelBoost: 0.016 },
+  nature: { keys: ['natureAttack', 'natureAttackAlt'], cooldownKey: 'natureAttack', levelBoost: 0.014 },
+  arcane: { keys: ['arcaneAttack', 'arcaneAttackAlt'], cooldownKey: 'arcaneAttack', levelBoost: 0.02 },
+  lightning: { keys: ['lightningAttack', 'lightningAttackAlt'], cooldownKey: 'lightningAttack', levelBoost: 0.018 }
+}
+
+const PERFORMANCE_PROFILES = {
+  relaxed: {
+    renderInterval: 16,
+    simplifyTowers: false,
+    simplifyMonsters: false,
+    simplifyBosses: false,
+    simplifyProjectiles: false,
+    skipDecorations: false,
+    decorStride: 1,
+    animatedDecorations: true,
+    effectRenderStride: 1,
+    projectileTrailPoints: 5,
+    damageTextStride: 1,
+    compactBossHp: false,
+    bossDamageTextCooldown: 0
+  },
+  busy: {
+    renderInterval: 30,
+    simplifyTowers: false,
+    simplifyMonsters: false,
+    simplifyBosses: true,
+    simplifyProjectiles: true,
+    skipDecorations: false,
+    decorStride: 2,
+    animatedDecorations: false,
+    effectRenderStride: 2,
+    projectileTrailPoints: 3,
+    damageTextStride: 1,
+    compactBossHp: true,
+    bossDamageTextCooldown: 80
+  },
+  intense: {
+    renderInterval: 42,
+    simplifyTowers: true,
+    simplifyMonsters: true,
+    simplifyBosses: true,
+    simplifyProjectiles: true,
+    skipDecorations: true,
+    decorStride: 3,
+    animatedDecorations: false,
+    effectRenderStride: 3,
+    projectileTrailPoints: 1,
+    damageTextStride: 2,
+    compactBossHp: true,
+    bossDamageTextCooldown: 140
+  }
+}
+
+// 塔最高等级（合并/升级上限）
+const MAX_TOWER_LEVEL = 10
+
+// 塔升级金币消耗公式：base + perLevelSq × level²
+const TOWER_UPGRADE_GOLD_BASE = 15
+const TOWER_UPGRADE_GOLD_PER_LEVEL_SQ = 5
 
 // 塔类型配置
 const TOWER_TYPES = {
@@ -346,7 +547,7 @@ const MONSTER_TYPES = {
 
 // 底部格子配置
 const INVENTORY_COLS = 5
-const INVENTORY_ROWS = 3
+const INVENTORY_ROWS = 4
 
 // 地形主题配置
 const MAP_THEMES = {
@@ -359,12 +560,13 @@ const MAP_THEMES = {
     decorTypes: ['tree', 'bush', 'flower', 'mushroom', 'rock'],
     // 塔位放在路径两侧，不在路上
     towerSlots: [
-      {row: 0, col: 1}, {row: 0, col: 4}, {row: 0, col: 7}, {row: 0, col: 10},
+      {row: 1, col: 1}, {row: 1, col: 4}, {row: 1, col: 7}, {row: 1, col: 10},
       {row: 2, col: 2}, {row: 2, col: 9},
       {row: 4, col: 0}, {row: 4, col: 5}, {row: 4, col: 10},
       {row: 6, col: 2}, {row: 6, col: 7},
       {row: 8, col: 0}, {row: 8, col: 4}, {row: 8, col: 10},
-      {row: 9, col: 6}
+      {row: 9, col: 6},
+      {row: 10, col: 7}, {row: 10, col: 9}, {row: 10, col: 10}, {row: 11, col: 8}
     ]
   },
   desert: {
@@ -375,12 +577,13 @@ const MAP_THEMES = {
     gridColor: 'rgba(200, 180, 100, 0.2)',
     decorTypes: ['cactus', 'rock', 'skull', 'tumbleweed'],
     towerSlots: [
-      {row: 0, col: 1}, {row: 0, col: 5}, {row: 0, col: 9},
-      {row: 2, col: 3}, {row: 2, col: 7},
-      {row: 4, col: 0}, {row: 4, col: 10},
-      {row: 6, col: 2}, {row: 6, col: 5}, {row: 6, col: 8},
-      {row: 8, col: 0}, {row: 8, col: 4}, {row: 8, col: 10},
-      {row: 9, col: 7}
+      {row: 1, col: 2}, {row: 1, col: 4}, {row: 1, col: 6}, {row: 1, col: 8}, {row: 1, col: 10},
+      {row: 3, col: 0}, {row: 3, col: 6},
+      {row: 5, col: 2}, {row: 5, col: 8},
+      {row: 6, col: 0}, {row: 6, col: 4}, {row: 6, col: 10},
+      {row: 7, col: 2}, {row: 7, col: 8},
+      {row: 8, col: 5},
+      {row: 10, col: 7}, {row: 10, col: 9}, {row: 11, col: 8}
     ]
   },
   ice: {
@@ -391,12 +594,13 @@ const MAP_THEMES = {
     gridColor: 'rgba(100, 180, 255, 0.2)',
     decorTypes: ['ice_crystal', 'snow_pile', 'frozen_tree', 'rock'],
     towerSlots: [
-      {row: 0, col: 2}, {row: 0, col: 8},
-      {row: 2, col: 0}, {row: 2, col: 5}, {row: 2, col: 10},
-      {row: 4, col: 3}, {row: 4, col: 7},
-      {row: 6, col: 0}, {row: 6, col: 5}, {row: 6, col: 10},
-      {row: 8, col: 2}, {row: 8, col: 8},
-      {row: 9, col: 5}
+      {row: 1, col: 1}, {row: 1, col: 3}, {row: 1, col: 6}, {row: 1, col: 9},
+      {row: 3, col: 1}, {row: 3, col: 7},
+      {row: 4, col: 0}, {row: 4, col: 5}, {row: 4, col: 10},
+      {row: 6, col: 3}, {row: 6, col: 9},
+      {row: 7, col: 1}, {row: 7, col: 7},
+      {row: 8, col: 0}, {row: 8, col: 5}, {row: 8, col: 10},
+      {row: 10, col: 5}, {row: 10, col: 7}, {row: 11, col: 6}
     ]
   },
   volcano: {
@@ -407,11 +611,14 @@ const MAP_THEMES = {
     gridColor: 'rgba(255, 150, 100, 0.15)',
     decorTypes: ['lava_rock', 'fire_vent', 'ash_pile', 'dead_tree'],
     towerSlots: [
-      {row: 0, col: 0}, {row: 0, col: 5}, {row: 0, col: 10},
-      {row: 2, col: 2}, {row: 2, col: 8},
-      {row: 4, col: 0}, {row: 4, col: 4}, {row: 4, col: 10},
-      {row: 6, col: 2}, {row: 6, col: 6}, {row: 6, col: 9},
-      {row: 8, col: 0}, {row: 8, col: 5}, {row: 8, col: 10}
+      {row: 1, col: 0}, {row: 1, col: 2}, {row: 1, col: 5}, {row: 1, col: 8}, {row: 1, col: 10},
+      {row: 3, col: 3}, {row: 3, col: 7},
+      {row: 4, col: 0}, {row: 4, col: 10},
+      {row: 5, col: 5},
+      {row: 6, col: 2}, {row: 6, col: 8},
+      {row: 7, col: 0}, {row: 7, col: 6}, {row: 7, col: 10},
+      {row: 8, col: 3}, {row: 8, col: 9},
+      {row: 10, col: 6}, {row: 10, col: 8}, {row: 11, col: 7}
     ]
   }
 }
@@ -433,16 +640,26 @@ Page({
     totalWavesInLevel: 10, // 每关总波数
     // 底部仓库
     inventorySlots: [],
-    summonCost: 15,
+    summonCost: 20,
     inventoryFull: false,
     canvasRect: null,
     draggingSlotIndex: -1,
     mergeTargetSlotIndex: -1,
+    mergeCost: 0,
+    mergeTargetNextLevel: 2,
+    dragFloating: false,
+    dragFloatingX: 0,
+    dragFloatingY: 0,
+    dragFloatingEmoji: '✨',
+    dragFloatingColor: '#8bff7b',
+    dragFloatingLevel: 1,
+    dragFloatingType: 'fire',
     // 当前地形主题
     currentTheme: 'forest',
     selectedBlessingKey: '',
     selectedBlessingName: '尚未选择战术祝福',
     selectedBlessingIcon: '✨',
+    selectedBlessingDescription: '选择后会立刻生效，并持续整局。',
     blessingOptions: Object.values(BLESSINGS),
     fieldTowerCount: 0,
     canStartBattle: false,
@@ -452,8 +669,28 @@ Page({
     runBuffSummary: '未激活',
     nextSupplyWave: 3,
     showWaveChoice: false,
+    waveChoiceMode: '',
+    waveChoicePanelTitle: '战术补给',
     waveChoiceTitle: '',
-    waveChoiceOptions: []
+    waveChoiceHint: '',
+    waveChoiceOptions: [],
+    pendingSpecializationTowerId: null,
+    pendingSpecializationSource: '',
+    choiceReturnState: 'playing',
+    activeChainIcon: '',
+    activeChainTitle: '',
+    activeChainDescription: '',
+    currentThreatIcon: '🐜',
+    currentThreatTitle: '虫潮奔袭',
+    currentThreatDescription: '敌人更多，但单体更脆。',
+    currentThreatCounterText: '推荐：火焰 / 闪电',
+    threatMissionText: '压制 0/6',
+    threatMissionReady: false,
+    commanderCost: COMMANDER_COST,
+    commanderAiming: false,
+    commanderReadyText: '3 点可火力标记',
+    commandPoints: 0,
+    soundEnabled: true
   },
 
   canvas: null,
@@ -569,9 +806,9 @@ Page({
     CONFIG.canvasWidth = width
     CONFIG.canvasHeight = height
 
-    const horizontalPadding = 14
-    const verticalPadding = 10
-    CONFIG.cellSize = Math.max(28, Math.floor(Math.min(
+    const horizontalPadding = 0  // 减水平 padding 让 cellSize 突破 31px 限制、塔不压扁（iPhone 16 Pro 水平方向 375/11=31 太挤）
+    const verticalPadding = 50  // 顶部留 50px 给顶部 HUD（关卡/波次/状态栏），避免 row 0 塔位塔身/Lv.标签挡住状态栏
+    CONFIG.cellSize = Math.max(34, Math.floor(Math.min(
       (CONFIG.canvasWidth - horizontalPadding * 2) / CONFIG.gridCols,
       (CONFIG.canvasHeight - verticalPadding * 2) / CONFIG.gridRows
     )))
@@ -581,6 +818,17 @@ Page({
     this.setData({
       gridOffsetX: (CONFIG.canvasWidth - gridWidth) / 2,
       gridOffsetY: (CONFIG.canvasHeight - gridHeight) / 2
+    }, () => {
+      // setData 是异步的——回调里 gridOffsetX/Y 才真正更新到 this.data
+      // initGame 在 setData 之后同步执行，用的还是旧 offset，导致 pathPoints / prepTowerSlots 位置全部偏移
+      // 这里必须重新生成路径 + 塔位，否则开发者工具里圈完全错位/不可见
+      if (Array.isArray(this.pathPoints) && this.pathPoints.length >= 2) {
+        this.generatePath(this.data.currentTheme)
+      }
+      if (Array.isArray(this.grid) && this.grid.length === CONFIG.gridRows) {
+        this.syncPrepTowerSlots(this.data.currentTheme)
+      }
+      this.requestRender()
     })
     this.requestRender()
   },
@@ -861,7 +1109,7 @@ Page({
       showWaveChoice: false,
       waveChoiceTitle: '',
       waveChoiceOptions: [],
-      summonCost: 15
+      summonCost: 20
     })
     this.syncPrepTowerSlots('forest')
     this.refreshInventoryRect()
