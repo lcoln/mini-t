@@ -51,6 +51,28 @@ const {
 } = require('./config')
 
 module.exports = {
+  // 连续走路相位（比 0~3 的 animFrame 顺滑得多）
+  getMonsterAnimPhase(monster) {
+    if (Number.isFinite(monster.walkPhase)) return monster.walkPhase
+    return (monster.animFrame || 0) * 0.85
+  },
+
+  getMonsterWalkMotion(monster, size) {
+    const phase = this.getMonsterAnimPhase(monster)
+    const slow = monster.slowTimer > 0 ? 0.6 : 1
+    // 用单周期慢波，避免 sin(phase*2) 造成的鬼畜高频抖动
+    const hop = (1 - Math.cos(phase)) * 0.5
+    return {
+      phase,
+      bob: -hop * (monster.isBoss ? 1.1 : 1.4) * slow,
+      squashX: 1 + hop * 0.03 * slow,
+      squashY: 1 - hop * 0.025 * slow,
+      lean: Math.sin(phase) * 0.35 * (monster.facing || 1) * slow,
+      sway: Math.sin(phase * 0.5) * 0.25 * slow,
+      shadowScale: 1.02 - hop * 0.06
+    }
+  },
+
   drawMonsters() {
     const profile = this.getActivePerformanceProfile()
 
@@ -62,21 +84,31 @@ module.exports = {
       const useCompactMonster = monster.isBoss
         ? !!profile.simplifyBosses
         : !!profile.simplifyMonsters
+      const motion = this.getMonsterWalkMotion(monster, size)
 
       // 硬重置，避免上一只怪泄漏的 shadow/alpha 污染本帧
       ctx.shadowBlur = 0
       ctx.shadowColor = 'rgba(0,0,0,0)'
       ctx.globalAlpha = 1
 
-      // 脚下阴影
-      ctx.fillStyle = 'rgba(0,0,0,0.4)'
+      // 脚下阴影（随步伐缩放，更有落地感）
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
       ctx.beginPath()
+      const shadowW = size * 0.8 * motion.shadowScale
+      const shadowH = size * 0.3 * motion.shadowScale
       if (typeof ctx.ellipse === 'function') {
-        ctx.ellipse(monster.x, monster.y + size + 4, size * 0.8, size * 0.3, 0, 0, Math.PI * 2)
+        ctx.ellipse(monster.x + motion.sway * 0.3, monster.y + size + 4, shadowW, shadowH, 0, 0, Math.PI * 2)
       } else {
-        ctx.arc(monster.x, monster.y + size + 4, size * 0.55, 0, Math.PI * 2)
+        ctx.arc(monster.x, monster.y + size + 4, size * 0.55 * motion.shadowScale, 0, Math.PI * 2)
       }
       ctx.fill()
+
+      // 以脚底为轴做弹跳缩放，走路不那么僵
+      const footY = monster.y + size * 0.85
+      ctx.save()
+      ctx.translate(monster.x + motion.lean + motion.sway, footY + motion.bob)
+      ctx.scale(motion.squashX, motion.squashY)
+      ctx.translate(-(monster.x), -footY)
 
       if (useCompactMonster) {
         this.drawCompactMonster(ctx, monster, size, config)
@@ -121,6 +153,7 @@ module.exports = {
           this.drawBurningEffect(ctx, monster, size)
         }
       }
+      ctx.restore()
 
       // 绘制后再次硬重置，防止 Boss/特效状态泄漏到后续塔/路径
       ctx.shadowBlur = 0
@@ -401,14 +434,15 @@ module.exports = {
 
   drawMonsterByType(ctx, monster, size) {
     const config = MONSTER_TYPES[monster.type]
-    const bounce = Math.sin(monster.animFrame * 0.5) * 2
+    const phase = this.getMonsterAnimPhase(monster)
+    const bounce = Math.sin(phase) * 2
     
     switch (monster.type) {
       case 'slime':
-        // 史莱姆 - 果冻质感水滴体
-        const slimeSquash = Math.sin(monster.animFrame * 0.5)
-        const sw = size + slimeSquash * 2
-        const sh = size - slimeSquash * 1.5
+        // 史莱姆 - 果冻质感，轻微弹软即可
+        const slimeSquash = Math.sin(phase)
+        const sw = size + slimeSquash * 1.2
+        const sh = size - slimeSquash * 1.0
         
         // 身体 - 水滴形+渐变
         ctx.save()
@@ -495,8 +529,8 @@ module.exports = {
       
       case 'bat':
         // 蝙蝠 - 飞行的小怪
-        const batY = monster.y + Math.sin(monster.animFrame * 0.6) * 4
-        const wingFlap = Math.sin(monster.animFrame * 0.8) * 0.4
+        const batY = monster.y + Math.sin(phase) * 2.2
+        const wingFlap = Math.sin(phase * 1.4) * 0.28
         ctx.fillStyle = config.bodyColor
         // 身体
         ctx.beginPath()
@@ -570,8 +604,8 @@ module.exports = {
       case 'ghost':
         // 幽灵 - 半透明漂浮
         ctx.save()
-        ctx.globalAlpha = 0.7 + Math.sin(monster.animFrame * 0.3) * 0.2
-        const ghostY = monster.y + Math.sin(monster.animFrame * 0.4) * 3
+        ctx.globalAlpha = 0.7 + Math.sin(phase * 0.9) * 0.2
+        const ghostY = monster.y + Math.sin(phase * 1.1) * 3
         ctx.fillStyle = config.bodyColor
         ctx.beginPath()
         ctx.arc(monster.x, ghostY - 5, size, 0, Math.PI)
@@ -761,7 +795,7 @@ module.exports = {
         ctx.arc(monster.x + 7, monster.y - dragonSize * 0.35, 4, 0, Math.PI * 2)
         ctx.fill()
         // 鼻孔喷火
-        if (monster.animFrame % 2 === 0) {
+        if (Math.sin(phase * 2) > 0) {
           ctx.fillStyle = '#ff6600'
           ctx.beginPath()
           ctx.moveTo(monster.x - 3, monster.y - dragonSize * 0.1)
@@ -801,7 +835,7 @@ module.exports = {
         ctx.lineTo(monster.x + 2, monster.y + treantSize * 0.6)
         ctx.stroke()
         // 树冠
-        const leafSway = Math.sin(monster.animFrame * 0.3) * 2
+        const leafSway = Math.sin(phase * 0.9) * 2
         ctx.fillStyle = config.bodyColor
         ctx.beginPath()
         ctx.arc(monster.x + leafSway, monster.y - treantSize * 0.7, treantSize * 0.8, 0, Math.PI * 2)
@@ -833,7 +867,7 @@ module.exports = {
         // 树枝手臂
         ctx.strokeStyle = '#5a3520'
         ctx.lineWidth = 3
-        const armSway = Math.sin(monster.animFrame * 0.4) * 0.15
+        const armSway = Math.sin(phase * 1.1) * 0.15
         ctx.beginPath()
         ctx.moveTo(monster.x - treantSize * 0.6, monster.y)
         ctx.quadraticCurveTo(monster.x - treantSize * 1.2, monster.y - treantSize * 0.3 + armSway * 20, monster.x - treantSize * 1.0, monster.y + treantSize * 0.2)
@@ -859,7 +893,7 @@ module.exports = {
         // 巫妖 - Boss（去掉径向渐变光环，降低真机 Canvas 压力）
         const lichSize = size * 1.15
         // 飘动的斗篷身体
-        const lichFloat = Math.sin(monster.animFrame * 0.4) * 3
+        const lichFloat = Math.sin(phase * 1.1) * 3
         ctx.fillStyle = config.bodyColor
         ctx.beginPath()
         ctx.moveTo(monster.x - lichSize * 0.6, monster.y - lichSize * 0.3 + lichFloat)
@@ -942,7 +976,7 @@ module.exports = {
         ctx.lineWidth = 2.5
         ctx.stroke()
         // 翅膀 - 火焰状展开
-        const wingFlap2 = Math.sin(monster.animFrame * 0.6) * 0.3
+        const wingFlap2 = Math.sin(phase * 1.3) * 0.3
         ctx.fillStyle = '#ffaa00'
         // 左翅
         ctx.beginPath()
@@ -1007,7 +1041,7 @@ module.exports = {
         ctx.closePath()
         ctx.fill()
         // 尾巴火焰
-        const tailWave = Math.sin(monster.animFrame * 0.5) * 3
+        const tailWave = Math.sin(phase) * 3
         ctx.fillStyle = '#ff6600'
         ctx.beginPath()
         ctx.moveTo(monster.x, monster.y + phSize * 0.4)

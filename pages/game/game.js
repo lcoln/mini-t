@@ -1727,17 +1727,19 @@ Page(Object.assign({
       vineVulnerability: 0, // 藤蔓造成的易伤比例
       // 动画
       animFrame: 0,
-      animTimer: 0
+      animTimer: 0,
+      walkPhase: Math.random() * Math.PI * 2,
+      facing: 1
     })
   },
 
   updateMonsters() {
     this.monsters = this.monsters.filter(monster => {
-      // 动画计时
+      // 动画计时（兼容旧逻辑；主走路动画用 walkPhase）
       monster.animTimer++
-      if (monster.animTimer > 10) {
+      if (monster.animTimer > 5) {
         monster.animTimer = 0
-        monster.animFrame = (monster.animFrame + 1) % 4
+        monster.animFrame = (monster.animFrame + 1) % 8
       }
 
       // 生命回复（巨魔等坦克怪）
@@ -1812,10 +1814,17 @@ Page(Object.assign({
       
       if (dist < 5) {
         monster.pathIndex++
+        // 拐弯处几乎静止，只留很慢的呼吸感
+        monster.walkPhase = (monster.walkPhase || 0) + 0.03 * speedMod
       } else {
         const moveSpeed = monster.speed * speedMod * 1.5
         monster.x += (dx / dist) * moveSpeed
         monster.y += (dy / dist) * moveSpeed
+        if (Math.abs(dx) > 0.2) {
+          monster.facing = dx >= 0 ? 1 : -1
+        }
+        // 步频放慢：大约每移动一段路才完成一次起伏
+        monster.walkPhase = (monster.walkPhase || 0) + moveSpeed * 0.12
       }
       
       if (monster.hp <= 0) {
