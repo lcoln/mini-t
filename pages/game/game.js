@@ -1189,7 +1189,7 @@ Page(Object.assign({
 
   getCellPathInfo(row, col) {
     if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) {
-      return { dist: Infinity, t: 0 }
+      return { dist: Infinity, t: 0, side: 0 }
     }
     const offsetX = this.getGridOffsetX()
     const offsetY = this.getGridOffsetY()
@@ -1198,6 +1198,7 @@ Page(Object.assign({
     const cy = offsetY + row * cellSize + cellSize / 2
     let minD = Infinity
     let bestT = 0
+    let bestSide = 0
     let pathLen = 0
 
     for (let i = 0; i < this.pathPoints.length - 1; i++) {
@@ -1214,55 +1215,214 @@ Page(Object.assign({
         const lenSq = C * C + D * D
         const param = lenSq > 0 ? Math.max(0, Math.min(1, (A * C + B * D) / lenSq)) : 0
         bestT = pathLen + param * segLen
+        // 相对路径前进方向的左右侧（叉积符号）
+        const cross = A * D - B * C
+        bestSide = cross === 0 ? 0 : (cross > 0 ? 1 : -1)
       }
       pathLen += segLen
     }
-    return { dist: minD, t: bestT }
+    return { dist: minD, t: bestT, side: bestSide }
   },
 
-  // 沿路径两侧挑选塔位：不在路上、不离路太远、沿路线均匀分布
-  buildTowerSlotsAlongPath(targetCount = 18) {
+  getPathLength() {
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) return 0
+    let len = 0
+    for (let i = 0; i < this.pathPoints.length - 1; i++) {
+      const p1 = this.pathPoints[i]
+      const p2 = this.pathPoints[i + 1]
+      len += Math.hypot(p2.x - p1.x, p2.y - p1.y)
+    }
+    return len
+  },
+
+  // 沿路径法线两侧采样，再吸附到网格，保证贴路且双侧都有位
+  collectFlankSlotCandidates() {
+    const cellSize = CONFIG.cellSize
+    const pathHalf = this.getPathHalfWidth()
+    const offsetX = this.getGridOffsetX()
+    const offsetY = this.getGridOffsetY()
+    const idealOffset = pathHalf + cellSize * 0.58
+    const farOffset = pathHalf + cellSize * 0.95
+    const minDist = pathHalf + cellSize * 0.2
+    const maxDist = pathHalf + cellSize * 1.2
+    const byKey = new Map()
+
+    const upsert = (row, col, t, side, dist, prefer = 0) => {
+      if (row < 0 || row >= CONFIG.gridRows || col < 0 || col >= CONFIG.gridCols) return
+      if (this.isOnPath(row, col)) return
+      const info = this.getCellPathInfo(row, col)
+      if (info.dist < minDist || info.dist > maxDist) return
+      const key = `${row},${col}`
+      const score = prefer - Math.abs(info.dist - idealOffset) * 0.02
+      const prev = byKey.get(key)
+      if (!prev || score > prev.score) {
+        byKey.set(key, {
+          row,
+          col,
+          t: Number.isFinite(t) ? t : info.t,
+          side: side || info.side || 0,
+          dist: info.dist,
+          score
+        })
+      }
+    }
+
+    // 1) 沿路径按步长双侧抛点（主来源，保证不空）
+    let pathLen = 0
+    const step = Math.max(cellSize * 0.75, 18)
+    for (let i = 0; i < this.pathPoints.length - 1; i++) {
+      const p1 = this.pathPoints[i]
+      const p2 = this.pathPoints[i + 1]
+      const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+      if (segLen < 1) continue
+      const tx = (p2.x - p1.x) / segLen
+      const ty = (p2.y - p1.y) / segLen
+      const nx = -ty
+      const ny = tx
+      const samples = Math.max(1, Math.ceil(segLen / step))
+      for (let s = 0; s <= samples; s++) {
+        const param = s / samples
+        const x = p1.x + (p2.x - p1.x) * param
+        const y = p1.y + (p2.y - p1.y) * param
+        const t = pathLen + param * segLen
+        for (const side of [-1, 1]) {
+          for (const off of [idealOffset, farOffset]) {
+            const fx = x + nx * off * side
+            const fy = y + ny * off * side
+            const col = Math.floor((fx - offsetX) / cellSize)
+            const row = Math.floor((fy - offsetY) / cellSize)
+            upsert(row, col, t, side, off, side === -1 ? 0.01 : 0)
+            // 邻格也试一下，提高贴路边的命中率
+            upsert(row, col + side, t, side, off, -0.05)
+            upsert(row + (Math.abs(ty) > Math.abs(tx) ? side : 0), col, t, side, off, -0.05)
+          }
+        }
+      }
+      pathLen += segLen
+    }
+
+    // 2) 全图扫描补漏：只收紧在贴路甜区
+    for (let row = 0; row < CONFIG.gridRows; row++) {
+      for (let col = 0; col < CONFIG.gridCols; col++) {
+        const info = this.getCellPathInfo(row, col)
+        if (info.dist >= minDist && info.dist <= maxDist && info.side !== 0) {
+          upsert(row, col, info.t, info.side, info.dist, -0.1)
+        }
+      }
+    }
+
+    return {
+      candidates: Array.from(byKey.values()),
+      pathLen,
+      minDist,
+      maxDist,
+      idealOffset
+    }
+  },
+
+  // 沿路径两侧挑选塔位：贴路、双侧均衡、塔距不过近、整段不空
+  buildTowerSlotsAlongPath(targetCount = 20) {
     if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) {
       const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
       return (theme && theme.towerSlots) ? theme.towerSlots.map((s) => ({ row: s.row, col: s.col })) : []
     }
 
     const cellSize = CONFIG.cellSize
-    const pathHalf = this.getPathHalfWidth()
-    const minDist = pathHalf + cellSize * 0.28
-    const maxDist = pathHalf + cellSize * 1.05
+    const { candidates, pathLen, maxDist, idealOffset } = this.collectFlankSlotCandidates()
+    if (!candidates.length) {
+      const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
+      return (theme && theme.towerSlots) ? theme.towerSlots.map((s) => ({ row: s.row, col: s.col })) : []
+    }
 
-    const candidates = []
-    for (let row = 0; row < CONFIG.gridRows; row++) {
-      for (let col = 0; col < CONFIG.gridCols; col++) {
-        const info = this.getCellPathInfo(row, col)
-        if (info.dist >= minDist && info.dist <= maxDist) {
-          candidates.push({ row, col, dist: info.dist, t: info.t })
+    const minChebyshev = 2 // 至少隔一格，避免塔挤在一起
+    const minPathGap = cellSize * 0.95
+    const tooClose = (a, b) => {
+      const gridDist = Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col))
+      if (gridDist < minChebyshev) return true
+      // 同侧更严格一点，避免单边扎堆
+      if (a.side && b.side && a.side === b.side && Math.abs(a.t - b.t) < minPathGap) return true
+      return Math.abs(a.t - b.t) < cellSize * 0.55 && gridDist < 3
+    }
+
+    const selected = []
+    const tryAdd = (c) => {
+      if (!c) return false
+      if (selected.some((s) => s.row === c.row && s.col === c.col)) return false
+      if (selected.some((s) => tooClose(s, c))) return false
+      selected.push(c)
+      return true
+    }
+
+    // 按路径进度分桶，每桶尽量左右各取 1 个 → 两边不空、全程有覆盖
+    const bucketCount = Math.max(6, Math.min(12, Math.round(pathLen / (cellSize * 2.2))))
+    const buckets = Array.from({ length: bucketCount }, () => ({ left: [], right: [] }))
+    candidates.forEach((c) => {
+      const idx = pathLen <= 0
+        ? 0
+        : Math.min(bucketCount - 1, Math.max(0, Math.floor((c.t / pathLen) * bucketCount)))
+      const score = c.score - Math.abs(c.dist - idealOffset) * 0.01
+      const item = { ...c, score }
+      if (c.side < 0) buckets[idx].left.push(item)
+      else buckets[idx].right.push(item)
+    })
+    buckets.forEach((b) => {
+      b.left.sort((a, c) => c.score - a.score)
+      b.right.sort((a, c) => c.score - a.score)
+    })
+
+    // 第一轮：交错取左右，保证双侧与全程
+    for (let i = 0; i < bucketCount && selected.length < targetCount; i++) {
+      const preferLeftFirst = i % 2 === 0
+      const order = preferLeftFirst
+        ? [buckets[i].left, buckets[i].right]
+        : [buckets[i].right, buckets[i].left]
+      order.forEach((list) => {
+        if (selected.length >= targetCount) return
+        for (let k = 0; k < list.length; k++) {
+          if (tryAdd(list[k])) break
+        }
+      })
+    }
+
+    // 第二轮：补空桶（仍空的一侧）
+    for (let i = 0; i < bucketCount && selected.length < targetCount; i++) {
+      const hasLeft = selected.some((s) => {
+        const idx = pathLen <= 0 ? 0 : Math.min(bucketCount - 1, Math.floor((s.t / pathLen) * bucketCount))
+        return idx === i && s.side < 0
+      })
+      const hasRight = selected.some((s) => {
+        const idx = pathLen <= 0 ? 0 : Math.min(bucketCount - 1, Math.floor((s.t / pathLen) * bucketCount))
+        return idx === i && s.side > 0
+      })
+      if (!hasLeft) {
+        for (const c of buckets[i].left) {
+          if (tryAdd(c)) break
+        }
+      }
+      if (!hasRight && selected.length < targetCount) {
+        for (const c of buckets[i].right) {
+          if (tryAdd(c)) break
         }
       }
     }
 
-    candidates.sort((a, b) => a.t - b.t || a.dist - b.dist)
+    // 第三轮：按分数补满，间距始终保持
+    const leftovers = candidates
+      .slice()
+      .sort((a, b) => (b.score - Math.abs(b.dist - idealOffset)) - (a.score - Math.abs(a.dist - idealOffset)))
+    for (let i = 0; i < leftovers.length && selected.length < targetCount; i++) {
+      tryAdd(leftovers[i])
+    }
 
-    const selected = []
-    const tryPick = (minGridDist, minPathDist) => {
-      for (let i = 0; i < candidates.length && selected.length < targetCount; i++) {
-        const c = candidates[i]
+    // 若仍偏少，略微放宽同侧路径间距再补
+    if (selected.length < Math.floor(targetCount * 0.75)) {
+      const relaxed = (a, b) => Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col)) < 2
+      for (let i = 0; i < leftovers.length && selected.length < targetCount; i++) {
+        const c = leftovers[i]
         if (selected.some((s) => s.row === c.row && s.col === c.col)) continue
-        const crowded = selected.some((s) => {
-          const gridDist = Math.abs(s.row - c.row) + Math.abs(s.col - c.col)
-          return gridDist < minGridDist || Math.abs(s.t - c.t) < minPathDist
-        })
-        if (!crowded) selected.push(c)
+        if (selected.some((s) => relaxed(s, c))) continue
+        selected.push(c)
       }
-    }
-
-    tryPick(2, cellSize * 0.85)
-    if (selected.length < Math.floor(targetCount * 0.7)) {
-      tryPick(2, cellSize * 0.45)
-    }
-    if (selected.length < Math.floor(targetCount * 0.55)) {
-      tryPick(1, cellSize * 0.25)
     }
 
     // 布局重算时保留已有塔所占格（须仍贴路且不在路上）
@@ -1273,11 +1433,12 @@ Page(Object.assign({
         const info = this.getCellPathInfo(tower.row, tower.col)
         if (info.dist > maxDist) return
         if (!selected.some((s) => s.row === tower.row && s.col === tower.col)) {
-          selected.push({ row: tower.row, col: tower.col, dist: info.dist, t: info.t })
+          selected.push({ row: tower.row, col: tower.col, dist: info.dist, t: info.t, side: info.side })
         }
       })
     }
 
+    selected.sort((a, b) => a.t - b.t)
     return selected.map((s) => ({ row: s.row, col: s.col }))
   },
 
