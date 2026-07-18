@@ -87,7 +87,7 @@
         data-row="{{item.row}}"
         data-col="{{item.col}}"
         bindtap="handlePrepSlotTap"
-        style="left: {{item.left}}px; top: {{item.top}}px;"
+        style="left: {{item.left}}; top: {{item.top}};"
       ></view>
     </view>
   </view>

@@ -73,6 +73,9 @@ module.exports = {
     ctx.globalAlpha = alpha
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
+    // 真机 shadowBlur 既贵又会把塔尖光晕裁到 battle-banner 里，统一禁用
+    ctx.shadowBlur = 0 /* was:  0 */
+    ctx.shadowColor = 'rgba(0,0,0,0)'
     
     // 底座阴影
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
@@ -94,7 +97,8 @@ module.exports = {
     }
     
     // 等级标签
-    ctx.shadowBlur = 0
+    ctx.shadowBlur = 0 /* was:  0 */
+    ctx.shadowColor = 'rgba(0,0,0,0)'
     ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
     ctx.beginPath()
     drawRoundRect(ctx, x - 14, y + 12, 28, 14, 4)
@@ -111,7 +115,7 @@ module.exports = {
   _drawFireTower(ctx, x, y, config, level) {
     const lv = level || 1
     const scale = 0.9 + lv * 0.05
-    ctx.shadowBlur = 12 + lv * 4
+    ctx.shadowBlur = 0 /* was: 12 + lv * 4 */
     ctx.shadowColor = lv >= 4 ? '#ff2200' : '#ff4400'
 
     // 塔身 - 圆角石塔
@@ -191,7 +195,7 @@ module.exports = {
         ctx.stroke()
       }
       // 裂缝发光
-      ctx.shadowBlur = 8
+      ctx.shadowBlur = 0 /* was: 8 */
       ctx.shadowColor = lv >= 4 ? '#ff8800' : '#ff4400'
     }
 
@@ -202,7 +206,7 @@ module.exports = {
     const flameY = y + 10 - bh - 2
 
     // 外焰
-    ctx.shadowBlur = 20 + lv * 5
+    ctx.shadowBlur = 0 /* was: 20 + lv * 5 */
     ctx.shadowColor = lv >= 4 ? '#ff6600' : '#ff4400'
     const fg = ctx.createRadialGradient(x, flameY - flameH * 0.3 + flicker, 0, x, flameY, flameH)
     fg.addColorStop(0, lv >= 4 ? '#ffffff' : '#ffff66')
@@ -291,7 +295,7 @@ module.exports = {
   _drawIceTower(ctx, x, y, config, level) {
     const lv = level || 1
     const scale = 0.9 + lv * 0.05
-    ctx.shadowBlur = 10 + lv * 4
+    ctx.shadowBlur = 0 /* was: 10 + lv * 4 */
     ctx.shadowColor = lv >= 4 ? '#44eeff' : '#00aadd'
 
     // 基座 - 冰台
@@ -422,7 +426,7 @@ module.exports = {
   _drawNatureTower(ctx, x, y, config, level) {
     const lv = level || 1
     const scale = 0.9 + lv * 0.05
-    ctx.shadowBlur = 8 + lv * 3
+    ctx.shadowBlur = 0 /* was: 8 + lv * 3 */
     ctx.shadowColor = lv >= 4 ? '#44ff88' : '#22aa44'
 
     // 地面草丛 (lv2+)
@@ -677,7 +681,7 @@ module.exports = {
   _drawArcaneTower(ctx, x, y, config, level) {
     const lv = level || 1
     const scale = 0.9 + lv * 0.05
-    ctx.shadowBlur = 16 + lv * 4
+    ctx.shadowBlur = 0 /* was: 16 + lv * 4 */
     ctx.shadowColor = lv >= 4 ? '#cc66ff' : '#aa44ff'
 
     // 底座石柱
@@ -771,7 +775,7 @@ module.exports = {
     const lv = level || 1
     const scale = 0.9 + lv * 0.05
     // 随等级大幅提升亮度
-    ctx.shadowBlur = 4 + lv * 6
+    ctx.shadowBlur = 0 /* was: 4 + lv * 6 */
     ctx.shadowColor = lv >= 5 ? '#ffff88' : lv >= 4 ? '#ffff66' : lv >= 3 ? '#eeee44' : lv >= 2 ? '#dddd22' : '#888800'
 
     // 底座 - 金属基座，等级越高越亮
@@ -903,7 +907,7 @@ module.exports = {
     // 顶部能量球 - 高等级更大更亮，低等级小巧
     const topY = y + 3 - pillarH
     const orbR = (1.5 + lv * 0.8) * scale
-    ctx.shadowBlur = 10 + lv * 6
+    ctx.shadowBlur = 0 /* was: 10 + lv * 6 */
     ctx.shadowColor = lv >= 4 ? '#ffff88' : lv >= 2 ? '#ffff44' : '#cccc00'
     const orbG = ctx.createRadialGradient(x, topY, 0, x, topY, orbR)
     if (lv >= 5) {
@@ -1011,7 +1015,7 @@ module.exports = {
       ctx.strokeStyle = '#ffd700'
       ctx.lineWidth = 3
       ctx.setLineDash([8, 4])
-      ctx.shadowBlur = 10
+      ctx.shadowBlur = 0 /* was: 10 */
       ctx.shadowColor = '#ffd700'
       ctx.beginPath()
       ctx.moveTo(x, y)

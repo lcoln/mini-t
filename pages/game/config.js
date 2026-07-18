@@ -52,10 +52,11 @@ const PERFORMANCE_PROFILE_INTERVALS = {
   elevated: 80
 }
 const PERFORMANCE_PROFILE_HYSTERESIS = {
-  busyEnter: 52,
-  busyExit: 38,
-  intenseEnter: 94,
-  intenseExit: 72,
+  // 怪一多早点进 busy：只砍弹道/特效频率，不砍地图与外形
+  busyEnter: 40,
+  busyExit: 28,
+  intenseEnter: 88,
+  intenseExit: 64,
   // 保留字段兼容旧逻辑，但数值对齐普通档位，Boss 不再单独降画质
   bossBusyFloor: 52,
   bossIntenseEnter: 94,
@@ -185,7 +186,7 @@ const TOWER_ATTACK_SOUNDS = {
   lightning: { keys: ['lightningAttack', 'lightningAttackAlt'], cooldownKey: 'lightningAttack', levelBoost: 0.018 }
 }
 
-// 各档画质标志保持一致：压力升高只略降帧，不再抽稀草地/装饰或把怪塔压成圆点
+// 压力升高时：降帧 + 精简弹道/特效；地图装饰与怪/塔外形始终保留（不压成圆点、不抽稀草地）
 const PERFORMANCE_PROFILES = {
   relaxed: {
     renderInterval: 16,
@@ -203,34 +204,34 @@ const PERFORMANCE_PROFILES = {
     bossDamageTextCooldown: 0
   },
   busy: {
-    renderInterval: 22,
+    renderInterval: 30,
     simplifyTowers: false,
     simplifyMonsters: false,
     simplifyBosses: false,
-    simplifyProjectiles: false,
+    simplifyProjectiles: true,
     skipDecorations: false,
     decorStride: 1,
-    animatedDecorations: true,
-    effectRenderStride: 1,
-    projectileTrailPoints: 5,
-    damageTextStride: 1,
+    animatedDecorations: false,
+    effectRenderStride: 2,
+    projectileTrailPoints: 2,
+    damageTextStride: 2,
     compactBossHp: false,
-    bossDamageTextCooldown: 0
+    bossDamageTextCooldown: 60
   },
   intense: {
-    renderInterval: 28,
+    renderInterval: 42,
     simplifyTowers: false,
     simplifyMonsters: false,
     simplifyBosses: false,
-    simplifyProjectiles: false,
+    simplifyProjectiles: true,
     skipDecorations: false,
     decorStride: 1,
-    animatedDecorations: true,
-    effectRenderStride: 1,
-    projectileTrailPoints: 5,
-    damageTextStride: 1,
-    compactBossHp: false,
-    bossDamageTextCooldown: 0
+    animatedDecorations: false,
+    effectRenderStride: 3,
+    projectileTrailPoints: 1,
+    damageTextStride: 3,
+    compactBossHp: true,
+    bossDamageTextCooldown: 100
   }
 }
 

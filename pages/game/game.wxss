@@ -12,6 +12,7 @@
 .status-bar {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   padding: 15rpx 20rpx;
   background: linear-gradient(180deg, rgba(30, 60, 30, 0.95) 0%, rgba(15, 30, 15, 0.9) 100%);
   border-bottom: 3rpx solid rgba(80, 255, 80, 0.4);
@@ -21,8 +22,9 @@
 .battle-banner {
   display: flex;
   align-items: center;
-  gap: 14rpx;
-  padding: 10rpx 18rpx 14rpx;
+  flex-shrink: 0;
+  gap: 10rpx;
+  padding: 6rpx 14rpx 8rpx;
   background: linear-gradient(180deg, rgba(10, 22, 10, 0.92) 0%, rgba(6, 14, 6, 0.85) 100%);
   border-bottom: 2rpx solid rgba(80, 255, 80, 0.16);
 }
@@ -122,17 +124,20 @@
   background: rgba(80, 255, 80, 0.3);
 }
 
-/* 游戏Canvas */
+/* 游戏Canvas：只占状态栏/banner 与仓库之间的剩余空间，避免仓库叠到地图上 */
 .battlefield-wrap {
   position: relative;
   width: 100%;
-  height: 320px;
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
   overflow: hidden;
 }
 
 .battlefield-wrap.prep-mode {
-  height: 320px;
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
 }
 
 .game-canvas {
@@ -205,6 +210,7 @@
 
 /* 底部仓库区域 */
 .inventory-area {
+  flex-shrink: 0;
   background: linear-gradient(0deg, rgba(5, 15, 5, 0.98) 0%, rgba(20, 40, 20, 0.95) 100%);
   border-top: 3rpx solid rgba(80, 255, 80, 0.5);
   padding: 8rpx 10rpx 15rpx;
@@ -618,6 +624,7 @@
 
 /* 战前准备 */
 .prep-hud {
+  flex-shrink: 0;
   padding: 16rpx 18rpx 14rpx;
   background: linear-gradient(180deg, rgba(14, 34, 14, 0.96) 0%, rgba(8, 20, 8, 0.92) 100%);
   border-bottom: 2rpx solid rgba(80, 255, 80, 0.16);

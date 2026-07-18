@@ -200,62 +200,142 @@ Page(Object.assign({
   },
 
   onUnload() {
+    if (this._prepLayoutSyncTimer) {
+      clearTimeout(this._prepLayoutSyncTimer)
+      this._prepLayoutSyncTimer = null
+    }
     this.stopGame()
   },
 
   initCanvas() {
-    const query = wx.createSelectorQuery()
-    query.select('#gameCanvas')
-      .fields({ node: true, size: true })
-      .exec((res) => {
-        if (!res[0]) return
-        
-        const canvas = res[0].node
-        const ctx = canvas.getContext('2d')
-        
-        const systemInfo = wx.getWindowInfo()
-        const dpr = systemInfo.pixelRatio || 2
-        this.windowWidth = systemInfo.windowWidth || 375
-        canvas.width = res[0].width * dpr
-        canvas.height = res[0].height * dpr
-        ctx.scale(dpr, dpr)
-        
-        this.canvas = canvas
-        this.ctx = ctx
-        this.updateCanvasMetrics(res[0].width, res[0].height)
-        this.refreshCanvasRect()
-        this.refreshInventoryRect()
-        
-        this.initGame()
-        this.startGame()
-      })
+    // 等 flex 布局完成后再量尺寸，否则 height 可能是 0/旧值
+    wx.nextTick(() => {
+      wx.createSelectorQuery()
+        .select('#gameCanvas')
+        .fields({ node: true, size: true })
+        .exec((res) => {
+          if (!res[0] || !res[0].node) return
+
+          const canvas = res[0].node
+          const ctx = canvas.getContext('2d')
+
+          const systemInfo = wx.getWindowInfo()
+          const dpr = systemInfo.pixelRatio || 2
+          this.windowWidth = systemInfo.windowWidth || 375
+          this._canvasDpr = dpr
+          canvas.width = res[0].width * dpr
+          canvas.height = res[0].height * dpr
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+          this.canvas = canvas
+          this.ctx = ctx
+          this.updateCanvasMetrics(res[0].width, res[0].height)
+          this.refreshCanvasRect()
+          this.refreshInventoryRect()
+
+          this.initGame()
+          this.startGame()
+        })
+    })
+  },
+
+  // flex 高度变化后重绑 canvas，并刷新路径/准备塔位（prep 圈与路径必须同一套坐标）
+  remeasureCanvasLayout() {
+    wx.nextTick(() => {
+      wx.createSelectorQuery()
+        .select('#gameCanvas')
+        .fields({ node: true, size: true })
+        .exec((res) => {
+          if (!res || !res[0] || !res[0].node || !this.ctx) return
+          const width = res[0].width
+          const height = res[0].height
+          if (!Number.isFinite(width) || !Number.isFinite(height) || height < 8) return
+
+          const dpr = this._canvasDpr || (wx.getWindowInfo().pixelRatio || 2)
+          const sameSize =
+            Math.abs(width - (CONFIG.canvasWidth || 0)) < 1 &&
+            Math.abs(height - (CONFIG.canvasHeight || 0)) < 1
+          if (!sameSize) {
+            const canvas = res[0].node
+            canvas.width = width * dpr
+            canvas.height = height * dpr
+            this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            this.canvas = canvas
+            this.updateCanvasMetrics(width, height)
+          } else {
+            // 尺寸未变也重同步塔位：避免 init 时量到旧高度导致圈落在路上
+            this.generatePath(this.data.currentTheme || 'forest')
+            this.rebuildGridFromTowers()
+            this.syncPrepTowerSlots(this.data.currentTheme || 'forest')
+            this.requestRender()
+          }
+          this.refreshCanvasRect()
+        })
+    })
+  },
+
+  // prep-hud 较大，首帧布局常未完成；延迟再测一两次
+  schedulePrepLayoutSync() {
+    this.remeasureCanvasLayout()
+    if (this._prepLayoutSyncTimer) {
+      clearTimeout(this._prepLayoutSyncTimer)
+    }
+    this._prepLayoutSyncTimer = setTimeout(() => {
+      this._prepLayoutSyncTimer = null
+      this.remeasureCanvasLayout()
+    }, 120)
+  },
+
+  getGridOffsetX() {
+    return Number.isFinite(this._gridOffsetX) ? this._gridOffsetX : (this.data.gridOffsetX || 0)
+  },
+
+  getGridOffsetY() {
+    return Number.isFinite(this._gridOffsetY) ? this._gridOffsetY : (this.data.gridOffsetY || 0)
   },
 
   updateCanvasMetrics(width, height) {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 8 || height < 8) {
+      return
+    }
+
     CONFIG.canvasWidth = width
     CONFIG.canvasHeight = height
 
-    const horizontalPadding = 0  // 减水平 padding 让 cellSize 突破 31px 限制、塔不压扁（iPhone 16 Pro 水平方向 375/11=31 太挤）
-    const verticalPadding = 50  // 顶部留 50px 给顶部 HUD（关卡/波次/状态栏），避免 row 0 塔位塔身/Lv.标签挡住状态栏
-    CONFIG.cellSize = Math.max(34, Math.floor(Math.min(
-      (CONFIG.canvasWidth - horizontalPadding * 2) / CONFIG.gridCols,
-      (CONFIG.canvasHeight - verticalPadding * 2) / CONFIG.gridRows
-    )))
+    // 上下留白给塔尖/塔座；整块网格必须落在 canvas 内，绝不能伸进仓库区域
+    const topInset = 20
+    const bottomInset = 36
+    const maxCellByWidth = Math.floor(CONFIG.canvasWidth / CONFIG.gridCols)
+    const maxCellByHeight = Math.floor(
+      (CONFIG.canvasHeight - topInset - bottomInset) / CONFIG.gridRows
+    )
+    CONFIG.cellSize = Math.max(1, Math.min(34, maxCellByWidth, maxCellByHeight))
 
     const gridWidth = CONFIG.gridCols * CONFIG.cellSize
     const gridHeight = CONFIG.gridRows * CONFIG.cellSize
-    this.setData({
-      gridOffsetX: (CONFIG.canvasWidth - gridWidth) / 2,
-      gridOffsetY: (CONFIG.canvasHeight - gridHeight) / 2
-    }, () => {
-      // setData 是异步的——回调里 gridOffsetX/Y 才真正更新到 this.data
-      // initGame 在 setData 之后同步执行，用的还是旧 offset，导致 pathPoints / prepTowerSlots 位置全部偏移
-      // 这里必须重新生成路径 + 塔位，否则开发者工具里圈完全错位/不可见
-      if (Array.isArray(this.pathPoints) && this.pathPoints.length >= 2) {
-        this.generatePath(this.data.currentTheme)
-      }
+    const gridOffsetX = Math.max(0, Math.floor((CONFIG.canvasWidth - gridWidth) / 2))
+    const availableY = CONFIG.canvasHeight - topInset - bottomInset
+    const gridOffsetY = topInset + Math.max(0, Math.floor((availableY - gridHeight) / 2))
+
+    // 同步写入，避免 setData 异步期间读到旧 offset
+    this._gridOffsetX = gridOffsetX
+    this._gridOffsetY = gridOffsetY
+    this.data.gridOffsetX = gridOffsetX
+    this.data.gridOffsetY = gridOffsetY
+
+    // 立即按新尺寸重建路径/塔位（勿等 setData，否则 prep 圈会短暂错位到路上）
+    const themeKey = this.data.currentTheme || 'forest'
+    this.generatePath(themeKey)
+    if (Array.isArray(this.grid) && this.grid.length === CONFIG.gridRows) {
+      this.rebuildGridFromTowers()
+      this.syncPrepTowerSlots(themeKey)
+    }
+
+    this.setData({ gridOffsetX, gridOffsetY }, () => {
+      this.generatePath(themeKey)
       if (Array.isArray(this.grid) && this.grid.length === CONFIG.gridRows) {
-        this.syncPrepTowerSlots(this.data.currentTheme)
+        this.rebuildGridFromTowers()
+        this.syncPrepTowerSlots(themeKey)
       }
       this.requestRender()
     })
@@ -719,7 +799,6 @@ Page(Object.assign({
       fieldTowerCount: 0,
       canStartBattle: false,
       selectedInventoryIndex: -1,
-      prepTowerSlots: [],
       prepActionHint: '先选祝福',
       runBuffSummary: '未激活',
       nextSupplyWave: 3,
@@ -727,10 +806,13 @@ Page(Object.assign({
       waveChoiceTitle: '',
       waveChoiceOptions: [],
       summonCost: 20
+    }, () => {
+      this.syncPrepTowerSlots('forest')
+      this.refreshInventoryRect()
+      // prep-hud 渲染后中间区域高度会变，必须重测，否则 DOM 塔位与路径错位（圈落在路上、点了放不上）
+      this.schedulePrepLayoutSync()
+      this.requestRender()
     })
-    this.syncPrepTowerSlots('forest')
-    this.refreshInventoryRect()
-    this.requestRender()
   },
 
   createTowerData(type, blessingKey = this.data.selectedBlessingKey) {
@@ -986,7 +1068,7 @@ Page(Object.assign({
     // 此时算出的 left/top 全是 NaN，setData NaN 会被外层两次 catch 兜底到 []，导致玩家看不到任何圈
     // 修复：无效尺寸时直接 return，**保留** 上次 prepTowerSlots（不主动清空，避免"圈又没了"假象）
     if (!Number.isFinite(CONFIG.cellSize) || CONFIG.cellSize <= 0
-        || !Number.isFinite(this.data.gridOffsetX) || !Number.isFinite(this.data.gridOffsetY)) {
+        || !Number.isFinite(this.getGridOffsetX()) || !Number.isFinite(this.getGridOffsetY())) {
       return
     }
     // 关键：整个函数 try-catch 包裹，任何 setData NaN/undefined 异常都不能阻断 render——否则 fillRect 不画，canvas 完全空（"地图直接没了"）
@@ -996,20 +1078,27 @@ Page(Object.assign({
         this.setData({ prepTowerSlots: [] })
         return
       }
-      const ox = this.data.gridOffsetX || 0
-      const oy = this.data.gridOffsetY || 0
+      const ox = this.getGridOffsetX()
+      const oy = this.getGridOffsetY()
+      const canvasW = CONFIG.canvasWidth || 1
+      const canvasH = CONFIG.canvasHeight || 1
       // 过滤路径上的塔位——用 pointToSegmentDist 检查到路径「线段」的距离
       const hasPath = Array.isArray(this.pathPoints) && this.pathPoints.length >= 2
       const prepTowerSlots = theme.towerSlots
         .filter(slot => !hasPath || !this.isOnPath(slot.row, slot.col))
-        .map((slot) => ({
-          key: `${slot.row}-${slot.col}`,
-          row: slot.row,
-          col: slot.col,
-          left: ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
-          top: oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
-          occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
-        }))
+        .map((slot) => {
+          const x = ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
+          const y = oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2
+          // 用百分比定位：canvas CSS 被 flex 拉伸时，圈仍与路径对齐（绝对 px 会错位到路中间）
+          return {
+            key: `${slot.row}-${slot.col}`,
+            row: slot.row,
+            col: slot.col,
+            left: `${(x / canvasW) * 100}%`,
+            top: `${(y / canvasH) * 100}%`,
+            occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
+          }
+        })
       this.setData({ prepTowerSlots })
     } catch (error) {
       // fallback：保留所有塔位——绝对不能让 prep 圈消失，玩家需要圈来放塔
@@ -1017,16 +1106,22 @@ Page(Object.assign({
       try {
         const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
         if (theme && Array.isArray(theme.towerSlots)) {
-          const ox = this.data.gridOffsetX || 0
-          const oy = this.data.gridOffsetY || 0
-          const prepTowerSlots = theme.towerSlots.map((slot) => ({
-            key: `${slot.row}-${slot.col}`,
-            row: slot.row,
-            col: slot.col,
-            left: ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2,
-            top: oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2,
-            occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
-          }))
+          const ox = this.getGridOffsetX()
+          const oy = this.getGridOffsetY()
+          const canvasW = CONFIG.canvasWidth || 1
+          const canvasH = CONFIG.canvasHeight || 1
+          const prepTowerSlots = theme.towerSlots.map((slot) => {
+            const x = ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
+            const y = oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2
+            return {
+              key: `${slot.row}-${slot.col}`,
+              row: slot.row,
+              col: slot.col,
+              left: `${(x / canvasW) * 100}%`,
+              top: `${(y / canvasH) * 100}%`,
+              occupied: !!(this.grid[slot.row] && this.grid[slot.row][slot.col])
+            }
+          })
           this.setData({ prepTowerSlots })
         } else {
           this.setData({ prepTowerSlots: [] })
@@ -1065,6 +1160,8 @@ Page(Object.assign({
       selectedBlessingName: blessing.name,
       selectedBlessingIcon: blessing.icon
     })
+    // 选祝福后 prep-hud 变矮，战场变高，需再同步塔位
+    this.schedulePrepLayoutSync()
   },
 
   handleInventorySlotTap(e) {
@@ -1156,7 +1253,8 @@ Page(Object.assign({
     this.applySelectedBlessing()
     this.lastSpawnTime = Date.now()
     this.setData({ gameState: 'playing' }, () => {
-      this.refreshCanvasRect()
+      // prep-hud 卸下后中间可用高度变化，重测以免底部仍按旧高度绘制被仓库挡住
+      this.remeasureCanvasLayout()
       this.refreshInventoryRect()
       this.requestRender()
     })
@@ -1208,8 +1306,8 @@ Page(Object.assign({
   },
 
   generatePath(themeKey = 'forest') {
-    const offsetX = this.data.gridOffsetX
-    const offsetY = this.data.gridOffsetY
+    const offsetX = this.getGridOffsetX()
+    const offsetY = this.getGridOffsetY()
     const cellSize = CONFIG.cellSize
     
     // 蜿蜒路径，利用更多空间，塔位在路两侧
@@ -1332,8 +1430,8 @@ Page(Object.assign({
 
     this.towers.forEach((tower) => {
       if (tower.row >= 0 && tower.row < CONFIG.gridRows && tower.col >= 0 && tower.col < CONFIG.gridCols) {
-        tower.x = this.data.gridOffsetX + tower.col * CONFIG.cellSize + CONFIG.cellSize / 2
-        tower.y = this.data.gridOffsetY + tower.row * CONFIG.cellSize + CONFIG.cellSize / 2
+        tower.x = this.getGridOffsetX() + tower.col * CONFIG.cellSize + CONFIG.cellSize / 2
+        tower.y = this.getGridOffsetY() + tower.row * CONFIG.cellSize + CONFIG.cellSize / 2
         this.grid[tower.row][tower.col] = tower
       }
     })
@@ -1455,8 +1553,8 @@ Page(Object.assign({
       })
     }
 
-    // 第1波（第一关开场）+ 每5波出Boss；不同关卡循环不同Boss
-    if (wave === 1 || wave % 5 === 0) {
+    // 每5波出Boss - 不同关卡不同Boss
+    if (wave % 5 === 0) {
       const bossTypes = ['dragon', 'treant', 'lich', 'phoenix']
       const bossType = bossTypes[(level - 1) % bossTypes.length]
       const bossConfig = MONSTER_TYPES[bossType]
@@ -1472,13 +1570,8 @@ Page(Object.assign({
       })
     }
 
-    // 随机打乱顺序；若本波有 Boss，固定移到队首，保证开场立刻出场
+    // 随机打乱顺序
     this.waveMonsters.sort(() => Math.random() - 0.5)
-    const bossIndex = this.waveMonsters.findIndex((m) => m.isBoss)
-    if (bossIndex > 0) {
-      const [boss] = this.waveMonsters.splice(bossIndex, 1)
-      this.waveMonsters.unshift(boss)
-    }
 
     this.spawnIndex = 0
     this.waveComplete = false
@@ -2991,8 +3084,8 @@ Page(Object.assign({
     if (this.data.gameState === 'prep') return
 
     const ctx = this.ctx
-    const offsetX = this.data.gridOffsetX
-    const offsetY = this.data.gridOffsetY
+    const offsetX = this.getGridOffsetX()
+    const offsetY = this.getGridOffsetY()
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
 
     theme.towerSlots.forEach(slot => {
@@ -3181,8 +3274,8 @@ Page(Object.assign({
 
 
   isOnPath(row, col) {
-    const offsetX = this.data.gridOffsetX
-    const offsetY = this.data.gridOffsetY
+    const offsetX = this.getGridOffsetX()
+    const offsetY = this.getGridOffsetY()
     const cellCenterX = offsetX + col * CONFIG.cellSize + CONFIG.cellSize / 2
     const cellCenterY = offsetY + row * CONFIG.cellSize + CONFIG.cellSize / 2
     
@@ -3508,8 +3601,8 @@ Page(Object.assign({
       return
     }
     
-    const offsetX = this.data.gridOffsetX
-    const offsetY = this.data.gridOffsetY
+    const offsetX = this.getGridOffsetX()
+    const offsetY = this.getGridOffsetY()
     
     if (this.mergeTarget) {
       // 合成操作
@@ -3686,8 +3779,8 @@ Page(Object.assign({
     const placedTower = {
       ...towerData,
       row, col,
-      x: this.data.gridOffsetX + col * CONFIG.cellSize + CONFIG.cellSize / 2,
-      y: this.data.gridOffsetY + row * CONFIG.cellSize + CONFIG.cellSize / 2,
+      x: this.getGridOffsetX() + col * CONFIG.cellSize + CONFIG.cellSize / 2,
+      y: this.getGridOffsetY() + row * CONFIG.cellSize + CONFIG.cellSize / 2,
       lastAttack: 0
     }
     
@@ -3954,8 +4047,8 @@ Page(Object.assign({
           ...t,
           row: t.relRow,
           col: t.relCol,
-          x: this.data.gridOffsetX + t.relCol * CONFIG.cellSize + CONFIG.cellSize / 2,
-          y: this.data.gridOffsetY + t.relRow * CONFIG.cellSize + CONFIG.cellSize / 2
+          x: this.getGridOffsetX() + t.relCol * CONFIG.cellSize + CONFIG.cellSize / 2,
+          y: this.getGridOffsetY() + t.relRow * CONFIG.cellSize + CONFIG.cellSize / 2
         }
         this.towers.push(newTower)
         this.grid[t.relRow][t.relCol] = newTower
