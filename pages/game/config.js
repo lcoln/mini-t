@@ -22,15 +22,15 @@ const CONFIG = {
 }
 
 const PERFORMANCE_LIMITS = {
-  particles: 110,
-  floatingTexts: 26,
-  lightningEffects: 70,
-  fireEffects: 90,
-  iceEffects: 60,
-  poisonEffects: 70,
-  arcaneEffects: 70,
-  mergeEffects: 24,
-  trailPoints: 5
+  particles: 70,
+  floatingTexts: 16,
+  lightningEffects: 40,
+  fireEffects: 50,
+  iceEffects: 36,
+  poisonEffects: 40,
+  arcaneEffects: 40,
+  mergeEffects: 16,
+  trailPoints: 4
 }
 
 const DRAG_UI_INTERVAL = 32
@@ -38,12 +38,13 @@ const IDLE_RENDER_INTERVAL = 120
 const MIN_SUMMON_COST = 10
 const DRAG_START_THRESHOLD = 10
 const FIELD_DRAG_PICK_RADIUS = 28
-const FIELD_MERGE_RADIUS = 58
+const FIELD_MERGE_RADIUS = 72
 const TOWER_SLOT_SNAP_RADIUS = 34
-const INVENTORY_HIT_TOLERANCE = 8
-const INVENTORY_MERGE_RADIUS = 22
-const INVENTORY_MERGE_COMMIT_RADIUS = 12
-const INVENTORY_MERGE_CORE_RATIO = 0.24
+const INVENTORY_HIT_TOLERANCE = 16
+// 仓库合并：放宽吸附/松手判定，避免怪多卡顿时对不齐
+const INVENTORY_MERGE_RADIUS = 48
+const INVENTORY_MERGE_COMMIT_RADIUS = 64
+const INVENTORY_MERGE_CORE_RATIO = 0.72
 // Boss 不再额外抬场景压力：出场不应切换 busy/intense，避免草地/弹道/特效被精简
 const BOSS_PRESSURE_BONUS = 0
 const BOSS_PROFILE_GRACE_MS = 520

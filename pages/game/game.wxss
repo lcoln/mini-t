@@ -85,6 +85,10 @@
   font-weight: bold;
   color: #fff;
   text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.5);
+  /* 固定占位，避免金币/分数位数变化把整栏挤动 → 地图跟着抖 */
+  min-width: 56rpx;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .status-label {

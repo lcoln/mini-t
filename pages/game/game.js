@@ -196,6 +196,7 @@ Page(Object.assign({
   },
 
   onHide() {
+    this.persistRunProgress({ immediate: true })
     this.stopGame()
   },
 
@@ -204,6 +205,7 @@ Page(Object.assign({
       clearTimeout(this._prepLayoutSyncTimer)
       this._prepLayoutSyncTimer = null
     }
+    this.persistRunProgress({ immediate: true })
     this.stopGame()
   },
 
@@ -233,7 +235,9 @@ Page(Object.assign({
           this.refreshCanvasRect()
           this.refreshInventoryRect()
 
-          this.initGame()
+          if (!this.tryRestoreRunProgress()) {
+            this.initGame()
+          }
           this.startGame()
         })
     })
@@ -252,9 +256,14 @@ Page(Object.assign({
           if (!Number.isFinite(width) || !Number.isFinite(height) || height < 8) return
 
           const dpr = this._canvasDpr || (wx.getWindowInfo().pixelRatio || 2)
-          const sameSize =
-            Math.abs(width - (CONFIG.canvasWidth || 0)) < 1 &&
-            Math.abs(height - (CONFIG.canvasHeight || 0)) < 1
+          const prevW = CONFIG.canvasWidth || 0
+          const prevH = CONFIG.canvasHeight || 0
+          const dw = Math.abs(width - prevW)
+          const dh = Math.abs(height - prevH)
+          // 游玩中忽略亚像素/布局抖动，避免整图重建造成地图晃动
+          const playing = this.data.gameState === 'playing'
+          const sizeTol = playing ? 8 : 1
+          const sameSize = dw < sizeTol && dh < sizeTol
           if (!sameSize) {
             const canvas = res[0].node
             canvas.width = width * dpr
@@ -262,9 +271,8 @@ Page(Object.assign({
             this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
             this.canvas = canvas
             this.updateCanvasMetrics(width, height)
-          } else {
-            // 尺寸未变也重同步塔位：避免 init 时量到旧高度导致圈落在路上
-            this.generatePath(this.data.currentTheme || 'forest')
+          } else if (this.data.gameState === 'prep') {
+            // 仅准备阶段、尺寸未变时轻量同步塔位圈，绝不重随机器装饰
             this.rebuildGridFromTowers()
             this.syncPrepTowerSlots(this.data.currentTheme || 'forest')
             this.requestRender()
@@ -299,23 +307,40 @@ Page(Object.assign({
       return
     }
 
-    CONFIG.canvasWidth = width
-    CONFIG.canvasHeight = height
-
     // 上下留白给塔尖/塔座；整块网格必须落在 canvas 内，绝不能伸进仓库区域
     const topInset = 20
     const bottomInset = 36
-    const maxCellByWidth = Math.floor(CONFIG.canvasWidth / CONFIG.gridCols)
+    const maxCellByWidth = Math.floor(width / CONFIG.gridCols)
     const maxCellByHeight = Math.floor(
-      (CONFIG.canvasHeight - topInset - bottomInset) / CONFIG.gridRows
+      (height - topInset - bottomInset) / CONFIG.gridRows
     )
-    CONFIG.cellSize = Math.max(1, Math.min(34, maxCellByWidth, maxCellByHeight))
+    const nextCellSize = Math.max(1, Math.min(34, maxCellByWidth, maxCellByHeight))
 
-    const gridWidth = CONFIG.gridCols * CONFIG.cellSize
-    const gridHeight = CONFIG.gridRows * CONFIG.cellSize
-    const gridOffsetX = Math.max(0, Math.floor((CONFIG.canvasWidth - gridWidth) / 2))
-    const availableY = CONFIG.canvasHeight - topInset - bottomInset
+    const gridWidth = CONFIG.gridCols * nextCellSize
+    const gridHeight = CONFIG.gridRows * nextCellSize
+    const gridOffsetX = Math.max(0, Math.floor((width - gridWidth) / 2))
+    const availableY = height - topInset - bottomInset
     const gridOffsetY = topInset + Math.max(0, Math.floor((availableY - gridHeight) / 2))
+
+    const prevW = CONFIG.canvasWidth || width
+    const prevH = CONFIG.canvasHeight || height
+    const prevCell = CONFIG.cellSize
+    const prevOx = this.getGridOffsetX()
+    const prevOy = this.getGridOffsetY()
+    const metricsUnchanged =
+      Math.abs(prevW - width) < 0.5 &&
+      Math.abs(prevH - height) < 0.5 &&
+      prevCell === nextCellSize &&
+      prevOx === gridOffsetX &&
+      prevOy === gridOffsetY
+
+    if (metricsUnchanged) {
+      return
+    }
+
+    CONFIG.canvasWidth = width
+    CONFIG.canvasHeight = height
+    CONFIG.cellSize = nextCellSize
 
     // 同步写入，避免 setData 异步期间读到旧 offset
     this._gridOffsetX = gridOffsetX
@@ -323,23 +348,63 @@ Page(Object.assign({
     this.data.gridOffsetX = gridOffsetX
     this.data.gridOffsetY = gridOffsetY
 
-    // 立即按新尺寸重建路径/塔位（勿等 setData，否则 prep 圈会短暂错位到路上）
     const themeKey = this.data.currentTheme || 'forest'
-    this.generatePath(themeKey)
+    const hasDressing = Array.isArray(this.grassDots) && this.grassDots.length > 0
+    const refreshDressing = !hasDressing
+    // 局中只重算路径几何并等比缩放装饰，避免随机重生成导致整图抖动
+    this.generatePath(themeKey, {
+      refreshDressing,
+      rebuildSlots: this.data.gameState === 'prep' || !Array.isArray(this.towerSlots) || !this.towerSlots.length,
+      relocateTowers: false
+    })
+    if (!refreshDressing) {
+      this.scaleBattlefieldDressing(prevW, prevH, width, height)
+    }
     if (Array.isArray(this.grid) && this.grid.length === CONFIG.gridRows) {
       this.rebuildGridFromTowers()
-      this.syncPrepTowerSlots(themeKey)
-    }
-
-    this.setData({ gridOffsetX, gridOffsetY }, () => {
-      this.generatePath(themeKey)
-      if (Array.isArray(this.grid) && this.grid.length === CONFIG.gridRows) {
-        this.rebuildGridFromTowers()
+      if (this.data.gameState === 'prep') {
         this.syncPrepTowerSlots(themeKey)
       }
-      this.requestRender()
-    })
+    }
+
+    // gridOffset 仅缓存给逻辑用，避免无意义 setData 触发视图层抖动
+    if (this.data.gridOffsetX !== gridOffsetX || this.data.gridOffsetY !== gridOffsetY) {
+      this.setData({ gridOffsetX, gridOffsetY })
+    }
     this.requestRender()
+  },
+
+  scaleBattlefieldDressing(prevW, prevH, nextW, nextH) {
+    if (!prevW || !prevH || (prevW === nextW && prevH === nextH)) return
+    const sx = nextW / prevW
+    const sy = nextH / prevH
+    if (!Number.isFinite(sx) || !Number.isFinite(sy)) return
+    if (Math.abs(sx - 1) < 0.001 && Math.abs(sy - 1) < 0.001) return
+
+    const scalePoint = (p) => {
+      if (!p) return
+      if (Number.isFinite(p.x)) p.x *= sx
+      if (Number.isFinite(p.y)) p.y *= sy
+    }
+
+    ;(this.grassDots || []).forEach(scalePoint)
+    ;(this.grassTufts || []).forEach(scalePoint)
+    ;(this.mapDecorations || []).forEach(scalePoint)
+
+    // 局中实体随画布缩放，避免怪/弹道停在旧坐标系里“跳一下”
+    ;(this.monsters || []).forEach(scalePoint)
+    ;(this.projectiles || []).forEach((p) => {
+      scalePoint(p)
+      if (Array.isArray(p.trail)) p.trail.forEach(scalePoint)
+    })
+    ;(this.particles || []).forEach(scalePoint)
+    ;(this.floatingTexts || []).forEach(scalePoint)
+    ;(this.lightningEffects || []).forEach(scalePoint)
+    ;(this.fireEffects || []).forEach(scalePoint)
+    ;(this.iceEffects || []).forEach(scalePoint)
+    ;(this.poisonEffects || []).forEach(scalePoint)
+    ;(this.arcaneEffects || []).forEach(scalePoint)
+    ;(this.mergeEffects || []).forEach(scalePoint)
   },
 
   requestRender() {
@@ -351,17 +416,23 @@ Page(Object.assign({
       wx.createSelectorQuery().select('#gameCanvas').boundingClientRect((rect) => {
         if (!rect) return
         this.cachedCanvasRect = rect
-        this.setData({ canvasRect: rect })
+        // 仅缓存，不 setData，避免拖拽/重测时视图层跟着抖
       }).exec()
     })
   },
 
   refreshInventoryRect() {
     wx.nextTick(() => {
-      wx.createSelectorQuery().select('.inventory-grid').boundingClientRect((rect) => {
-        if (!rect) return
-        this.inventoryRect = rect
-      }).exec()
+      wx.createSelectorQuery()
+        .select('.inventory-grid')
+        .boundingClientRect()
+        .selectAll('.inventory-slot')
+        .boundingClientRect()
+        .exec((res) => {
+          if (!res) return
+          if (res[0]) this.inventoryRect = res[0]
+          if (Array.isArray(res[1])) this.inventorySlotRects = res[1]
+        })
     })
   },
 
@@ -385,34 +456,68 @@ Page(Object.assign({
     this[queueName].splice(0, this[queueName].length - limit)
   },
 
+  getDynamicEffectLimits() {
+    const monsterCount = this.monsters ? this.monsters.length : 0
+    const profileKey = this.performanceProfileKey || 'relaxed'
+    let scale = 1
+    if (profileKey === 'busy' || monsterCount >= 22) scale = 0.55
+    if (profileKey === 'intense' || monsterCount >= 40) scale = 0.35
+    const scaleLimit = (n) => Math.max(8, Math.floor(n * scale))
+    return {
+      particles: scaleLimit(PERFORMANCE_LIMITS.particles),
+      floatingTexts: scaleLimit(PERFORMANCE_LIMITS.floatingTexts),
+      lightningEffects: scaleLimit(PERFORMANCE_LIMITS.lightningEffects),
+      fireEffects: scaleLimit(PERFORMANCE_LIMITS.fireEffects),
+      iceEffects: scaleLimit(PERFORMANCE_LIMITS.iceEffects),
+      poisonEffects: scaleLimit(PERFORMANCE_LIMITS.poisonEffects),
+      arcaneEffects: scaleLimit(PERFORMANCE_LIMITS.arcaneEffects),
+      mergeEffects: scaleLimit(PERFORMANCE_LIMITS.mergeEffects)
+    }
+  },
+
   enforcePerformanceCaps() {
-    this.trimEffectQueue('particles', PERFORMANCE_LIMITS.particles)
-    this.trimEffectQueue('floatingTexts', PERFORMANCE_LIMITS.floatingTexts)
-    this.trimEffectQueue('lightningEffects', PERFORMANCE_LIMITS.lightningEffects)
-    this.trimEffectQueue('fireEffects', PERFORMANCE_LIMITS.fireEffects)
-    this.trimEffectQueue('iceEffects', PERFORMANCE_LIMITS.iceEffects)
-    this.trimEffectQueue('poisonEffects', PERFORMANCE_LIMITS.poisonEffects)
-    this.trimEffectQueue('arcaneEffects', PERFORMANCE_LIMITS.arcaneEffects)
-    this.trimEffectQueue('mergeEffects', PERFORMANCE_LIMITS.mergeEffects)
+    const particlesBefore = this.particles ? this.particles.length : 0
+    const projectilesBefore = this.projectiles ? this.projectiles.length : 0
+    const limits = this.getDynamicEffectLimits()
+
+    this.trimEffectQueue('particles', limits.particles)
+    this.trimEffectQueue('floatingTexts', limits.floatingTexts)
+    this.trimEffectQueue('lightningEffects', limits.lightningEffects)
+    this.trimEffectQueue('fireEffects', limits.fireEffects)
+    this.trimEffectQueue('iceEffects', limits.iceEffects)
+    this.trimEffectQueue('poisonEffects', limits.poisonEffects)
+    this.trimEffectQueue('arcaneEffects', limits.arcaneEffects)
+    this.trimEffectQueue('mergeEffects', limits.mergeEffects)
 
     const trailLimit = this.getProjectileTrailLimit()
     this.projectiles.forEach((proj) => {
-      if (proj.trail.length > trailLimit) {
+      if (proj.trail && proj.trail.length > trailLimit) {
         proj.trail.splice(0, proj.trail.length - trailLimit)
       }
     })
 
     // 防御性硬上限：防止后期/Boss 波弹丸与怪物瞬时堆积把堆冲爆
-    const MAX_PROJECTILES_HARD = 180
+    const MAX_PROJECTILES_HARD = this.performanceProfileKey === 'intense' ? 90 : 140
     if (this.projectiles.length > MAX_PROJECTILES_HARD) {
       this.projectiles.splice(0, this.projectiles.length - MAX_PROJECTILES_HARD)
     }
-    const MAX_MONSTERS_HARD = 80
+    const MAX_MONSTERS_HARD = 56
     if (this.monsters.length > MAX_MONSTERS_HARD) {
       this.monsters.splice(0, this.monsters.length - MAX_MONSTERS_HARD)
     }
-    // 主动提示 V8 立即 GC 释放被 trim 掉的对象
-    if (typeof wx !== 'undefined' && typeof wx.triggerGC === 'function') {
+
+    // 禁止每帧 triggerGC（会造成明显卡顿/画面抖动）；仅在大量裁剪后且限频调用
+    const trimmedHard =
+      particlesBefore - (this.particles ? this.particles.length : 0) > 40 ||
+      projectilesBefore - (this.projectiles ? this.projectiles.length : 0) > 40
+    const now = Date.now()
+    if (
+      trimmedHard &&
+      typeof wx !== 'undefined' &&
+      typeof wx.triggerGC === 'function' &&
+      now - (this.lastTriggerGcAt || 0) > 8000
+    ) {
+      this.lastTriggerGcAt = now
       try { wx.triggerGC() } catch (e) {}
     }
   },
@@ -485,6 +590,12 @@ Page(Object.assign({
     }
     if (merged.gold) {
       patch.gold = Math.max(0, this.data.gold + merged.gold)
+    }
+    if (merged.score) {
+      patch.score = Math.max(0, this.data.score + merged.score)
+    }
+    if (merged.lives) {
+      patch.lives = Math.max(0, this.data.lives + merged.lives)
     }
 
     if (Object.keys(patch).length) {
@@ -1063,6 +1174,113 @@ Page(Object.assign({
     this.syncPrepTowerSlots()
   },
 
+  getPathHalfWidth() {
+    // 与 drawPath 最外层线宽 30 对齐
+    return 15
+  },
+
+  getTowerSlots() {
+    if (Array.isArray(this.towerSlots) && this.towerSlots.length > 0) {
+      return this.towerSlots
+    }
+    const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
+    return (theme && theme.towerSlots) || []
+  },
+
+  getCellPathInfo(row, col) {
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) {
+      return { dist: Infinity, t: 0 }
+    }
+    const offsetX = this.getGridOffsetX()
+    const offsetY = this.getGridOffsetY()
+    const cellSize = CONFIG.cellSize
+    const cx = offsetX + col * cellSize + cellSize / 2
+    const cy = offsetY + row * cellSize + cellSize / 2
+    let minD = Infinity
+    let bestT = 0
+    let pathLen = 0
+
+    for (let i = 0; i < this.pathPoints.length - 1; i++) {
+      const p1 = this.pathPoints[i]
+      const p2 = this.pathPoints[i + 1]
+      const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+      const dist = this.pointToSegmentDist(cx, cy, p1.x, p1.y, p2.x, p2.y)
+      if (dist < minD) {
+        minD = dist
+        const A = cx - p1.x
+        const B = cy - p1.y
+        const C = p2.x - p1.x
+        const D = p2.y - p1.y
+        const lenSq = C * C + D * D
+        const param = lenSq > 0 ? Math.max(0, Math.min(1, (A * C + B * D) / lenSq)) : 0
+        bestT = pathLen + param * segLen
+      }
+      pathLen += segLen
+    }
+    return { dist: minD, t: bestT }
+  },
+
+  // 沿路径两侧挑选塔位：不在路上、不离路太远、沿路线均匀分布
+  buildTowerSlotsAlongPath(targetCount = 18) {
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) {
+      const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
+      return (theme && theme.towerSlots) ? theme.towerSlots.map((s) => ({ row: s.row, col: s.col })) : []
+    }
+
+    const cellSize = CONFIG.cellSize
+    const pathHalf = this.getPathHalfWidth()
+    const minDist = pathHalf + cellSize * 0.28
+    const maxDist = pathHalf + cellSize * 1.05
+
+    const candidates = []
+    for (let row = 0; row < CONFIG.gridRows; row++) {
+      for (let col = 0; col < CONFIG.gridCols; col++) {
+        const info = this.getCellPathInfo(row, col)
+        if (info.dist >= minDist && info.dist <= maxDist) {
+          candidates.push({ row, col, dist: info.dist, t: info.t })
+        }
+      }
+    }
+
+    candidates.sort((a, b) => a.t - b.t || a.dist - b.dist)
+
+    const selected = []
+    const tryPick = (minGridDist, minPathDist) => {
+      for (let i = 0; i < candidates.length && selected.length < targetCount; i++) {
+        const c = candidates[i]
+        if (selected.some((s) => s.row === c.row && s.col === c.col)) continue
+        const crowded = selected.some((s) => {
+          const gridDist = Math.abs(s.row - c.row) + Math.abs(s.col - c.col)
+          return gridDist < minGridDist || Math.abs(s.t - c.t) < minPathDist
+        })
+        if (!crowded) selected.push(c)
+      }
+    }
+
+    tryPick(2, cellSize * 0.85)
+    if (selected.length < Math.floor(targetCount * 0.7)) {
+      tryPick(2, cellSize * 0.45)
+    }
+    if (selected.length < Math.floor(targetCount * 0.55)) {
+      tryPick(1, cellSize * 0.25)
+    }
+
+    // 布局重算时保留已有塔所占格（须仍贴路且不在路上）
+    if (Array.isArray(this.towers)) {
+      this.towers.forEach((tower) => {
+        if (tower.row == null || tower.col == null) return
+        if (this.isOnPath(tower.row, tower.col)) return
+        const info = this.getCellPathInfo(tower.row, tower.col)
+        if (info.dist > maxDist) return
+        if (!selected.some((s) => s.row === tower.row && s.col === tower.col)) {
+          selected.push({ row: tower.row, col: tower.col, dist: info.dist, t: info.t })
+        }
+      })
+    }
+
+    return selected.map((s) => ({ row: s.row, col: s.col }))
+  },
+
   syncPrepTowerSlots(themeKey = this.data.currentTheme) {
     // 防御：开发者工具模拟器偶发 canvas res width/height=0 → CONFIG.cellSize / gridOffsetX/Y 变成 NaN
     // 此时算出的 left/top 全是 NaN，setData NaN 会被外层两次 catch 兜底到 []，导致玩家看不到任何圈
@@ -1073,8 +1291,8 @@ Page(Object.assign({
     }
     // 关键：整个函数 try-catch 包裹，任何 setData NaN/undefined 异常都不能阻断 render——否则 fillRect 不画，canvas 完全空（"地图直接没了"）
     try {
-      const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
-      if (!theme || !Array.isArray(theme.towerSlots)) {
+      const slots = this.getTowerSlots()
+      if (!slots.length) {
         this.setData({ prepTowerSlots: [] })
         return
       }
@@ -1082,9 +1300,8 @@ Page(Object.assign({
       const oy = this.getGridOffsetY()
       const canvasW = CONFIG.canvasWidth || 1
       const canvasH = CONFIG.canvasHeight || 1
-      // 过滤路径上的塔位——用 pointToSegmentDist 检查到路径「线段」的距离
       const hasPath = Array.isArray(this.pathPoints) && this.pathPoints.length >= 2
-      const prepTowerSlots = theme.towerSlots
+      const prepTowerSlots = slots
         .filter(slot => !hasPath || !this.isOnPath(slot.row, slot.col))
         .map((slot) => {
           const x = ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
@@ -1104,13 +1321,13 @@ Page(Object.assign({
       // fallback：保留所有塔位——绝对不能让 prep 圈消失，玩家需要圈来放塔
       console.warn('syncPrepTowerSlots failed, fallback to all slots', (error && error.stack) || error)
       try {
-        const theme = MAP_THEMES[themeKey] || MAP_THEMES.forest
-        if (theme && Array.isArray(theme.towerSlots)) {
+        const slots = this.getTowerSlots()
+        if (slots.length) {
           const ox = this.getGridOffsetX()
           const oy = this.getGridOffsetY()
           const canvasW = CONFIG.canvasWidth || 1
           const canvasH = CONFIG.canvasHeight || 1
-          const prepTowerSlots = theme.towerSlots.map((slot) => {
+          const prepTowerSlots = slots.map((slot) => {
             const x = ox + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
             const y = oy + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2
             return {
@@ -1305,7 +1522,12 @@ Page(Object.assign({
     })
   },
 
-  generatePath(themeKey = 'forest') {
+  generatePath(themeKey = 'forest', options = {}) {
+    const {
+      refreshDressing = true,
+      rebuildSlots = true,
+      relocateTowers = true
+    } = options
     const offsetX = this.getGridOffsetX()
     const offsetY = this.getGridOffsetY()
     const cellSize = CONFIG.cellSize
@@ -1374,26 +1596,22 @@ Page(Object.assign({
     }
     
     this.pathPoints = pathLayouts[themeKey] || pathLayouts.forest
-    
-    // 预生成路径装饰（小石子）
-    this.pathDecorations = []
-    for (let i = 0; i < this.pathPoints.length - 1; i++) {
-      const p1 = this.pathPoints[i]
-      const p2 = this.pathPoints[i + 1]
-      const dist = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
-      const stoneCount = Math.floor(dist / 15)
-      
-      for (let j = 0; j < stoneCount; j++) {
-        const t = j / stoneCount
-        this.pathDecorations.push({
-          x: p1.x + (p2.x - p1.x) * t + (Math.random() - 0.5) * 18,
-          y: p1.y + (p2.y - p1.y) * t + (Math.random() - 0.5) * 18,
-          size: 1 + Math.random() * 2.5
-        })
-      }
+
+    if (rebuildSlots) {
+      // 按当前路径重新生成两侧塔位（避免各主题硬编码与路线错位）
+      this.towerSlots = this.buildTowerSlotsAlongPath()
+    }
+    if (relocateTowers) {
+      this.relocateInvalidTowers()
+    }
+
+    if (!refreshDressing) {
+      // 仅路径几何更新：路径石子跟新路径重建（确定性，不抖），草地/树木保持原样由外部缩放
+      this.rebuildPathDecorations(false)
+      return
     }
     
-    // 根据主题生成装饰物
+    this.rebuildPathDecorations(true)
     this.generateMapDecorations(themeKey)
     
     // 预生成背景纹理点 - 控制密度，减少持续绘制负担
@@ -1416,6 +1634,32 @@ Page(Object.assign({
         height: 4 + Math.random() * 5,
         sway: Math.random() * Math.PI * 2
       })
+    }
+  },
+
+  // jitter=false 时用确定性偏移，避免每次重建路径石子乱跳
+  rebuildPathDecorations(jitter = true) {
+    this.pathDecorations = []
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) return
+
+    for (let i = 0; i < this.pathPoints.length - 1; i++) {
+      const p1 = this.pathPoints[i]
+      const p2 = this.pathPoints[i + 1]
+      const dist = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+      const stoneCount = Math.floor(dist / 15)
+
+      for (let j = 0; j < stoneCount; j++) {
+        const t = stoneCount <= 0 ? 0 : j / stoneCount
+        const seed = (i * 17 + j * 31) % 100
+        const jx = jitter ? (Math.random() - 0.5) * 18 : ((seed / 100) - 0.5) * 12
+        const jy = jitter ? (Math.random() - 0.5) * 18 : (((seed * 3) % 100) / 100 - 0.5) * 12
+        const size = jitter ? (1 + Math.random() * 2.5) : (1.2 + (seed % 10) * 0.12)
+        this.pathDecorations.push({
+          x: p1.x + (p2.x - p1.x) * t + jx,
+          y: p1.y + (p2.y - p1.y) * t + jy,
+          size
+        })
+      }
     }
   },
 
@@ -1444,10 +1688,393 @@ Page(Object.assign({
       return true
     }
 
-    this.generatePath(this.data.currentTheme)
+    const hasDressing = Array.isArray(this.grassDots) && this.grassDots.length > 0
+    this.generatePath(this.data.currentTheme, {
+      refreshDressing: !hasDressing,
+      rebuildSlots: !Array.isArray(this.towerSlots) || this.towerSlots.length === 0,
+      relocateTowers: false
+    })
     this.rebuildGridFromTowers()
-    this.syncPrepTowerSlots(this.data.currentTheme)
+    if (this.data.gameState === 'prep') {
+      this.syncPrepTowerSlots(this.data.currentTheme)
+    }
     return false
+  },
+
+  hasMeaningfulRunProgress() {
+    return !!this.data.selectedBlessingKey ||
+      this.towers.length > 0 ||
+      this.data.wave > 1 ||
+      this.data.score > 0 ||
+      this.data.gameState !== 'prep'
+  },
+
+  buildRunProgressSnapshot() {
+    const threat = this.currentWaveThreat ||
+      (typeof this.resolveWaveThreat === 'function' ? this.resolveWaveThreat(this.data.wave) : null) ||
+      { key: 'swarm' }
+    const missionTarget = this.currentThreatMissionTarget ||
+      (typeof this.getThreatMissionTarget === 'function'
+        ? this.getThreatMissionTarget(this.data.wave, threat)
+        : 0)
+
+    return {
+      version: RUN_PROGRESS_VERSION,
+      savedAt: Date.now(),
+      currentWaveThreatKey: threat.key || 'swarm',
+      currentThreatMissionProgress: this.currentThreatMissionProgress || 0,
+      currentThreatMissionTarget: missionTarget,
+      currentThreatMissionCompleted: !!this.currentThreatMissionCompleted,
+      runBonuses: {
+        damage: this.runDamageBonus || 0,
+        range: this.runRangeBonus || 0,
+        attackSpeed: this.runAttackSpeedBonus || 0,
+        crit: this.runCritBonus || 0
+      },
+      blessingApplied: !!this.blessingApplied,
+      waveStartLives: this.waveStartLives || this.data.lives,
+      waveComplete: !!this.waveComplete,
+      spawnIndex: this.spawnIndex || 0,
+      lastSpawnDelta: Math.max(0, Date.now() - (this.lastSpawnTime || 0)),
+      pendingWaveAdvance: this.pendingWaveAdvance || null,
+      data: {
+        wave: this.data.wave,
+        score: this.data.score,
+        gold: this.data.gold,
+        lives: this.data.lives,
+        gameState: this.data.gameState,
+        level: this.data.level,
+        waveInLevel: this.data.waveInLevel,
+        totalWavesInLevel: this.data.totalWavesInLevel,
+        currentTheme: this.data.currentTheme,
+        selectedBlessingKey: this.data.selectedBlessingKey,
+        selectedBlessingName: this.data.selectedBlessingName,
+        selectedBlessingIcon: this.data.selectedBlessingIcon,
+        selectedBlessingDescription: this.data.selectedBlessingDescription,
+        fieldTowerCount: this.towers.length,
+        canStartBattle: this.data.canStartBattle,
+        prepActionHint: this.data.prepActionHint,
+        runBuffSummary: this.data.runBuffSummary,
+        nextSupplyWave: this.data.nextSupplyWave,
+        showWaveChoice: this.data.showWaveChoice,
+        waveChoiceMode: this.data.waveChoiceMode,
+        waveChoicePanelTitle: this.data.waveChoicePanelTitle,
+        waveChoiceTitle: this.data.waveChoiceTitle,
+        waveChoiceHint: this.data.waveChoiceHint,
+        waveChoiceOptions: this.data.waveChoiceOptions || [],
+        pendingSpecializationTowerId: this.data.pendingSpecializationTowerId,
+        pendingSpecializationSource: this.data.pendingSpecializationSource,
+        choiceReturnState: this.data.choiceReturnState,
+        activeChainIcon: this.data.activeChainIcon,
+        activeChainTitle: this.data.activeChainTitle,
+        activeChainDescription: this.data.activeChainDescription,
+        currentThreatIcon: this.data.currentThreatIcon,
+        currentThreatTitle: this.data.currentThreatTitle,
+        currentThreatDescription: this.data.currentThreatDescription,
+        currentThreatCounterText: this.data.currentThreatCounterText,
+        threatMissionText: this.data.threatMissionText,
+        threatMissionReady: this.data.threatMissionReady,
+        commanderCost: this.data.commanderCost,
+        commanderAiming: false,
+        commanderReadyText: this.data.commanderReadyText,
+        commandPoints: this.data.commandPoints,
+        summonCost: this.data.summonCost,
+        selectedInventoryIndex: this.data.selectedInventoryIndex
+      },
+      inventory: this.inventory,
+      towers: this.towers,
+      // 截断保存，防止后期怪物过多导致序列化卡死 / OOM
+      monsters: (this.monsters || []).slice(0, 30),
+      waveMonsters: (this.waveMonsters || []).slice(0, 50)
+    }
+  },
+
+  persistRunProgress({ immediate = false } = {}) {
+    if (!this.hasMeaningfulRunProgress() || this.data.gameState === 'gameover') {
+      this.clearRunProgress()
+      return false
+    }
+
+    const now = Date.now()
+    if (!immediate && now - (this.lastRunPersistedAt || 0) < RUN_PROGRESS_INTERVAL) {
+      return false
+    }
+
+    const snapshot = this.buildRunProgressSnapshot()
+    this.lastRunPersistedAt = now
+
+    // 退出/暂停必须同步落盘，避免 async 未完成或 inFlight 跳过导致读到旧档/空档
+    if (immediate) {
+      try {
+        wx.setStorageSync(RUN_PROGRESS_KEY, snapshot)
+        this._persistInFlight = false
+        return true
+      } catch (error) {
+        console.warn('persistRunProgress sync failed', error)
+        this._persistInFlight = false
+        return false
+      }
+    }
+
+    // 上一份 setStorage 未完成则跳过，避免异步队列堆积旧 snapshot 闭包导致 OOM
+    if (this._persistInFlight) {
+      return false
+    }
+
+    this._persistInFlight = true
+    try {
+      wx.setStorage({
+        key: RUN_PROGRESS_KEY,
+        data: snapshot,
+        complete: () => {
+          this._persistInFlight = false
+        }
+      })
+      return true
+    } catch (error) {
+      console.warn('persistRunProgress failed', error)
+      this._persistInFlight = false
+      return false
+    }
+  },
+
+  clearRunProgress() {
+    this.lastRunPersistedAt = 0
+    this._persistInFlight = false
+    try {
+      wx.removeStorageSync(RUN_PROGRESS_KEY)
+    } catch (error) {
+      console.warn('clearRunProgress failed', error)
+    }
+  },
+
+  normalizeSavedTower(tower, mode = 'field', blessingKey = this.data.selectedBlessingKey) {
+    if (!tower || !tower.type) return null
+    const stats = this.getTowerStatsForLevel(
+      tower.type,
+      tower.level || 1,
+      mode,
+      blessingKey,
+      tower.specializationKey
+    )
+    return {
+      ...tower,
+      ...stats,
+      lastAttack: tower.lastAttack || 0
+    }
+  },
+
+  tryRestoreRunProgress() {
+    let snapshot = null
+    try {
+      snapshot = wx.getStorageSync(RUN_PROGRESS_KEY)
+    } catch (error) {
+      snapshot = null
+    }
+
+    if (!snapshot || snapshot.version !== RUN_PROGRESS_VERSION || !snapshot.data) {
+      return false
+    }
+
+    try {
+      const savedData = snapshot.data
+      const blessingKey = savedData.selectedBlessingKey || ''
+      const themeKey = savedData.currentTheme || 'forest'
+      const threat = (typeof this.resolveWaveThreat === 'function'
+        ? this.resolveWaveThreat(savedData.wave || 1)
+        : null) || {
+        key: snapshot.currentWaveThreatKey || 'swarm',
+        icon: savedData.currentThreatIcon || '🐜',
+        title: savedData.currentThreatTitle || '虫潮奔袭',
+        description: savedData.currentThreatDescription || '',
+        counterText: savedData.currentThreatCounterText || ''
+      }
+
+      if (typeof this.clearScheduledTimeouts === 'function') {
+        this.clearScheduledTimeouts()
+      }
+
+      this.generatePath(themeKey)
+      this.towers = (snapshot.towers || [])
+        .map((tower) => this.normalizeSavedTower(tower, 'field', blessingKey))
+        .filter(Boolean)
+      this.inventory = (snapshot.inventory || [])
+        .map((tower) => this.normalizeSavedTower(tower, 'inventory', blessingKey))
+        .filter(Boolean)
+      this.monsters = (snapshot.monsters || []).map((monster) => ({
+        ...monster,
+        walkPhase: Number.isFinite(monster.walkPhase) ? monster.walkPhase : Math.random() * Math.PI * 2,
+        facing: monster.facing || 1,
+        animFrame: monster.animFrame || 0,
+        animTimer: monster.animTimer || 0
+      }))
+      this.waveMonsters = (snapshot.waveMonsters || []).map((monster) => ({ ...monster }))
+      this.projectiles = []
+      this.particles = []
+      this.floatingTexts = []
+      this.lightningEffects = []
+      this.fireEffects = []
+      this.iceEffects = []
+      this.poisonEffects = []
+      this.arcaneEffects = []
+      this.mergeEffects = []
+      this.blessingApplied = snapshot.blessingApplied !== false
+      this.runDamageBonus = snapshot.runBonuses?.damage || 0
+      this.runRangeBonus = snapshot.runBonuses?.range || 0
+      this.runAttackSpeedBonus = snapshot.runBonuses?.attackSpeed || 0
+      this.runCritBonus = snapshot.runBonuses?.crit || 0
+      this.currentWaveThreat = threat
+      this.currentThreatMissionProgress = snapshot.currentThreatMissionProgress || 0
+      this.currentThreatMissionTarget = snapshot.currentThreatMissionTarget ||
+        (typeof this.getThreatMissionTarget === 'function'
+          ? this.getThreatMissionTarget(savedData.wave || 1, threat)
+          : 0)
+      this.currentThreatMissionCompleted = !!snapshot.currentThreatMissionCompleted
+      this.waveStartLives = snapshot.waveStartLives || savedData.lives || 20
+      this.waveComplete = !!snapshot.waveComplete
+      this.spawnIndex = Math.max(0, snapshot.spawnIndex || 0)
+      this.lastSpawnTime = Date.now() - Math.min(snapshot.lastSpawnDelta || 0, CONFIG.spawnInterval)
+      this.pendingWaveAdvance = snapshot.pendingWaveAdvance || null
+      // 规范化读档状态：暂停/死局/空选择/波次死锁都会导致“关卡不动、不出怪”
+      const restored = this.sanitizeRestoredRunState(savedData, snapshot)
+      Object.assign(savedData, restored.dataPatch)
+      this.performanceProfileKey = 'relaxed'
+      this.activePerformanceProfile = PERFORMANCE_PROFILES.relaxed
+      this.lastPerformanceProfileCheckAt = 0
+      this.lastBossSeenAt = 0
+      this.lastFrameRenderAt = 0
+      this.renderFrameCount = 0
+      this.pendingGoldDelta = 0
+      this.pendingScoreDelta = 0
+      this.pendingLivesDelta = 0
+      this.pendingCommandPointsDelta = 0
+      this.lastIdleRenderAt = 0
+      this.lastDragUiUpdateAt = 0
+      this.lastMergeHintVisible = false
+      this.lastMergeHintSlotIndex = -1
+      this.lastMergeCost = 0
+      this.lastMergeTargetNextLevel = 0
+      this.draggingTower = null
+      this.pendingDragTower = null
+      this.isDragging = false
+      this.hasMoved = false
+      this.mergeTarget = null
+      this.mergeTargetType = null
+      this.mergeTargetInventoryIndex = -1
+
+      this.rebuildGridFromTowers()
+      // 读档后按当前路径重算塔位，并把落在路上/过远的塔挪开
+      this.towerSlots = this.buildTowerSlotsAlongPath()
+      this.relocateInvalidTowers()
+
+      this.setData({
+        ...savedData,
+        gameState: restored.gameState,
+        currentTheme: themeKey,
+        currentThreatIcon: threat.icon || savedData.currentThreatIcon,
+        currentThreatTitle: threat.title || savedData.currentThreatTitle,
+        currentThreatDescription: threat.description || savedData.currentThreatDescription,
+        currentThreatCounterText: threat.counterText || savedData.currentThreatCounterText,
+        dragFloating: false,
+        draggingSlotIndex: -1,
+        mergeTargetSlotIndex: -1,
+        showMergeHint: false,
+        commanderAiming: false,
+        showWaveChoice: restored.gameState === 'choice' ? !!savedData.showWaveChoice : false
+      })
+
+      this.updateInventoryDisplay()
+      this.syncPrepTowerSlots(themeKey)
+      this.syncFieldTowerCount()
+      if (typeof this.updateRunBuffSummary === 'function') {
+        this.updateRunBuffSummary(savedData.wave || 1)
+      }
+      if (typeof this.syncThreatMissionDisplay === 'function') {
+        this.syncThreatMissionDisplay()
+      }
+      this.refreshCanvasRect()
+      this.refreshInventoryRect()
+      if (restored.gameState === 'prep' && typeof this.schedulePrepLayoutSync === 'function') {
+        this.schedulePrepLayoutSync()
+      }
+      this.requestRender()
+      this.lastRunPersistedAt = Date.now()
+      wx.showToast({ title: '已恢复上次战局', icon: 'none' })
+      return true
+    } catch (error) {
+      console.warn('tryRestoreRunProgress failed', error)
+      this.clearRunProgress()
+      return false
+    }
+  },
+
+  // 读档后修复会卡死推进的状态（暂停回菜单再进最常见）
+  sanitizeRestoredRunState(savedData = {}, snapshot = {}) {
+    const dataPatch = {
+      showWaveChoice: !!savedData.showWaveChoice,
+      waveChoiceOptions: savedData.waveChoiceOptions || [],
+      wave: savedData.wave || 1,
+      level: savedData.level || 1,
+      waveInLevel: savedData.waveInLevel || 1
+    }
+
+    let gameState = savedData.gameState || 'playing'
+
+    // 从菜单重新进入：自动续玩，避免停在 paused 导致 update 不跑、不出怪
+    if (gameState === 'paused' || gameState === 'gameover') {
+      gameState = 'playing'
+    }
+
+    // choice 但选项丢失时，降级为可游玩
+    if (gameState === 'choice') {
+      const options = dataPatch.waveChoiceOptions
+      if (!dataPatch.showWaveChoice || !Array.isArray(options) || options.length === 0) {
+        gameState = 'playing'
+        dataPatch.showWaveChoice = false
+        dataPatch.waveChoiceOptions = []
+      }
+    }
+
+    if (gameState === 'prep') {
+      this.waveComplete = false
+      this.pendingWaveAdvance = null
+      this.lastSpawnTime = Date.now() + 60000
+      return { gameState, dataPatch }
+    }
+
+    if (gameState === 'choice') {
+      return { gameState, dataPatch }
+    }
+
+    // playing：修复波次死锁（waveComplete / 空波次队列 / 被清掉的推进定时器）
+    const noMonsters = !this.monsters || this.monsters.length === 0
+    const waveQueueEmpty = !this.waveMonsters || this.waveMonsters.length === 0
+    const spawnDone = waveQueueEmpty || this.spawnIndex >= this.waveMonsters.length
+
+    if (this.pendingWaveAdvance && noMonsters) {
+      const pw = this.pendingWaveAdvance
+      this.pendingWaveAdvance = null
+      this.waveComplete = false
+      dataPatch.wave = pw.wave || dataPatch.wave
+      dataPatch.level = pw.level || dataPatch.level
+      dataPatch.waveInLevel = pw.waveInLevel || dataPatch.waveInLevel
+      this.generateWave(dataPatch.wave)
+      this.lastSpawnTime = Date.now()
+      return { gameState: 'playing', dataPatch }
+    }
+
+    if (noMonsters && (this.waveComplete || spawnDone)) {
+      this.waveComplete = false
+      this.pendingWaveAdvance = null
+      this.generateWave(dataPatch.wave)
+      this.lastSpawnTime = Date.now()
+    } else {
+      // 确保不会因为 lastSpawnTime 异常偏未来而长时间不出怪
+      this.lastSpawnTime = Math.min(this.lastSpawnTime || Date.now(), Date.now())
+      this.waveComplete = false
+    }
+
+    return { gameState: 'playing', dataPatch }
   },
 
   generateMapDecorations(themeKey) {
@@ -1654,14 +2281,20 @@ Page(Object.assign({
     this.safeUpdate('monsters', this.updateMonsters)
     this.safeUpdate('towers', this.updateTowers, now)
     this.safeUpdate('projectiles', this.updateProjectiles)
-    this.safeUpdate('particles', this.updateParticles)
-    this.safeUpdate('floatingTexts', this.updateFloatingTexts)
-    this.safeUpdate('lightningEffects', this.updateLightningEffects)
-    this.safeUpdate('fireEffects', this.updateFireEffects)
-    this.safeUpdate('iceEffects', this.updateIceEffects)
-    this.safeUpdate('poisonEffects', this.updatePoisonEffects)
-    this.safeUpdate('arcaneEffects', this.updateArcaneEffects)
-    this.safeUpdate('mergeEffects', this.updateMergeEffects)
+
+    // 拖拽合成时优先保证触摸命中：跳过重特效更新与存档，减轻主线程抢占
+    if (!this.isDragging) {
+      this.safeUpdate('particles', this.updateParticles)
+      this.safeUpdate('floatingTexts', this.updateFloatingTexts)
+      this.safeUpdate('lightningEffects', this.updateLightningEffects)
+      this.safeUpdate('fireEffects', this.updateFireEffects)
+      this.safeUpdate('iceEffects', this.updateIceEffects)
+      this.safeUpdate('poisonEffects', this.updatePoisonEffects)
+      this.safeUpdate('arcaneEffects', this.updateArcaneEffects)
+      this.safeUpdate('mergeEffects', this.updateMergeEffects)
+      this.safeUpdate('persistProgress', this.persistRunProgress)
+    }
+
     this.safeUpdate('performanceCaps', this.enforcePerformanceCaps)
     this.safeUpdate('flushStats', this.flushQueuedStats)
 
@@ -1734,6 +2367,9 @@ Page(Object.assign({
   },
 
   updateMonsters() {
+    const crowded = this.monsters.length >= 24
+    const effectStride = crowded ? 3 : 1
+
     this.monsters = this.monsters.filter(monster => {
       // 动画计时（兼容旧逻辑；主走路动画用 walkPhase）
       monster.animTimer++
@@ -1751,7 +2387,7 @@ Page(Object.assign({
       if (monster.burnTimer > 0) {
         monster.hp -= monster.burnDamage
         monster.burnTimer--
-        if (monster.burnTimer % 10 === 0) {
+        if (!crowded && monster.burnTimer % 10 === 0) {
           this.fireEffects.push({
             x: monster.x + (Math.random() - 0.5) * 20,
             y: monster.y + (Math.random() - 0.5) * 20,
@@ -1767,7 +2403,7 @@ Page(Object.assign({
       if (monster.slowTimer > 0) {
         speedMod = 0.5
         monster.slowTimer--
-        if (monster.slowTimer % 15 === 0) {
+        if (!crowded && monster.slowTimer % 15 === 0) {
           this.iceEffects.push({
             x: monster.x + (Math.random() - 0.5) * 20,
             y: monster.y + (Math.random() - 0.5) * 20,
@@ -1783,19 +2419,17 @@ Page(Object.assign({
       if (monster.vineTimer > 0) {
         speedMod *= 0.7  // 额外减速30%
         monster.vineTimer--
-        if (monster.vineTimer % 12 === 0) {
-          // 藤蔓缠绕特效
+        if (!crowded && monster.vineTimer % (12 * effectStride) === 0) {
           this.poisonEffects.push({
             x: monster.x + (Math.random() - 0.5) * 15,
             y: monster.y + 5,
             size: 4 + Math.random() * 3,
             life: 20,
             maxLife: 20,
-            vy: 0.2,  // 向下蔓延
+            vy: 0.2,
             isVine: true
           })
         }
-        // 易伤结束时清除
         if (monster.vineTimer <= 0) {
           monster.vineVulnerability = 0
         }
@@ -1803,27 +2437,26 @@ Page(Object.assign({
       
       const target = this.pathPoints[monster.pathIndex + 1]
       if (!target) {
-        this.setData({ lives: this.data.lives - (monster.isBoss ? 5 : 1) })
-        this.createParticles(monster.x, monster.y, '#ff0000', 20)
+        this.queueStatDelta({ lives: -(monster.isBoss ? 5 : 1) })
+        if (!crowded) this.createParticles(monster.x, monster.y, '#ff0000', 12)
         return false
       }
       
       const dx = target.x - monster.x
       const dy = target.y - monster.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
+      const distSq = dx * dx + dy * dy
       
-      if (dist < 5) {
+      if (distSq < 25) {
         monster.pathIndex++
-        // 拐弯处几乎静止，只留很慢的呼吸感
         monster.walkPhase = (monster.walkPhase || 0) + 0.03 * speedMod
       } else {
+        const dist = Math.sqrt(distSq)
         const moveSpeed = monster.speed * speedMod * 1.5
         monster.x += (dx / dist) * moveSpeed
         monster.y += (dy / dist) * moveSpeed
         if (Math.abs(dx) > 0.2) {
           monster.facing = dx >= 0 ? 1 : -1
         }
-        // 步频放慢：大约每移动一段路才完成一次起伏
         monster.walkPhase = (monster.walkPhase || 0) + moveSpeed * 0.12
       }
       
@@ -1837,44 +2470,32 @@ Page(Object.assign({
   },
 
   onMonsterKilled(monster) {
-    const gold = monster.goldDrop
-    this.setData({ 
-      gold: this.data.gold + gold,
-      score: this.data.score + gold * 10
+    const gold = monster.goldDrop || 0
+    this.queueStatDelta({
+      gold,
+      score: gold * 10
     })
-    
-    // 金币飘字动画 - 缩减数量，避免击杀密集时文字洪峰
-    for (let i = 0; i < 3; i++) {
-      const angle = (Math.PI * 2 / 3) * i + Math.random() * 0.35
-      this.floatingTexts.push({
-        x: monster.x,
-        y: monster.y,
-        text: '💰',
-        color: '#ffd700',
-        life: 36 + i * 5,
-        maxLife: 36 + i * 5,
-        vy: -1.8 - Math.random() * 0.5,
-        vx: Math.cos(angle) * 1.6,
-        scale: 0.9
-      })
-    }
-    
-    // 金额显示
+
+    const crowded = this.monsters.length >= 20
+    // 怪多时只留一条飘字，避免击杀洪峰打爆主线程
     this.floatingTexts.push({
       x: monster.x,
       y: monster.y - 20,
       text: `+${gold}`,
       color: '#ffd700',
-      life: 60,
-      maxLife: 60,
+      life: crowded ? 36 : 60,
+      maxLife: crowded ? 36 : 60,
       vy: -1.5,
       vx: 0,
-      scale: 1.5,
+      scale: crowded ? 1.1 : 1.5,
       isBold: true
     })
-    
-    // 根据怪物类型创建差异化死亡特效
-    this.createMonsterDeathEffect(monster)
+
+    if (!crowded) {
+      this.createMonsterDeathEffect(monster)
+    } else if (monster.isBoss) {
+      this.createParticles(monster.x, monster.y, monster.bodyColor || '#fff', 10)
+    }
   },
 
   // 差异化怪物死亡特效
@@ -2195,22 +2816,25 @@ Page(Object.assign({
   },
 
   updateTowers(now) {
+    const monsters = this.monsters
+    if (!monsters.length || !this.towers.length) return
+
     this.towers.forEach(tower => {
       if (now - tower.lastAttack < tower.attackSpeed) return
       
       let target = null
+      let bestPath = -1
+      const rangeSq = tower.range * tower.range
       
-      this.monsters.forEach(monster => {
+      for (let i = 0; i < monsters.length; i++) {
+        const monster = monsters[i]
         const dx = monster.x - tower.x
         const dy = monster.y - tower.y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-        
-        if (dist < tower.range) {
-          if (!target || monster.pathIndex > target.pathIndex) {
-            target = monster
-          }
+        if (dx * dx + dy * dy < rangeSq && monster.pathIndex > bestPath) {
+          bestPath = monster.pathIndex
+          target = monster
         }
-      })
+      }
       
       if (target) {
         this.towerAttack(tower, target)
@@ -2228,7 +2852,7 @@ Page(Object.assign({
       this.projectiles.push({
         x: tower.x,
         y: tower.y - 10,
-        targetId: this.monsters.indexOf(target),
+        target,
         damage: tower.damage,
         towerType: tower.type,
         towerLevel: tower.level,
@@ -2241,7 +2865,9 @@ Page(Object.assign({
       })
     }
     
-    this.createParticles(tower.x, tower.y - 15, config.color, 2)
+    if (this.monsters.length < 28) {
+      this.createParticles(tower.x, tower.y - 15, config.color, 2)
+    }
   },
 
   lightningAttack(tower, target) {
@@ -2382,6 +3008,11 @@ Page(Object.assign({
     }
 
     const displayDamage = Math.floor(finalDamage)
+    const stride = this.getDamageTextStride ? this.getDamageTextStride() : 1
+    this._damageTextTick = (this._damageTextTick || 0) + 1
+    const showText = isCrit || monster.isBoss || (this._damageTextTick % stride === 0)
+    if (!showText) return
+
     const critPrefix = isCrit ? '暴击! ' : ''
     const text = isCrit ? `${critPrefix}-${displayDamage}💥` : (monster.vineVulnerability > 0 ? `-${displayDamage}!` : `-${displayDamage}`)
 
@@ -2399,48 +3030,56 @@ Page(Object.assign({
   },
 
   updateProjectiles() {
+    const monsters = this.monsters
     this.projectiles = this.projectiles.filter(proj => {
-      const target = this.monsters[proj.targetId]
-      if (!target && proj.piercing <= 0) return false
-      
-      let currentTarget = target
-      if (!target && proj.piercing > 0) {
-        let minDist = 60
-        this.monsters.forEach((m, i) => {
-          const d = Math.sqrt((m.x - proj.x) ** 2 + (m.y - proj.y) ** 2)
-          if (d < minDist) {
-            minDist = d
-            currentTarget = m
-            proj.targetId = i
+      let currentTarget = proj.target
+      if (!currentTarget || currentTarget.hp <= 0) {
+        currentTarget = null
+        if (proj.piercing > 0) {
+          let minDistSq = 60 * 60
+          for (let i = 0; i < monsters.length; i++) {
+            const m = monsters[i]
+            const dx = m.x - proj.x
+            const dy = m.y - proj.y
+            const dSq = dx * dx + dy * dy
+            if (dSq < minDistSq) {
+              minDistSq = dSq
+              currentTarget = m
+            }
           }
-        })
+          proj.target = currentTarget
+        }
         if (!currentTarget) return false
       }
       
       const dx = currentTarget.x - proj.x
       const dy = currentTarget.y - proj.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
+      const distSq = dx * dx + dy * dy
       
-      if (dist < 15) {
+      if (distSq < 225) {
         this.applyDamage(currentTarget, proj.damage, proj.towerType)
         this.applyTowerEffect(currentTarget, proj.towerType, proj.damage, proj.towerLevel)
-        this.createHitEffect(currentTarget.x, currentTarget.y, proj.towerType, proj.towerLevel)
+        if (monsters.length < 32) {
+          this.createHitEffect(currentTarget.x, currentTarget.y, proj.towerType, proj.towerLevel)
+        }
         
         if (proj.piercing > 0) {
           proj.piercing--
-          proj.targetId = -1
+          proj.target = null
           return true
         }
         return false
       }
       
+      const dist = Math.sqrt(distSq)
       proj.angle = Math.atan2(dy, dx)
       proj.x += (dx / dist) * proj.speed
       proj.y += (dy / dist) * proj.speed
       
-      // 记录轨迹
+      if (!proj.trail) proj.trail = []
       proj.trail.push({ x: proj.x, y: proj.y })
-      if (proj.trail.length > 8) proj.trail.shift()
+      const trailLimit = this.getProjectileTrailLimit ? this.getProjectileTrailLimit() : 4
+      if (proj.trail.length > trailLimit) proj.trail.shift()
       
       return true
     })
@@ -2657,10 +3296,12 @@ Page(Object.assign({
   },
 
   createParticles(x, y, color, count) {
-    const remaining = Math.max(0, PERFORMANCE_LIMITS.particles - this.particles.length)
+    const limit = (this.getDynamicEffectLimits && this.getDynamicEffectLimits().particles) || PERFORMANCE_LIMITS.particles
+    const remaining = Math.max(0, limit - this.particles.length)
     if (remaining <= 0) return
 
-    const particleCount = Math.min(remaining, Math.max(1, Math.ceil(count * 0.55)))
+    const crowdedScale = this.monsters && this.monsters.length >= 24 ? 0.35 : 0.55
+    const particleCount = Math.min(remaining, Math.max(1, Math.ceil(count * crowdedScale)))
     for (let i = 0; i < particleCount; i++) {
       this.particles.push({
         x, y,
@@ -2830,7 +3471,11 @@ Page(Object.assign({
       if ((pathInvalid || gridInvalid) && now - (this.lastRenderRecoveryAt || 0) >= 1000) {
         this.lastRenderRecoveryAt = now
         try {
-          this.generatePath(this.data.currentTheme)
+          this.generatePath(this.data.currentTheme, {
+            refreshDressing: false,
+            rebuildSlots: false,
+            relocateTowers: false
+          })
           this.rebuildGridFromTowers()
         } catch (e2) {
           // 二次自愈失败则放弃，避免连环抛错
@@ -3095,9 +3740,9 @@ Page(Object.assign({
     const ctx = this.ctx
     const offsetX = this.getGridOffsetX()
     const offsetY = this.getGridOffsetY()
-    const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
 
-    theme.towerSlots.forEach(slot => {
+    this.getTowerSlots().forEach(slot => {
+      if (this.isOnPath(slot.row, slot.col)) return
       const x = offsetX + slot.col * CONFIG.cellSize + CONFIG.cellSize / 2
       const y = offsetY + slot.row * CONFIG.cellSize + CONFIG.cellSize / 2
       const hasTower = this.grid[slot.row] && this.grid[slot.row][slot.col]
@@ -3283,10 +3928,12 @@ Page(Object.assign({
 
 
   isOnPath(row, col) {
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) return false
     const offsetX = this.getGridOffsetX()
     const offsetY = this.getGridOffsetY()
     const cellCenterX = offsetX + col * CONFIG.cellSize + CONFIG.cellSize / 2
     const cellCenterY = offsetY + row * CONFIG.cellSize + CONFIG.cellSize / 2
+    const clearance = this.getPathHalfWidth() + Math.max(2, CONFIG.cellSize * 0.08)
     
     for (let i = 0; i < this.pathPoints.length - 1; i++) {
       const dist = this.pointToSegmentDist(
@@ -3294,15 +3941,93 @@ Page(Object.assign({
         this.pathPoints[i].x, this.pathPoints[i].y,
         this.pathPoints[i + 1].x, this.pathPoints[i + 1].y
       )
-      if (dist < 28) return true
+      if (dist < clearance) return true
     }
     return false
   },
 
   // 检查是否是有效的塔位
   isTowerSlot(row, col) {
-    const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-    return theme.towerSlots.some(slot => slot.row === row && slot.col === col)
+    if (this.isOnPath(row, col)) return false
+    return this.getTowerSlots().some(slot => slot.row === row && slot.col === col)
+  },
+
+  findNearestFreeSlot(row, col) {
+    let best = null
+    let bestDist = Infinity
+    this.getTowerSlots().forEach((slot) => {
+      if (this.isOnPath(slot.row, slot.col)) return
+      if (this.grid[slot.row] && this.grid[slot.row][slot.col]) return
+      const d = Math.abs(slot.row - row) + Math.abs(slot.col - col)
+      if (d < bestDist) {
+        bestDist = d
+        best = slot
+      }
+    })
+    return best
+  },
+
+  // 把落在路上 / 非塔位的塔挪到最近空位，否则退回仓库
+  relocateInvalidTowers() {
+    if (!Array.isArray(this.towers) || this.towers.length === 0) return
+    if (!Array.isArray(this.grid) || this.grid.length !== CONFIG.gridRows) return
+
+    const pending = this.towers.slice()
+    this.towers = []
+    for (let row = 0; row < CONFIG.gridRows; row++) {
+      for (let col = 0; col < CONFIG.gridCols; col++) {
+        this.grid[row][col] = null
+      }
+    }
+
+    pending.forEach((t) => {
+      let targetRow = t.row
+      let targetCol = t.col
+      const sameOk = Number.isInteger(targetRow) && Number.isInteger(targetCol) &&
+        this.isTowerSlot(targetRow, targetCol) &&
+        !(this.grid[targetRow] && this.grid[targetRow][targetCol])
+
+      if (!sameOk) {
+        const near = this.findNearestFreeSlot(
+          Number.isInteger(t.row) ? t.row : 0,
+          Number.isInteger(t.col) ? t.col : 0
+        )
+        if (!near) {
+          if (this.inventory.length < INVENTORY_COLS * INVENTORY_ROWS) {
+            this.inventory.push({
+              id: t.id,
+              type: t.type,
+              level: t.level,
+              damage: t.damage,
+              range: t.range,
+              attackSpeed: t.attackSpeed,
+              specializationKey: t.specializationKey,
+              lastAttack: 0
+            })
+          }
+          return
+        }
+        targetRow = near.row
+        targetCol = near.col
+      }
+
+      const moved = {
+        ...t,
+        row: targetRow,
+        col: targetCol,
+        x: this.getGridOffsetX() + targetCol * CONFIG.cellSize + CONFIG.cellSize / 2,
+        y: this.getGridOffsetY() + targetRow * CONFIG.cellSize + CONFIG.cellSize / 2
+      }
+      this.towers.push(moved)
+      this.grid[targetRow][targetCol] = moved
+    })
+
+    if (typeof this.updateInventoryDisplay === 'function') {
+      this.updateInventoryDisplay()
+    }
+    if (typeof this.syncFieldTowerCount === 'function') {
+      this.syncFieldTowerCount()
+    }
   },
 
   pointToSegmentDist(px, py, x1, y1, x2, y2) {
@@ -3356,9 +4081,8 @@ Page(Object.assign({
     if (!this.cachedCanvasRect) {
       this.refreshCanvasRect()
     }
-    if (!this.inventoryRect) {
-      this.refreshInventoryRect()
-    }
+    // 每次开始拖仓库塔都重测格子，避免居中布局/换行后命中偏移
+    this.refreshInventoryRect()
     
     // 记录触摸信息
     this.pendingDragTower = { ...tower }
@@ -3372,6 +4096,7 @@ Page(Object.assign({
     this.lastTouchClientX = startClientX
     this.lastTouchClientY = startClientY
     this.lastDragUiUpdateAt = 0
+    this._stickyMerge = null
     
     // 初始拖动位置设为手指位置（相对于canvas逻辑坐标）
     if (this.cachedCanvasRect) {
@@ -3506,35 +4231,38 @@ Page(Object.assign({
     this.mergeTargetType = null
 
     // 检查场上的塔（合成目标）- 不能和自己合成
+    let bestFieldDist = FIELD_MERGE_RADIUS
     for (const tower of this.towers) {
-      // 如果是从场上拖动的塔，跳过自己
       if (!this.draggingFromInventory && tower.id === this.draggingTower.id) continue
       if (tower.type !== this.draggingTower.type || tower.level !== this.draggingTower.level || tower.level >= MAX_TOWER_LEVEL) continue
 
       const dx = this.dragX - tower.x
       const dy = this.dragY - tower.y
-      if (Math.sqrt(dx * dx + dy * dy) < FIELD_MERGE_RADIUS) {
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < bestFieldDist) {
+        bestFieldDist = dist
         this.mergeTarget = tower
         this.mergeTargetType = 'tower'
-        break
       }
     }
 
-    // 检查仓库内其他塔（合成目标）- 无论从哪里拖动都检查
+    // 仓库合并：按真实格子中心吸附（兼容居中布局），并放宽半径
     if (!this.mergeTarget) {
-      const targetIndex = this.getInventorySlotIndex(touch.clientX, touch.clientY)
-      if (targetIndex !== null &&
-          targetIndex !== this.draggingInventoryIndex &&
-          targetIndex < this.inventory.length) {
+      const targetIndex = this.findInventoryMergeIndex(touch.clientX, touch.clientY, INVENTORY_MERGE_RADIUS)
+      if (targetIndex !== null) {
         const targetTower = this.inventory[targetIndex]
-        if (targetTower &&
-            targetTower.type === this.draggingTower.type &&
-            targetTower.level === this.draggingTower.level &&
-            targetTower.level < MAX_TOWER_LEVEL) {
-          this.mergeTargetInventoryIndex = targetIndex
-          this.mergeTarget = targetTower
-          this.mergeTargetType = 'inventory'
-        }
+        this.mergeTargetInventoryIndex = targetIndex
+        this.mergeTarget = targetTower
+        this.mergeTargetType = 'inventory'
+      }
+    }
+
+    if (this.mergeTarget) {
+      this._stickyMerge = {
+        type: this.mergeTargetType,
+        inventoryIndex: this.mergeTargetInventoryIndex,
+        towerId: this.mergeTargetType === 'tower' ? this.mergeTarget.id : null,
+        at: Date.now()
       }
     }
 
@@ -3561,35 +4289,150 @@ Page(Object.assign({
     }
   },
 
-  // 获取仓库格子索引
-  getInventorySlotIndex(clientX, clientY) {
-    if (!this.inventoryRect) {
+  // 用实测格子矩形找最近可合并目标（解决 flex 居中导致的格子错位）
+  findInventoryMergeIndex(clientX, clientY, baseRadius = INVENTORY_MERGE_RADIUS) {
+    const slots = this.inventorySlotRects
+    if (!Array.isArray(slots) || slots.length === 0) {
       this.refreshInventoryRect()
-      return null
+      return this.getInventorySlotIndexFallback(clientX, clientY)
     }
-    
+
+    let bestIdx = null
+    let bestDist = Infinity
+    const dragType = this.draggingTower && this.draggingTower.type
+    const dragLevel = this.draggingTower && this.draggingTower.level
+
+    for (let i = 0; i < slots.length; i++) {
+      if (this.draggingFromInventory && i === this.draggingInventoryIndex) continue
+      if (i >= this.inventory.length) continue
+      const targetTower = this.inventory[i]
+      if (!targetTower ||
+          targetTower.type !== dragType ||
+          targetTower.level !== dragLevel ||
+          targetTower.level >= MAX_TOWER_LEVEL) {
+        continue
+      }
+
+      const slot = slots[i]
+      if (!slot || !Number.isFinite(slot.left)) continue
+      const cx = slot.left + slot.width / 2
+      const cy = slot.top + slot.height / 2
+      const dx = clientX - cx
+      const dy = clientY - cy
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const hitR = Math.max(baseRadius, Math.max(slot.width, slot.height) * INVENTORY_MERGE_CORE_RATIO)
+      if (dist <= hitR && dist < bestDist) {
+        bestDist = dist
+        bestIdx = i
+      }
+    }
+    return bestIdx
+  },
+
+  // 回退：旧网格估算（仅在尚未量到格子时使用）
+  getInventorySlotIndexFallback(clientX, clientY) {
+    if (!this.inventoryRect) return null
+
     const rect = this.inventoryRect
-    const tolerance = 8
-    const relX = clientX - rect.left + tolerance
-    const relY = clientY - rect.top + tolerance
-    
-    if (relX < -tolerance || relY < -tolerance || relX > rect.width + tolerance * 2 || relY > rect.height + tolerance * 2) {
+    const tolerance = INVENTORY_HIT_TOLERANCE
+    const relX = clientX - rect.left
+    const relY = clientY - rect.top
+    if (relX < -tolerance || relY < -tolerance ||
+        relX > rect.width + tolerance || relY > rect.height + tolerance) {
       return null
     }
-    
-    const scale = this.windowWidth / 375
-    const slotSize = 50 * scale  // 100rpx
-    const gap = 3 * scale        // 6rpx
+
+    const scale = (this.windowWidth || 375) / 375
+    const slotSize = 50 * scale
+    const gap = 3 * scale
     const cellTotal = slotSize + gap
-    
-    const col = Math.floor(relX / cellTotal)
-    const row = Math.floor(relY / cellTotal)
-    
-    if (col < 0 || col >= INVENTORY_COLS || row < 0 || row >= INVENTORY_ROWS) {
+    // 居中布局：估算左侧空白
+    const rowWidth = INVENTORY_COLS * slotSize + (INVENTORY_COLS - 1) * gap
+    const padX = Math.max(0, (rect.width - rowWidth) / 2)
+    const col = Math.floor((relX - padX + gap / 2) / cellTotal)
+    const row = Math.floor((relY + gap / 2) / cellTotal)
+    if (col < 0 || col >= INVENTORY_COLS || row < 0 || row >= INVENTORY_ROWS) return null
+    const index = row * INVENTORY_COLS + col
+    if (index === this.draggingInventoryIndex || index >= this.inventory.length) return null
+    const targetTower = this.inventory[index]
+    if (!targetTower ||
+        targetTower.type !== this.draggingTower.type ||
+        targetTower.level !== this.draggingTower.level ||
+        targetTower.level >= MAX_TOWER_LEVEL) {
       return null
     }
-    
-    return row * INVENTORY_COLS + col
+    return index
+  },
+
+  getInventorySlotIndex(clientX, clientY) {
+    return this.findInventoryMergeIndex(clientX, clientY, INVENTORY_MERGE_RADIUS)
+  },
+
+  resolveStickyMergeTarget(touch) {
+    if (this.mergeTarget) return true
+
+    const clientX = (touch && touch.clientX) || this.lastTouchClientX
+    const clientY = (touch && touch.clientY) || this.lastTouchClientY
+    if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+      const idx = this.findInventoryMergeIndex(clientX, clientY, INVENTORY_MERGE_COMMIT_RADIUS)
+      if (idx !== null) {
+        this.mergeTargetInventoryIndex = idx
+        this.mergeTarget = this.inventory[idx]
+        this.mergeTargetType = 'inventory'
+        return true
+      }
+
+      let bestField = null
+      let bestDist = FIELD_MERGE_RADIUS * 1.25
+      for (const tower of this.towers) {
+        if (!this.draggingFromInventory && this.draggingTower && tower.id === this.draggingTower.id) continue
+        if (!this.draggingTower ||
+            tower.type !== this.draggingTower.type ||
+            tower.level !== this.draggingTower.level ||
+            tower.level >= MAX_TOWER_LEVEL) continue
+        const dx = this.dragX - tower.x
+        const dy = this.dragY - tower.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < bestDist) {
+          bestDist = dist
+          bestField = tower
+        }
+      }
+      if (bestField) {
+        this.mergeTarget = bestField
+        this.mergeTargetType = 'tower'
+        return true
+      }
+    }
+
+    // 卡顿时松手瞬间可能丢命中：200ms 内粘滞上次合法目标
+    const sticky = this._stickyMerge
+    if (sticky && Date.now() - sticky.at <= 220) {
+      if (sticky.type === 'inventory' &&
+          sticky.inventoryIndex >= 0 &&
+          sticky.inventoryIndex < this.inventory.length) {
+        const t = this.inventory[sticky.inventoryIndex]
+        if (t && this.draggingTower &&
+            t.type === this.draggingTower.type &&
+            t.level === this.draggingTower.level) {
+          this.mergeTarget = t
+          this.mergeTargetInventoryIndex = sticky.inventoryIndex
+          this.mergeTargetType = 'inventory'
+          return true
+        }
+      }
+      if (sticky.type === 'tower' && sticky.towerId != null) {
+        const t = this.towers.find((tower) => tower.id === sticky.towerId)
+        if (t && this.draggingTower &&
+            t.type === this.draggingTower.type &&
+            t.level === this.draggingTower.level) {
+          this.mergeTarget = t
+          this.mergeTargetType = 'tower'
+          return true
+        }
+      }
+    }
+    return false
   },
 
   onTouchEnd(e) {
@@ -3612,6 +4455,8 @@ Page(Object.assign({
     
     const offsetX = this.getGridOffsetX()
     const offsetY = this.getGridOffsetY()
+    const endTouch = (e && e.changedTouches && e.changedTouches[0]) || null
+    this.resolveStickyMergeTarget(endTouch)
     
     if (this.mergeTarget) {
       // 合成操作
@@ -3771,6 +4616,7 @@ Page(Object.assign({
     this.lastDragUiUpdateAt = 0
     this.lastMergeHintVisible = false
     this.lastMergeHintSlotIndex = -1
+    this._stickyMerge = null
     this.setData({ 
       showMergeHint: false, 
       draggingSlotIndex: -1,
@@ -4037,59 +4883,72 @@ Page(Object.assign({
         this.grid[row][col] = null
       }
     }
+    this.towers = []
     
     // 更新主题
     this.setData({ currentTheme: themeKey })
     
-    // 重新生成路径和装饰
-    this.generatePath(themeKey)
+    // 换图：完整重建路径、塔位与装饰
+    this.generatePath(themeKey, {
+      refreshDressing: true,
+      rebuildSlots: true,
+      relocateTowers: false
+    })
     this.syncPrepTowerSlots(themeKey)
     
-    // 重新放置塔（检查新位置是否是有效塔位）
-    this.towers = []
+    // 重新放置塔：原位仍合法则保留，否则吸附到最近空塔位，再不行退回仓库
     savedTowers.forEach(t => {
-      // 检查是否在新主题的塔位上
-      const isValidSlot = theme.towerSlots.some(slot => slot.row === t.relRow && slot.col === t.relCol)
-      
-      if (isValidSlot) {
-        const newTower = {
-          ...t,
-          row: t.relRow,
-          col: t.relCol,
-          x: this.getGridOffsetX() + t.relCol * CONFIG.cellSize + CONFIG.cellSize / 2,
-          y: this.getGridOffsetY() + t.relRow * CONFIG.cellSize + CONFIG.cellSize / 2
-        }
-        this.towers.push(newTower)
-        this.grid[t.relRow][t.relCol] = newTower
-      } else {
-        // 塔位置无效，退回仓库
-        if (this.inventory.length < INVENTORY_COLS * INVENTORY_ROWS) {
-          this.inventory.push({
-            id: t.id,
-            type: t.type,
-            level: t.level,
-            damage: t.damage,
-            range: t.range,
-            attackSpeed: t.attackSpeed,
-            lastAttack: 0
-          })
-          this.updateInventoryDisplay()
-          
-          this.floatingTexts.push({
-            x: CONFIG.canvasWidth / 2,
-            y: CONFIG.canvasHeight / 2 + 20,
-            text: `${TOWER_TYPES[t.type].emoji} 塔已退回仓库`,
-            color: '#ffaa00',
-            life: 80,
-            maxLife: 80,
-            vy: -0.5,
-            vx: 0,
-            scale: 1
-          })
+      let targetRow = t.relRow
+      let targetCol = t.relCol
+      const sameSlotOk = this.isTowerSlot(targetRow, targetCol) &&
+        !(this.grid[targetRow] && this.grid[targetRow][targetCol])
+
+      if (!sameSlotOk) {
+        const near = this.findNearestFreeSlot(t.relRow, t.relCol)
+        if (near) {
+          targetRow = near.row
+          targetCol = near.col
+        } else {
+          if (this.inventory.length < INVENTORY_COLS * INVENTORY_ROWS) {
+            this.inventory.push({
+              id: t.id,
+              type: t.type,
+              level: t.level,
+              damage: t.damage,
+              range: t.range,
+              attackSpeed: t.attackSpeed,
+              lastAttack: 0
+            })
+            this.updateInventoryDisplay()
+            
+            this.floatingTexts.push({
+              x: CONFIG.canvasWidth / 2,
+              y: CONFIG.canvasHeight / 2 + 20,
+              text: `${TOWER_TYPES[t.type].emoji} 塔已退回仓库`,
+              color: '#ffaa00',
+              life: 80,
+              maxLife: 80,
+              vy: -0.5,
+              vx: 0,
+              scale: 1
+            })
+          }
+          return
         }
       }
+
+      const newTower = {
+        ...t,
+        row: targetRow,
+        col: targetCol,
+        x: this.getGridOffsetX() + targetCol * CONFIG.cellSize + CONFIG.cellSize / 2,
+        y: this.getGridOffsetY() + targetRow * CONFIG.cellSize + CONFIG.cellSize / 2
+      }
+      this.towers.push(newTower)
+      this.grid[targetRow][targetCol] = newTower
     })
     this.syncFieldTowerCount()
+    this.syncPrepTowerSlots(themeKey)
     
     // 地形切换特效
     for (let i = 0; i < 50; i++) {
@@ -4112,6 +4971,7 @@ Page(Object.assign({
   },
 
   gameOver() {
+    this.clearRunProgress()
     this.stopGame()
     
     const highScore = wx.getStorageSync('highScore') || 0
@@ -4137,6 +4997,7 @@ Page(Object.assign({
 
     if (this.data.gameState === 'playing') {
       this.setData({ gameState: 'paused' })
+      this.persistRunProgress({ immediate: true })
       this.requestRender()
       return
     }
@@ -4147,17 +5008,32 @@ Page(Object.assign({
   },
 
   resumeGame() {
+    // 暂停过久/回前台后，避免波次卡在 complete 或出怪时间戳异常
+    const noMonsters = !this.monsters || this.monsters.length === 0
+    const spawnDone = !this.waveMonsters || !this.waveMonsters.length ||
+      this.spawnIndex >= this.waveMonsters.length
+    if (noMonsters && (this.waveComplete || spawnDone)) {
+      this.waveComplete = false
+      this.pendingWaveAdvance = null
+      this.generateWave(this.data.wave || 1)
+    }
+    this.lastSpawnTime = Math.min(this.lastSpawnTime || Date.now(), Date.now())
     this.setData({ gameState: 'playing' })
+    if (!this.gameLoop) {
+      this.startGame()
+    }
     this.requestRender()
   },
 
   restartGame() {
+    this.clearRunProgress()
     this.stopGame()
     this.initGame()
     this.startGame()
   },
 
   backToMenu() {
+    this.persistRunProgress({ immediate: true })
     this.stopGame()
     wx.navigateBack()
   }
