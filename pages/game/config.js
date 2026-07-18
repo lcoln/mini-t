@@ -44,7 +44,8 @@ const INVENTORY_HIT_TOLERANCE = 8
 const INVENTORY_MERGE_RADIUS = 22
 const INVENTORY_MERGE_COMMIT_RADIUS = 12
 const INVENTORY_MERGE_CORE_RATIO = 0.24
-const BOSS_PRESSURE_BONUS = 42
+// Boss 不再额外抬场景压力：出场不应切换 busy/intense，避免草地/弹道/特效被精简
+const BOSS_PRESSURE_BONUS = 0
 const BOSS_PROFILE_GRACE_MS = 520
 const PERFORMANCE_PROFILE_INTERVALS = {
   relaxed: 180,
@@ -55,9 +56,10 @@ const PERFORMANCE_PROFILE_HYSTERESIS = {
   busyExit: 38,
   intenseEnter: 94,
   intenseExit: 72,
-  bossBusyFloor: 48,
-  bossIntenseEnter: 60,
-  bossIntenseExit: 46
+  // 保留字段兼容旧逻辑，但数值对齐普通档位，Boss 不再单独降画质
+  bossBusyFloor: 52,
+  bossIntenseEnter: 94,
+  bossIntenseExit: 72
 }
 
 const AUDIO_SETTING_KEY = 'miniTSoundEnabled'
@@ -183,6 +185,7 @@ const TOWER_ATTACK_SOUNDS = {
   lightning: { keys: ['lightningAttack', 'lightningAttackAlt'], cooldownKey: 'lightningAttack', levelBoost: 0.018 }
 }
 
+// 各档画质标志保持一致：压力升高只略降帧，不再抽稀草地/装饰或把怪塔压成圆点
 const PERFORMANCE_PROFILES = {
   relaxed: {
     renderInterval: 16,
@@ -200,34 +203,34 @@ const PERFORMANCE_PROFILES = {
     bossDamageTextCooldown: 0
   },
   busy: {
-    renderInterval: 30,
+    renderInterval: 22,
     simplifyTowers: false,
     simplifyMonsters: false,
-    simplifyBosses: true,
-    simplifyProjectiles: true,
+    simplifyBosses: false,
+    simplifyProjectiles: false,
     skipDecorations: false,
-    decorStride: 2,
-    animatedDecorations: false,
-    effectRenderStride: 2,
-    projectileTrailPoints: 3,
+    decorStride: 1,
+    animatedDecorations: true,
+    effectRenderStride: 1,
+    projectileTrailPoints: 5,
     damageTextStride: 1,
-    compactBossHp: true,
-    bossDamageTextCooldown: 80
+    compactBossHp: false,
+    bossDamageTextCooldown: 0
   },
   intense: {
-    renderInterval: 42,
-    simplifyTowers: true,
-    simplifyMonsters: true,
-    simplifyBosses: true,
-    simplifyProjectiles: true,
-    skipDecorations: true,
-    decorStride: 3,
-    animatedDecorations: false,
-    effectRenderStride: 3,
-    projectileTrailPoints: 1,
-    damageTextStride: 2,
-    compactBossHp: true,
-    bossDamageTextCooldown: 140
+    renderInterval: 28,
+    simplifyTowers: false,
+    simplifyMonsters: false,
+    simplifyBosses: false,
+    simplifyProjectiles: false,
+    skipDecorations: false,
+    decorStride: 1,
+    animatedDecorations: true,
+    effectRenderStride: 1,
+    projectileTrailPoints: 5,
+    damageTextStride: 1,
+    compactBossHp: false,
+    bossDamageTextCooldown: 0
   }
 }
 

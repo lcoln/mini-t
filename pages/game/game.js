@@ -14,7 +14,6 @@ const {
   INVENTORY_MERGE_COMMIT_RADIUS,
   INVENTORY_MERGE_CORE_RATIO,
   BOSS_PRESSURE_BONUS,
-  BOSS_PROFILE_GRACE_MS,
   PERFORMANCE_PROFILE_INTERVALS,
   PERFORMANCE_PROFILE_HYSTERESIS,
   AUDIO_SETTING_KEY,
@@ -307,16 +306,13 @@ Page(Object.assign({
   },
 
   enforcePerformanceCaps() {
-    const hasBoss = this.hasBossOnField()
-    const effectCapFactor = hasBoss ? 0.72 : 1
-
-    this.trimEffectQueue('particles', Math.max(40, Math.floor(PERFORMANCE_LIMITS.particles * effectCapFactor)))
-    this.trimEffectQueue('floatingTexts', Math.max(10, Math.floor(PERFORMANCE_LIMITS.floatingTexts * effectCapFactor)))
-    this.trimEffectQueue('lightningEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.lightningEffects * effectCapFactor)))
-    this.trimEffectQueue('fireEffects', Math.max(20, Math.floor(PERFORMANCE_LIMITS.fireEffects * effectCapFactor)))
-    this.trimEffectQueue('iceEffects', Math.max(16, Math.floor(PERFORMANCE_LIMITS.iceEffects * effectCapFactor)))
-    this.trimEffectQueue('poisonEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.poisonEffects * effectCapFactor)))
-    this.trimEffectQueue('arcaneEffects', Math.max(18, Math.floor(PERFORMANCE_LIMITS.arcaneEffects * effectCapFactor)))
+    this.trimEffectQueue('particles', PERFORMANCE_LIMITS.particles)
+    this.trimEffectQueue('floatingTexts', PERFORMANCE_LIMITS.floatingTexts)
+    this.trimEffectQueue('lightningEffects', PERFORMANCE_LIMITS.lightningEffects)
+    this.trimEffectQueue('fireEffects', PERFORMANCE_LIMITS.fireEffects)
+    this.trimEffectQueue('iceEffects', PERFORMANCE_LIMITS.iceEffects)
+    this.trimEffectQueue('poisonEffects', PERFORMANCE_LIMITS.poisonEffects)
+    this.trimEffectQueue('arcaneEffects', PERFORMANCE_LIMITS.arcaneEffects)
     this.trimEffectQueue('mergeEffects', PERFORMANCE_LIMITS.mergeEffects)
 
     const trailLimit = this.getProjectileTrailLimit()
@@ -789,38 +785,31 @@ Page(Object.assign({
       (this.isDragging ? 12 : 0)
   },
 
-  resolvePerformanceProfileKey(pressure, hasBoss, now = Date.now()) {
-    const bossPressureActive = hasBoss || (
-      this.lastBossSeenAt > 0 && now - this.lastBossSeenAt <= BOSS_PROFILE_GRACE_MS
-    )
+  resolvePerformanceProfileKey(pressure) {
     const currentKey = this.performanceProfileKey || 'relaxed'
 
     if (currentKey === 'intense') {
-      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.intenseExit &&
-        (!bossPressureActive || pressure <= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseExit)) {
-        return pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit && !bossPressureActive ? 'relaxed' : 'busy'
+      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.intenseExit) {
+        return pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit ? 'relaxed' : 'busy'
       }
       return this.isDragging ? 'busy' : 'intense'
     }
 
     if (currentKey === 'busy') {
-      if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter ||
-        (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseEnter)) {
+      if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter) {
         return this.isDragging ? 'busy' : 'intense'
       }
-      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit && !bossPressureActive) {
+      if (pressure <= PERFORMANCE_PROFILE_HYSTERESIS.busyExit) {
         return 'relaxed'
       }
       return 'busy'
     }
 
-    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter ||
-      (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossIntenseEnter)) {
+    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.intenseEnter) {
       return this.isDragging ? 'busy' : 'intense'
     }
 
-    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.busyEnter ||
-      (bossPressureActive && pressure >= PERFORMANCE_PROFILE_HYSTERESIS.bossBusyFloor)) {
+    if (pressure >= PERFORMANCE_PROFILE_HYSTERESIS.busyEnter) {
       return 'busy'
     }
 
@@ -829,26 +818,8 @@ Page(Object.assign({
 
   updatePerformanceProfile(now = Date.now(), force = false) {
     const pressure = this.calculateScenePressure()
-    const hasBoss = this.hasBossOnField()
 
-    if (hasBoss) {
-      this.lastBossSeenAt = now
-    }
-
-    // Boss 离场后超过 grace period，强制回归 relaxed
-    // 原因：Boss 击杀后残留的怪物/弹丸/特效仍把 pressure 推在 72+（intenseExit），
-    // profile 永远退不出 intense → drawPath/drawDecorations 永远简化 → 路径一直变色 + 卡顿
-    const bossGraceActive = hasBoss || (
-      this.lastBossSeenAt > 0 && now - this.lastBossSeenAt <= BOSS_PROFILE_GRACE_MS
-    )
-    const wasBossProfile = this.performanceProfileKey === 'intense' || this.performanceProfileKey === 'busy'
-    if (!bossGraceActive && wasBossProfile) {
-      this.setPerformanceProfile('relaxed')
-      this.lastPerformanceProfileCheckAt = now
-      return
-    }
-
-    const checkInterval = hasBoss || this.performanceProfileKey !== 'relaxed' || pressure >= 48
+    const checkInterval = this.performanceProfileKey !== 'relaxed' || pressure >= 48
       ? PERFORMANCE_PROFILE_INTERVALS.elevated
       : PERFORMANCE_PROFILE_INTERVALS.relaxed
 
@@ -857,7 +828,7 @@ Page(Object.assign({
     }
 
     this.lastPerformanceProfileCheckAt = now
-    const nextKey = this.resolvePerformanceProfileKey(pressure, hasBoss, now)
+    const nextKey = this.resolvePerformanceProfileKey(pressure)
     this.setPerformanceProfile(nextKey)
   },
 
@@ -882,30 +853,22 @@ Page(Object.assign({
 
   shouldUseSimplifiedProjectiles() {
     const profile = this.getActivePerformanceProfile()
-    return profile.simplifyProjectiles || this.hasBossOnField()
+    return !!profile.simplifyProjectiles
   },
 
   getEffectRenderStride() {
     const profile = this.getActivePerformanceProfile()
-    const stride = this.hasBossOnField()
-      ? Math.max(profile.effectRenderStride, 2)
-      : profile.effectRenderStride
+    const stride = profile.effectRenderStride || 1
     return this.isDragging ? Math.min(stride, 2) : stride
   },
 
   getProjectileTrailLimit() {
     const profile = this.getActivePerformanceProfile()
-    if (this.hasBossOnField()) {
-      return Math.min(profile.projectileTrailPoints || PERFORMANCE_LIMITS.trailPoints, 2)
-    }
     return profile.projectileTrailPoints || PERFORMANCE_LIMITS.trailPoints
   },
 
   getDamageTextStride() {
     const profile = this.getActivePerformanceProfile()
-    if (this.hasBossOnField()) {
-      return Math.max(profile.damageTextStride || 1, 2)
-    }
     return profile.damageTextStride || 1
   },
 
@@ -1492,8 +1455,8 @@ Page(Object.assign({
       })
     }
 
-    // 每5波出Boss - 不同关卡不同Boss
-    if (wave % 5 === 0) {
+    // 第1波（第一关开场）+ 每5波出Boss；不同关卡循环不同Boss
+    if (wave === 1 || wave % 5 === 0) {
       const bossTypes = ['dragon', 'treant', 'lich', 'phoenix']
       const bossType = bossTypes[(level - 1) % bossTypes.length]
       const bossConfig = MONSTER_TYPES[bossType]
@@ -1509,8 +1472,13 @@ Page(Object.assign({
       })
     }
 
-    // 随机打乱顺序
+    // 随机打乱顺序；若本波有 Boss，固定移到队首，保证开场立刻出场
     this.waveMonsters.sort(() => Math.random() - 0.5)
+    const bossIndex = this.waveMonsters.findIndex((m) => m.isBoss)
+    if (bossIndex > 0) {
+      const [boss] = this.waveMonsters.splice(bossIndex, 1)
+      this.waveMonsters.unshift(boss)
+    }
 
     this.spawnIndex = 0
     this.waveComplete = false

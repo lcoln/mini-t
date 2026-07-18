@@ -58,12 +58,24 @@ module.exports = {
       const ctx = this.ctx
       const config = MONSTER_TYPES[monster.type]
       const size = monster.isBoss ? 22 : 14
-      const useCompactMonster = profile.simplifyMonsters && !monster.isBoss
+      // 仅在 intense 等档位精简；Boss 完整绘制已去掉 shadowBlur，不再强制 compact
+      const useCompactMonster = monster.isBoss
+        ? !!profile.simplifyBosses
+        : !!profile.simplifyMonsters
 
-      // 阴影
+      // 硬重置，避免上一只怪泄漏的 shadow/alpha 污染本帧
+      ctx.shadowBlur = 0
+      ctx.shadowColor = 'rgba(0,0,0,0)'
+      ctx.globalAlpha = 1
+
+      // 脚下阴影
       ctx.fillStyle = 'rgba(0,0,0,0.4)'
       ctx.beginPath()
-      ctx.ellipse(monster.x, monster.y + size + 4, size * 0.8, size * 0.3, 0, 0, Math.PI * 2)
+      if (typeof ctx.ellipse === 'function') {
+        ctx.ellipse(monster.x, monster.y + size + 4, size * 0.8, size * 0.3, 0, 0, Math.PI * 2)
+      } else {
+        ctx.arc(monster.x, monster.y + size + 4, size * 0.55, 0, Math.PI * 2)
+      }
       ctx.fill()
 
       if (useCompactMonster) {
@@ -74,8 +86,6 @@ module.exports = {
           ctx.save()
           ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
           ctx.lineWidth = 3
-          ctx.shadowBlur = 15
-          ctx.shadowColor = '#00ccff'
           ctx.beginPath()
           ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
           ctx.stroke()
@@ -86,8 +96,6 @@ module.exports = {
           ctx.save()
           ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
           ctx.lineWidth = 2
-          ctx.shadowBlur = 10
-          ctx.shadowColor = '#44ff44'
           // 绘制缠绕的藤蔓
           const time = Date.now()
           for (let i = 0; i < 3; i++) {
@@ -113,6 +121,11 @@ module.exports = {
           this.drawBurningEffect(ctx, monster, size)
         }
       }
+
+      // 绘制后再次硬重置，防止 Boss/特效状态泄漏到后续塔/路径
+      ctx.shadowBlur = 0
+      ctx.shadowColor = 'rgba(0,0,0,0)'
+      ctx.globalAlpha = 1
 
       // 血条背景
       const barWidth = monster.isBoss ? 55 : 35
@@ -280,22 +293,8 @@ module.exports = {
     const time = Date.now()
 
     if (monster.isBoss) {
-      // 真机 Canvas 2D 兼容：globalAlpha + 实色，替代 rgba 模板
-      const flameRadius = size * 1.15 + Math.sin(time * 0.01) * 2
-      ctx.globalAlpha = 0.16 + intensity * 0.18
-      ctx.fillStyle = '#ff821e'
-      ctx.beginPath()
-      ctx.arc(monster.x, monster.y, flameRadius, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.globalAlpha = 0.38 + intensity * 0.2
-      ctx.strokeStyle = '#ffdc82'
-      ctx.lineWidth = 2
-      for (let i = 0; i < 3; i++) {
-        const start = time * 0.004 + i * (Math.PI * 2 / 3)
-        ctx.beginPath()
-        ctx.arc(monster.x, monster.y, flameRadius + i * 2, start, start + Math.PI * 0.55)
-        ctx.stroke()
-      }
+      // Boss 出场时燃烧特效会形成满屏黄光叠加 + 巨量 Canvas 2D 调用导致卡顿发烫，
+      // 此处直接跳过底盘光晕与外层光圈绘制，仅保留内部亮核（见下方共用的 fireFlame 逻辑）。
       ctx.globalAlpha = 1
       ctx.restore()
       return
@@ -755,15 +754,12 @@ module.exports = {
         ctx.lineTo(monster.x + 4, monster.y - dragonSize * 0.5)
         ctx.closePath()
         ctx.fill()
-        // 眼睛
+        // 眼睛（禁用 shadowBlur：真机上 #ffff00 光晕会扩散成满屏黄光）
         ctx.fillStyle = config.eyeColor
-        ctx.shadowBlur = 8
-        ctx.shadowColor = config.eyeColor
         ctx.beginPath()
         ctx.arc(monster.x - 7, monster.y - dragonSize * 0.35, 4, 0, Math.PI * 2)
         ctx.arc(monster.x + 7, monster.y - dragonSize * 0.35, 4, 0, Math.PI * 2)
         ctx.fill()
-        ctx.shadowBlur = 0
         // 鼻孔喷火
         if (monster.animFrame % 2 === 0) {
           ctx.fillStyle = '#ff6600'
@@ -822,15 +818,12 @@ module.exports = {
         ctx.beginPath()
         ctx.arc(monster.x + leafSway, monster.y - treantSize * 0.7, treantSize * 0.8, 0, Math.PI * 2)
         ctx.stroke()
-        // 眼睛 - 在树干上
+        // 眼睛 - 在树干上（禁用 shadowBlur，避免真机满屏染色）
         ctx.fillStyle = config.eyeColor
-        ctx.shadowBlur = 6
-        ctx.shadowColor = config.eyeColor
         ctx.beginPath()
         ctx.arc(monster.x - 7, monster.y - treantSize * 0.15, 4, 0, Math.PI * 2)
         ctx.arc(monster.x + 7, monster.y - treantSize * 0.15, 4, 0, Math.PI * 2)
         ctx.fill()
-        ctx.shadowBlur = 0
         // 瞳孔
         ctx.fillStyle = '#114400'
         ctx.beginPath()
@@ -863,19 +856,8 @@ module.exports = {
         break
         
       case 'lich':
-        // 巫妖 - Boss
+        // 巫妖 - Boss（去掉径向渐变光环，降低真机 Canvas 压力）
         const lichSize = size * 1.15
-        // 暗影光环
-        ctx.save()
-        ctx.globalAlpha = 0.3 + Math.sin(monster.animFrame * 0.3) * 0.1
-        const lichAura = ctx.createRadialGradient(monster.x, monster.y, lichSize * 0.3, monster.x, monster.y, lichSize * 1.5)
-        lichAura.addColorStop(0, 'rgba(85, 34, 170, 0.4)')
-        lichAura.addColorStop(1, 'rgba(85, 34, 170, 0)')
-        ctx.fillStyle = lichAura
-        ctx.beginPath()
-        ctx.arc(monster.x, monster.y, lichSize * 1.5, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
         // 飘动的斗篷身体
         const lichFloat = Math.sin(monster.animFrame * 0.4) * 3
         ctx.fillStyle = config.bodyColor
@@ -909,15 +891,12 @@ module.exports = {
         ctx.strokeStyle = config.outlineColor
         ctx.lineWidth = 1.5
         ctx.stroke()
-        // 眼睛 - 发光的青色眼窝
+        // 眼睛（禁用 shadowBlur，避免真机满屏染色）
         ctx.fillStyle = config.eyeColor
-        ctx.shadowBlur = 10
-        ctx.shadowColor = config.eyeColor
         ctx.beginPath()
         ctx.arc(monster.x - 6, monster.y - lichSize * 0.45 + lichFloat, 4, 0, Math.PI * 2)
         ctx.arc(monster.x + 6, monster.y - lichSize * 0.45 + lichFloat, 4, 0, Math.PI * 2)
         ctx.fill()
-        ctx.shadowBlur = 0
         // 眼内瞳
         ctx.fillStyle = '#ffffff'
         ctx.beginPath()
@@ -933,12 +912,9 @@ module.exports = {
         ctx.stroke()
         // 法杖顶端宝珠
         ctx.fillStyle = '#aa66ff'
-        ctx.shadowBlur = 12
-        ctx.shadowColor = '#aa66ff'
         ctx.beginPath()
         ctx.arc(monster.x + lichSize * 0.7, monster.y - lichSize * 0.55 + lichFloat, 5, 0, Math.PI * 2)
         ctx.fill()
-        ctx.shadowBlur = 0
         // 漂浮的灵魂粒子
         const soulT = Date.now() * 0.002
         for (let i = 0; i < 3; i++) {
@@ -955,19 +931,8 @@ module.exports = {
         break
         
       case 'phoenix':
-        // 凤凰 - Boss
+        // 凤凰 - Boss（去掉径向渐变光环：真机易整屏染黄/橙并卡顿）
         const phSize = size * 1.2
-        // 火焰光环
-        ctx.save()
-        const fireAura = ctx.createRadialGradient(monster.x, monster.y, phSize * 0.3, monster.x, monster.y, phSize * 1.6)
-        fireAura.addColorStop(0, 'rgba(255, 136, 0, 0.3)')
-        fireAura.addColorStop(0.5, 'rgba(255, 68, 0, 0.15)')
-        fireAura.addColorStop(1, 'rgba(255, 0, 0, 0)')
-        ctx.fillStyle = fireAura
-        ctx.beginPath()
-        ctx.arc(monster.x, monster.y, phSize * 1.6, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
         // 身体
         ctx.fillStyle = config.bodyColor
         ctx.beginPath()
@@ -976,15 +941,6 @@ module.exports = {
         ctx.strokeStyle = config.outlineColor
         ctx.lineWidth = 2.5
         ctx.stroke()
-        // 渐变覆盖
-        const phGrad = ctx.createRadialGradient(monster.x - 3, monster.y - 3, 0, monster.x, monster.y, phSize * 0.7)
-        phGrad.addColorStop(0, 'rgba(255, 255, 100, 0.4)')
-        phGrad.addColorStop(0.5, 'rgba(255, 200, 0, 0.2)')
-        phGrad.addColorStop(1, 'rgba(255, 100, 0, 0)')
-        ctx.fillStyle = phGrad
-        ctx.beginPath()
-        ctx.ellipse(monster.x, monster.y, phSize * 0.7, phSize * 0.55, 0, 0, Math.PI * 2)
-        ctx.fill()
         // 翅膀 - 火焰状展开
         const wingFlap2 = Math.sin(monster.animFrame * 0.6) * 0.3
         ctx.fillStyle = '#ffaa00'
@@ -1036,15 +992,12 @@ module.exports = {
         ctx.lineTo(monster.x + 5, monster.y - phSize * 0.7)
         ctx.closePath()
         ctx.fill()
-        // 眼睛
+        // 眼睛（禁用 shadowBlur）
         ctx.fillStyle = config.eyeColor
-        ctx.shadowBlur = 8
-        ctx.shadowColor = '#ffffff'
         ctx.beginPath()
         ctx.arc(monster.x - 5, monster.y - phSize * 0.5, 3.5, 0, Math.PI * 2)
         ctx.arc(monster.x + 5, monster.y - phSize * 0.5, 3.5, 0, Math.PI * 2)
         ctx.fill()
-        ctx.shadowBlur = 0
         // 喙
         ctx.fillStyle = '#cc6600'
         ctx.beginPath()
