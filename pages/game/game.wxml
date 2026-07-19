@@ -18,8 +18,13 @@
       <text class="status-icon">⭐</text>
       <text class="status-value">{{score}}</text>
     </view>
-    <view class="pause-btn" bindtap="togglePause">
-      <text>⏸</text>
+    <view class="status-actions">
+      <view class="sound-btn {{soundEnabled ? '' : 'muted'}}" bindtap="toggleSound">
+        <text>{{soundEnabled ? '🔊' : '🔇'}}</text>
+      </view>
+      <view class="pause-btn" bindtap="togglePause">
+        <text>⏸</text>
+      </view>
     </view>
   </view>
 
@@ -102,10 +107,17 @@
     <view class="inventory-header">
       <text class="inventory-title">🏰 防御塔仓库</text>
       <view class="inventory-actions">
-        <view class="organize-btn" catchtap="autoMergeInventory">
-          <text>⚙️ 整理</text>
+        <view class="supply-drop-btn {{commandPoints >= 2 ? '' : 'disabled'}}" catchtap="callSupplyDrop">
+          <text class="supply-drop-icon">📦</text>
+          <text class="supply-drop-text">空投</text>
+          <text class="supply-drop-cost">{{commandPoints}} / 2</text>
         </view>
-        <view class="summon-btn {{gold < summonCost ? 'disabled' : (inventoryFull ? 'full' : '')}}" catchtap="summonTower">
+        <view class="commander-btn {{commanderAiming ? 'targeting' : ''}} {{commandPoints >= commanderCost ? '' : 'disabled'}}" catchtap="toggleCommanderTargeting">
+          <text class="commander-icon">🛰️</text>
+          <text class="commander-text">指挥</text>
+          <text class="commander-cost">{{commandPoints}} / {{commanderCost}}</text>
+        </view>
+        <view class="summon-btn {{gold < summonCost || inventoryFull ? 'disabled' : ''}}" catchtap="summonTower">
           <text class="summon-icon">✨</text>
           <text class="summon-text">召唤</text>
           <text class="summon-cost">💰{{summonCost}}</text>
@@ -114,7 +126,7 @@
     </view>
     
     <view class="inventory-hint">
-      <text>拖拽同类同级塔合成 · 长按可回收 · 满仓点整理</text>
+      <text>无漏怪或击杀精英可攒战术点，2 点空投补塔，3 点投放集火区 · 长按可回收</text>
     </view>
     
     <view class="inventory-grid">

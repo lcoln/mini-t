@@ -176,6 +176,7 @@ Page(Object.assign({
   grid: [],
   pathDecorations: [],  // 预生成的路径装饰，避免每帧随机
   mapDecorations: [],   // 预生成的地图装饰
+  commanderZone: null,
   
   waveMonsters: [],
   spawnIndex: 0,
@@ -219,6 +220,7 @@ Page(Object.assign({
   onLoad() {
     this.setupIOSGestureSafeArea()
     this.enableLeaveGuard()
+    this.initSoundSettings()
     this.initCanvas()
   },
 
@@ -227,6 +229,9 @@ Page(Object.assign({
     if (this.canvas && !this.gameLoop) {
       this.startGame()
       this.requestRender()
+    }
+    if (this.soundEnabled && this.data.gameState === 'playing') {
+      this.syncAmbientTrack()
     }
   },
 
@@ -239,6 +244,7 @@ Page(Object.assign({
 
   onHide() {
     this.persistRunProgress({ immediate: true })
+    this.stopAllSounds()
     this.stopGame()
   },
 
@@ -249,6 +255,7 @@ Page(Object.assign({
     }
     this.persistRunProgress({ immediate: true })
     this.stopGame()
+    this.destroySoundPool()
   },
 
   // 微信 iOS 7.0.5+ 强制保留边缘侧滑返回，无法通过 disableSwipeBack 关闭。
@@ -648,8 +655,429 @@ Page(Object.assign({
     this.requestRender()
   },
 
-  playSound() {
-    // 音效系统尚未接入，预留接口
+  initSoundSettings() {
+    const stored = wx.getStorageSync(AUDIO_SETTING_KEY)
+    const soundEnabled = typeof stored === 'boolean' ? stored : true
+    this.soundEnabled = soundEnabled
+    this.setData({ soundEnabled })
+    this.ensureSoundPool()
+  },
+
+  ensureSoundPool() {
+    if (this.soundInitialized) return
+
+    this.soundPool = {}
+    this.soundPoolCursor = {}
+    this.soundLastPlayedAt = {}
+
+    Object.keys(SOUND_ASSETS).forEach((key) => {
+      if (String(key).endsWith('Ambience')) return
+
+      const size = SOUND_POOL_SIZES[key] || 1
+      this.soundPool[key] = []
+      this.soundPoolCursor[key] = 0
+
+      for (let i = 0; i < size; i++) {
+        try {
+          const audio = wx.createInnerAudioContext()
+          audio.src = SOUND_ASSETS[key]
+          audio.autoplay = false
+          audio.loop = false
+          audio.obeyMuteSwitch = true
+          audio.volume = SOUND_VOLUMES[key] ?? 0.5
+          this.soundPool[key].push(audio)
+        } catch (error) {
+          // 忽略单个音频实例初始化失败
+        }
+      }
+    })
+
+    this.soundInitialized = true
+  },
+
+  ensureAmbientAudio() {
+    if (this.ambientAudio) return this.ambientAudio
+
+    try {
+      const audio = wx.createInnerAudioContext()
+      audio.autoplay = false
+      audio.loop = true
+      audio.obeyMuteSwitch = true
+      this.ambientAudio = audio
+      return audio
+    } catch (error) {
+      this.ambientAudio = null
+      return null
+    }
+  },
+
+  syncAmbientTrack(themeKey = this.data.currentTheme) {
+    if (!this.soundEnabled) return
+
+    const ambientKey = AMBIENT_TRACKS[themeKey]
+    if (!ambientKey || !SOUND_ASSETS[ambientKey]) return
+
+    const audio = this.ensureAmbientAudio()
+    if (!audio) return
+
+    try {
+      audio.volume = SOUND_VOLUMES[ambientKey] ?? 0.16
+      if (this.ambientKey !== ambientKey) {
+        audio.stop()
+        audio.src = SOUND_ASSETS[ambientKey]
+        this.ambientKey = ambientKey
+      }
+      audio.play()
+    } catch (error) {
+      // 忽略环境音失败
+    }
+  },
+
+  stopAmbientTrack() {
+    if (!this.ambientAudio) return
+    try {
+      this.ambientAudio.stop()
+    } catch (error) {
+      // 忽略停止失败
+    }
+  },
+
+  playSound(key, options = {}) {
+    if (!this.soundEnabled) return
+    this.ensureSoundPool()
+
+    const pool = this.soundPool && this.soundPool[key]
+    if (!pool || pool.length === 0) return
+
+    const cooldown = options.cooldown ?? SOUND_COOLDOWNS[key] ?? 0
+    const cooldownKey = options.cooldownKey || key
+    const now = Date.now()
+    const lastAt = this.soundLastPlayedAt[cooldownKey] || 0
+    if (cooldown > 0 && now - lastAt < cooldown) {
+      return
+    }
+    this.soundLastPlayedAt[cooldownKey] = now
+
+    const cursor = this.soundPoolCursor[key] || 0
+    const audio = pool[cursor % pool.length]
+    this.soundPoolCursor[key] = (cursor + 1) % pool.length
+    if (!audio) return
+
+    try {
+      audio.stop()
+      if (typeof audio.seek === 'function') {
+        audio.seek(0)
+      }
+      audio.volume = options.volume ?? SOUND_VOLUMES[key] ?? 0.5
+      audio.play()
+    } catch (error) {
+      // 低端机或未解锁音频时静默降级
+    }
+  },
+
+  playTowerAttackSound(tower) {
+    if (!tower) return
+
+    const soundConfig = TOWER_ATTACK_SOUNDS[tower.type] || TOWER_ATTACK_SOUNDS.fire
+    if (!soundConfig) return
+
+    const soundKeys = soundConfig.keys || [soundConfig.key]
+    const level = Math.max(1, tower.level || 1)
+    const variantIndex = (level + (this.renderFrameCount || 0)) % soundKeys.length
+    const soundKey = soundKeys[variantIndex]
+    const baseVolume = SOUND_VOLUMES[soundKey] ?? 0.22
+    const levelBoost = Math.min((level - 1) * (soundConfig.levelBoost || 0.015), 0.08)
+
+    this.playSound(soundKey, {
+      volume: Math.min(baseVolume + levelBoost, 0.34),
+      cooldownKey: soundConfig.cooldownKey || soundKey
+    })
+  },
+
+  stopAllSounds() {
+    Object.values(this.soundPool || {}).forEach((pool) => {
+      ;(pool || []).forEach((audio) => {
+        try {
+          audio.stop()
+        } catch (error) {
+          // 忽略停止失败
+        }
+      })
+    })
+    this.stopAmbientTrack()
+  },
+
+  destroySoundPool() {
+    this.stopAllSounds()
+    Object.values(this.soundPool || {}).forEach((pool) => {
+      ;(pool || []).forEach((audio) => {
+        try {
+          audio.destroy()
+        } catch (error) {
+          // 忽略销毁失败
+        }
+      })
+    })
+    if (this.ambientAudio) {
+      try {
+        this.ambientAudio.destroy()
+      } catch (error) {
+        // 忽略销毁失败
+      }
+    }
+    this.ambientAudio = null
+    this.ambientKey = ''
+    this.soundPool = {}
+    this.soundPoolCursor = {}
+    this.soundLastPlayedAt = {}
+    this.soundInitialized = false
+  },
+
+  toggleSound() {
+    const nextEnabled = !this.soundEnabled
+    this.soundEnabled = nextEnabled
+    wx.setStorageSync(AUDIO_SETTING_KEY, nextEnabled)
+    if (!nextEnabled) {
+      this.stopAllSounds()
+    }
+    this.setData({ soundEnabled: nextEnabled })
+    wx.showToast({ title: nextEnabled ? '音效已开启' : '音效已关闭', icon: 'none' })
+    if (nextEnabled) {
+      this.playSound('ui', { cooldown: 0, volume: 0.4 })
+      this.syncAmbientTrack()
+    }
+  },
+
+  getSupplyDropPool(threat = this.currentWaveThreat) {
+    const pool = []
+    const blessingType = BLESSINGS[this.data.selectedBlessingKey]?.towerType
+
+    if (blessingType) {
+      pool.push(blessingType)
+    }
+
+    ;(threat?.counterTypes || []).forEach((type) => {
+      if (TOWER_TYPES[type] && !pool.includes(type)) {
+        pool.push(type)
+      }
+    })
+
+    if (pool.length === 0) {
+      return Object.keys(TOWER_TYPES)
+    }
+
+    return pool
+  },
+
+  callSupplyDrop() {
+    this.flushQueuedStats()
+
+    if ((this.data.commandPoints || 0) < 2) {
+      wx.showToast({ title: '至少需要 2 点战术点', icon: 'none' })
+      return
+    }
+
+    const nextPoints = this.data.commandPoints - 2
+    if (this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS) {
+      this.setData({
+        commandPoints: nextPoints,
+        gold: this.data.gold + 25
+      })
+      this.playSound('reward', { cooldown: 0 })
+      wx.showToast({ title: '仓库已满，改为空投金币 +25', icon: 'none' })
+      return
+    }
+
+    const pool = this.getSupplyDropPool()
+    const type = pool[Math.floor(Math.random() * pool.length)]
+    this.inventory.unshift(this.createTowerData(type))
+    this.setData({ commandPoints: nextPoints })
+    this.updateInventoryDisplay()
+    this.playSound('reward', { cooldown: 0 })
+
+    this.floatingTexts.push({
+      x: CONFIG.canvasWidth / 2,
+      y: CONFIG.canvasHeight / 2 - 14,
+      text: `🛰️ 空投抵达：${TOWER_TYPES[type].name}`,
+      color: '#a8f2ff',
+      life: 90,
+      maxLife: 90,
+      vy: -0.34,
+      vx: 0,
+      scale: 1.16,
+      isBold: true
+    })
+    wx.showToast({ title: `空投 ${TOWER_TYPES[type].name}`, icon: 'none' })
+  },
+
+  toggleCommanderTargeting() {
+    this.flushQueuedStats()
+
+    if (this.data.gameState !== 'playing') {
+      wx.showToast({ title: '战斗中才能下达指挥', icon: 'none' })
+      return
+    }
+
+    if ((this.data.commandPoints || 0) < COMMANDER_COST) {
+      wx.showToast({ title: `至少需要 ${COMMANDER_COST} 点战术点`, icon: 'none' })
+      return
+    }
+
+    const nextAiming = !this.data.commanderAiming
+    this.setData({ commanderAiming: nextAiming })
+    this.playSound('ui', { cooldown: 0, volume: 0.3 })
+    if (nextAiming) {
+      wx.showToast({ title: '点地图投放集火区：优先攻击并增伤', icon: 'none' })
+    }
+  },
+
+  deployCommanderMark(x, y) {
+    this.flushQueuedStats()
+    if ((this.data.commandPoints || 0) < COMMANDER_COST) return false
+
+    this.commanderZone = {
+      x,
+      y,
+      radius: COMMANDER_MARK_RADIUS,
+      expiresAt: Date.now() + COMMANDER_MARK_DURATION,
+      lastPulseAt: 0
+    }
+
+    this.setData({
+      commandPoints: Math.max(0, (this.data.commandPoints || 0) - COMMANDER_COST),
+      commanderAiming: false
+    })
+
+    const burstDamage = COMMANDER_PULSE_DAMAGE + Math.floor(this.data.wave * 0.5)
+    const burstTargets = this.monsters
+      .filter((monster) => this.isMonsterInCommanderZone(monster))
+      .sort((a, b) => b.pathIndex - a.pathIndex)
+      .slice(0, 4)
+
+    burstTargets.forEach((monster) => {
+      this.applyDamage(monster, burstDamage, 'commander')
+      this.arcaneEffects.push({
+        x: monster.x,
+        y: monster.y,
+        size: 10,
+        life: 16,
+        maxLife: 16,
+        angle: Math.random() * Math.PI * 2,
+        dist: 0,
+        speed: 3.5
+      })
+    })
+
+    this.playSound('commander', { cooldown: 0 })
+    this.floatingTexts.push({
+      x,
+      y: y - 18,
+      text: '🛰️ 集火区已锁定',
+      color: '#9ee6ff',
+      life: 96,
+      maxLife: 96,
+      vy: -0.45,
+      vx: 0,
+      scale: 1.12,
+      isBold: true
+    })
+    wx.showToast({ title: '集火区生效：优先攻击并增伤', icon: 'none' })
+    this.requestRender()
+    return true
+  },
+
+  isMonsterInCommanderZone(monster, zone = this.commanderZone) {
+    if (!monster || !zone) return false
+    const dx = monster.x - zone.x
+    const dy = monster.y - zone.y
+    return Math.sqrt(dx * dx + dy * dy) <= zone.radius
+  },
+
+  updateCommander(now) {
+    const zone = this.commanderZone
+    if (!zone) return
+
+    if (now >= zone.expiresAt) {
+      this.commanderZone = null
+      this.requestRender()
+      return
+    }
+
+    if (now - (zone.lastPulseAt || 0) < COMMANDER_PULSE_INTERVAL) {
+      return
+    }
+
+    zone.lastPulseAt = now
+    let target = null
+    this.monsters.forEach((monster) => {
+      if (!this.isMonsterInCommanderZone(monster, zone)) return
+      if (!target || monster.pathIndex > target.pathIndex) {
+        target = monster
+      }
+    })
+
+    if (!target) return
+
+    this.applyDamage(target, COMMANDER_PULSE_DAMAGE + Math.floor(this.data.wave * 0.6), 'commander')
+    this.arcaneEffects.push({
+      x: target.x,
+      y: target.y,
+      size: 9,
+      life: 16,
+      maxLife: 16,
+      angle: Math.random() * Math.PI * 2,
+      dist: 0,
+      speed: 3.2
+    })
+  },
+
+  drawCommanderZone() {
+    const ctx = this.ctx
+    const zone = this.commanderZone
+    if (!ctx || !zone) return
+
+    const remain = Math.max(0, zone.expiresAt - Date.now())
+    const remainRatio = remain / COMMANDER_MARK_DURATION
+    const alpha = 0.32 + remainRatio * 0.22
+
+    ctx.shadowBlur = 0
+    ctx.shadowColor = 'rgba(0,0,0,0)'
+    ctx.globalAlpha = 1
+    ctx.setLineDash([])
+
+    ctx.globalAlpha = Math.max(0.12, alpha - 0.14)
+    ctx.fillStyle = '#46a0ff'
+    ctx.beginPath()
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = '#82e1ff'
+    ctx.lineWidth = 2.5
+    ctx.setLineDash([7, 5])
+    ctx.beginPath()
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    ctx.globalAlpha = Math.min(0.92, alpha + 0.12)
+    ctx.strokeStyle = '#d8f6ff'
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.moveTo(zone.x - 10, zone.y)
+    ctx.lineTo(zone.x + 10, zone.y)
+    ctx.moveTo(zone.x, zone.y - 10)
+    ctx.lineTo(zone.x, zone.y + 10)
+    ctx.stroke()
+
+    ctx.globalAlpha = 1
+    ctx.fillStyle = '#d8f6ff'
+    ctx.font = 'bold 10px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('集火', zone.x, zone.y - 14)
+    ctx.font = '9px Arial'
+    ctx.fillText('+45% 伤害', zone.x, zone.y + 14)
   },
 
   setActiveWaveModifierDisplay(modifier = null) {
@@ -1571,6 +1999,7 @@ Page(Object.assign({
       selectedBlessingName: blessing.name,
       selectedBlessingIcon: blessing.icon
     })
+    this.playSound('blessing', { cooldown: 0 })
     // 选祝福后 prep-hud 变矮，战场变高，需再同步塔位
     this.schedulePrepLayoutSync()
   },
@@ -1663,12 +2092,14 @@ Page(Object.assign({
 
     this.applySelectedBlessing()
     this.lastSpawnTime = Date.now()
-    this.setData({ gameState: 'playing' }, () => {
+    this.setData({ gameState: 'playing', commanderAiming: false }, () => {
       // prep-hud 卸下后中间可用高度变化，重测以免底部仍按旧高度绘制被仓库挡住
       this.remeasureCanvasLayout()
       this.refreshInventoryRect()
+      this.syncAmbientTrack()
       this.requestRender()
     })
+    this.playSound('wave', { cooldown: 0, volume: 0.5 })
     this.floatingTexts.push({
       x: CONFIG.canvasWidth / 2,
       y: CONFIG.canvasHeight / 2 - 40,
@@ -2581,6 +3012,7 @@ Page(Object.assign({
     }
 
     this.safeUpdate('monsters', this.updateMonsters)
+    this.safeUpdate('commander', this.updateCommander, now)
     this._towerUpdateTick = (this._towerUpdateTick || 0) + 1
     const towerUpdateStride = this.performanceProfileKey === 'intense'
       ? 3
@@ -2717,6 +3149,9 @@ Page(Object.assign({
       walkPhase: Math.random() * Math.PI * 2,
       facing: 1
     })
+    if (template.isBoss) {
+      this.playSound('boss', { cooldown: 0 })
+    }
   },
 
   updateMonsters() {
@@ -3174,72 +3609,89 @@ Page(Object.assign({
   updateTowers(now) {
     const monsters = this.monsters
     if (!monsters.length || !this.towers.length) return
+    const commanderZone = this.commanderZone
 
     this.towers.forEach(tower => {
       if (now - tower.lastAttack < tower.attackSpeed) return
       
       let target = null
-      let bestPath = -1
+      let fallbackTarget = null
       const rangeSq = tower.range * tower.range
       
       for (let i = 0; i < monsters.length; i++) {
         const monster = monsters[i]
         const dx = monster.x - tower.x
         const dy = monster.y - tower.y
-        if (dx * dx + dy * dy < rangeSq && monster.pathIndex > bestPath) {
-          bestPath = monster.pathIndex
+        if (dx * dx + dy * dy >= rangeSq) continue
+
+        if (!fallbackTarget || monster.pathIndex > fallbackTarget.pathIndex) {
+          fallbackTarget = monster
+        }
+        if (commanderZone && this.isMonsterInCommanderZone(monster, commanderZone) &&
+            (!target || monster.pathIndex > target.pathIndex)) {
           target = monster
         }
       }
-      
-      if (target) {
-        this.towerAttack(tower, target)
-        tower.lastAttack = now
+
+      const finalTarget = target || fallbackTarget
+      if (finalTarget) {
+        const inZone = this.isMonsterInCommanderZone(finalTarget, commanderZone)
+        this.towerAttack(tower, finalTarget)
+        tower.lastAttack = inZone
+          ? now - tower.attackSpeed * (1 - COMMANDER_ZONE_ATTACK_SPEED_FACTOR)
+          : now
       }
     })
   },
 
   towerAttack(tower, target) {
     const config = TOWER_TYPES[tower.type]
+    const commanderBoosted = this.isMonsterInCommanderZone(target)
+    const damageMultiplier = commanderBoosted ? (1 + COMMANDER_ZONE_DAMAGE_BONUS) : 1
+    const shotDamage = tower.damage * damageMultiplier
+    const shotColor = commanderBoosted ? '#d8f6ff' : config.color
     
     if (tower.type === 'lightning') {
-      this.lightningAttack(tower, target)
+      this.lightningAttack(tower, target, damageMultiplier)
     } else {
       const projectileBudget = this.performanceProfileKey === 'intense'
         ? 56
         : (this.performanceProfileKey === 'busy' ? 80 : 110)
       if (this.projectiles.length >= projectileBudget) {
         // 弹道预算满时直接结算，保留伤害但不再分配新对象/轨迹。
-        this.applyDamage(target, tower.damage, tower.type)
-        this.applyTowerEffect(target, tower.type, tower.damage, tower.level)
+        this.applyDamage(target, shotDamage, tower.type)
+        this.applyTowerEffect(target, tower.type, shotDamage, tower.level)
+        this.playTowerAttackSound(tower)
         return
       }
       this.projectiles.push({
         x: tower.x,
         y: tower.y - 10,
         target,
-        damage: tower.damage,
+        damage: shotDamage,
         towerType: tower.type,
         towerLevel: tower.level,
-        color: config.color,
+        color: shotColor,
         speed: tower.type === 'arcane' ? 10 : 7,
         piercing: tower.type === 'arcane' ? 2 + tower.level : 0,
-        size: 4 + tower.level * 1.2,
+        size: 4 + tower.level * 1.2 + (commanderBoosted ? 0.8 : 0),
         angle: 0,
-        trail: []
+        trail: [],
+        commanderBoosted
       })
     }
-    
+
+    this.playTowerAttackSound(tower)
     if (this.monsters.length < 18 && this.performanceProfileKey === 'relaxed') {
-      this.createParticles(tower.x, tower.y - 15, config.color, 2)
+      this.createParticles(tower.x, tower.y - 15, shotColor, commanderBoosted ? 4 : 2)
     }
   },
 
-  lightningAttack(tower, target) {
+  lightningAttack(tower, target, damageMultiplier = 1) {
     const lv = tower.level || 1
     const chainCount = Math.min(3, 1 + Math.floor((lv + 1) / 2))
     
-    this.applyDamage(target, tower.damage, 'lightning')
+    this.applyDamage(target, tower.damage * damageMultiplier, 'lightning')
     
     // 闪电主链 - 等级影响颜色、粗细、持续时间
     const mainColor = lv >= 5 ? '#ffffff' : lv >= 4 ? '#ffffcc' : lv >= 3 ? '#ffff88' : lv >= 2 ? '#ffff44' : '#dddd00'
@@ -3279,7 +3731,7 @@ Page(Object.assign({
       })
       
       if (nearestMonster) {
-        this.applyDamage(nearestMonster, tower.damage * (0.6 + lv * 0.05), 'lightning')
+        this.applyDamage(nearestMonster, tower.damage * damageMultiplier * (0.6 + lv * 0.05), 'lightning')
         
         const chainColor = lv >= 4 ? '#ffff88' : lv >= 3 ? '#ffff66' : lv >= 2 ? '#eeee33' : '#cccc00'
         if (this.performanceProfileKey !== 'intense' || i === 0) {
@@ -3824,6 +4276,7 @@ Page(Object.assign({
       this.safeRender('decorations', this.drawDecorations)
       this.safeRender('grid', this.drawGrid)
       this.safeRender('path', this.drawPath)
+      this.safeRender('commanderZone', this.drawCommanderZone)
       this.safeRender('towers', this.drawTowers)
       this.safeRender('monsters', this.drawMonsters)
       this.safeRender('projectiles', this.drawProjectiles)
@@ -4527,6 +4980,7 @@ Page(Object.assign({
     
     this.setData({ gold: this.data.gold - this.data.summonCost })
     this.updateInventoryDisplay()
+    this.playSound('summon', { cooldown: 0 })
     
     wx.showToast({ title: `获得 ${TOWER_TYPES[type].name}!`, icon: 'none' })
   },
@@ -4605,6 +5059,11 @@ Page(Object.assign({
       x = touch.x
       y = touch.y
     } else {
+      return
+    }
+
+    if (this.data.commanderAiming) {
+      this.deployCommanderMark(x, y)
       return
     }
     
@@ -5023,6 +5482,7 @@ Page(Object.assign({
 
     // 震动反馈
     wx.vibrateShort({ type: 'medium' }).catch(() => {})
+    this.playSound('merge', { cooldown: 0 })
 
     wx.showToast({ title: `合成成功! Lv.${tower2.level}`, icon: 'none' })
   },
@@ -5069,6 +5529,7 @@ Page(Object.assign({
     this.setData({ gold: this.data.gold - upgradeCost, score: this.data.score + 300 * invTower.level })
 
     wx.vibrateShort({ type: 'medium' }).catch(() => {})
+    this.playSound('merge', { cooldown: 0 })
     wx.showToast({ title: `合成成功! Lv.${invTower.level}`, icon: 'none' })
   },
 
@@ -5121,6 +5582,7 @@ Page(Object.assign({
     this.syncFieldTowerCount()
     
     this.createParticles(placedTower.x, placedTower.y, config.color, 15)
+    this.playSound('place', { cooldown: 0 })
     
     // 放置音效提示
     wx.showToast({ title: '放置成功!', icon: 'none', duration: 800 })
@@ -5184,6 +5646,7 @@ Page(Object.assign({
       isBold: true
     })
     
+    this.playSound('merge', { cooldown: 0 })
     wx.showToast({ title: `合成成功! Lv.${actualTarget.level}`, icon: 'none' })
   },
 
@@ -5354,7 +5817,8 @@ Page(Object.assign({
     this.towers = []
     
     // 更新主题
-    this.setData({ currentTheme: themeKey })
+    this.setData({ currentTheme: themeKey, commanderAiming: false })
+    this.syncAmbientTrack(themeKey)
     
     // 换图：完整重建路径、塔位与装饰
     this.generatePath(themeKey, {
@@ -5441,7 +5905,9 @@ Page(Object.assign({
   gameOver() {
     this.disableLeaveGuard()
     this.clearRunProgress()
+    this.stopAllSounds()
     this.stopGame()
+    this.playSound('gameover', { cooldown: 0 })
     
     const highScore = wx.getStorageSync('highScore') || 0
     const maxWave = wx.getStorageSync('maxWave') || 1
@@ -5450,7 +5916,7 @@ Page(Object.assign({
     if (isNewRecord) wx.setStorageSync('highScore', this.data.score)
     if (this.data.wave > maxWave) wx.setStorageSync('maxWave', this.data.wave)
     
-    this.setData({ gameState: 'gameover', isNewRecord })
+    this.setData({ gameState: 'gameover', isNewRecord, commanderAiming: false })
   },
 
   togglePause() {
@@ -5465,7 +5931,9 @@ Page(Object.assign({
     }
 
     if (this.data.gameState === 'playing') {
-      this.setData({ gameState: 'paused' })
+      this.playSound('ui', { cooldown: 0, volume: 0.32 })
+      this.stopAmbientTrack()
+      this.setData({ gameState: 'paused', commanderAiming: false })
       this.persistRunProgress({ immediate: true })
       this.requestRender()
       return
@@ -5477,6 +5945,8 @@ Page(Object.assign({
   },
 
   resumeGame() {
+    this.playSound('ui', { cooldown: 0, volume: 0.32 })
+    this.syncAmbientTrack()
     // 暂停过久/回前台后，避免波次卡在 complete 或出怪时间戳异常
     const noMonsters = !this.monsters || this.monsters.length === 0
     const spawnDone = !this.waveMonsters || !this.waveMonsters.length ||
