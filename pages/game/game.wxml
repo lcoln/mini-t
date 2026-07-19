@@ -1,22 +1,24 @@
 <view class="game-container {{isIOS ? 'ios-device' : ''}}" catchtouchmove="onGlobalTouchMove" catchtouchend="onGlobalTouchEnd">
   <!-- 顶部状态栏 -->
   <view class="status-bar">
-    <view class="status-item wave">
-      <text class="status-icon">🏰</text>
-      <text class="status-value">{{level}}-{{waveInLevel}}</text>
-      <text class="status-label">关</text>
-    </view>
-    <view class="status-item gold">
-      <text class="status-icon">💰</text>
-      <text class="status-value gold-value">{{gold}}</text>
-    </view>
-    <view class="status-item lives">
-      <text class="status-icon">❤️</text>
-      <text class="status-value lives-value">{{lives}}</text>
-    </view>
-    <view class="status-item score">
-      <text class="status-icon">⭐</text>
-      <text class="status-value">{{score}}</text>
+    <view class="status-main">
+      <view class="status-item wave">
+        <text class="status-icon">🏰</text>
+        <text class="status-value">{{level}}-{{waveInLevel}}</text>
+        <text class="status-label">关</text>
+      </view>
+      <view class="status-item gold">
+        <text class="status-icon">💰</text>
+        <text class="status-value gold-value">{{gold}}</text>
+      </view>
+      <view class="status-item lives">
+        <text class="status-icon">❤️</text>
+        <text class="status-value lives-value">{{lives}}</text>
+      </view>
+      <view class="status-item score">
+        <text class="status-icon">⭐</text>
+        <text class="status-value">{{score}}</text>
+      </view>
     </view>
     <view class="status-actions">
       <view class="sound-btn {{soundEnabled ? '' : 'muted'}}" bindtap="toggleSound">

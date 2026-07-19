@@ -38,15 +38,16 @@
       "disablePlugins": [],
       "outputPath": ""
     },
-    "condition": false
+    "condition": false,
+    "ignoreUploadUnusedFiles": true
   },
-  "compileType": "miniprogram",
+  "compileType": "game",
   "libVersion": "3.13.2",
-  "appid": "wx24eac4d0de76e014",
   "projectname": "合成塔防-这塔还能再合",
   "condition": {},
   "editorSetting": {
     "tabIndent": "insertSpaces",
     "tabSize": 2
-  }
+  },
+  "appid": "wxc2540b6ca293436b"
 }

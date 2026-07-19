@@ -76,15 +76,18 @@ module.exports = {
   drawMonsters() {
     const profile = this.getActivePerformanceProfile()
     const monsterCount = this.monsters.length
-    // 仅在极多怪时精简阴影/血条样式，不再切换简化外形
-    const crowded = monsterCount >= 40
-    const intense = monsterCount >= 48 || profile.effectRenderStride >= 6
+    // 怪物造型始终完整；怪潮时仅省略阴影、位移动画和复杂状态装饰。
+    const crowded = monsterCount >= 18
+    const intense = monsterCount >= 32 || profile.effectRenderStride >= 4
     const now = Date.now()
 
     this.monsters.forEach(monster => {
       const ctx = this.ctx
       const size = monster.isBoss ? 22 : 14
-      const motion = this.getMonsterWalkMotion(monster, size)
+      const detailed = !crowded || monster.isBoss
+      const motion = detailed
+        ? this.getMonsterWalkMotion(monster, size)
+        : { bob: 0, squashX: 1, squashY: 1, lean: 0, sway: 0, shadowScale: 1 }
 
       // 硬重置，避免上一只怪泄漏的 shadow/alpha 污染本帧
       ctx.shadowBlur = 0
@@ -108,43 +111,44 @@ module.exports = {
       // 以脚底为轴做弹跳缩放，走路不那么僵
       const footY = monster.y + size * 0.85
       ctx.save()
-      ctx.translate(monster.x + motion.lean + motion.sway, footY + motion.bob)
-      ctx.scale(motion.squashX, motion.squashY)
-      ctx.translate(-(monster.x), -footY)
+      if (detailed) {
+        ctx.translate(monster.x + motion.lean + motion.sway, footY + motion.bob)
+        ctx.scale(motion.squashX, motion.squashY)
+        ctx.translate(-(monster.x), -footY)
+      }
 
       // 状态光环
       if (monster.slowTimer > 0) {
-        ctx.save()
         ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
-        ctx.lineWidth = 3
+        ctx.lineWidth = detailed ? 3 : 2
         ctx.beginPath()
         ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
         ctx.stroke()
-        ctx.restore()
       }
       if (monster.vineTimer > 0) {
         // 藤蔓缠绕效果 - 绿色藤蔓环绕
-        ctx.save()
         ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
         ctx.lineWidth = 2
         const time = now
-        for (let i = 0; i < 3; i++) {
+        const vineArcCount = detailed ? 3 : 1
+        for (let i = 0; i < vineArcCount; i++) {
           const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
           const waveOffset = Math.sin(time * 0.005 + i) * 2
           ctx.beginPath()
           ctx.arc(monster.x, monster.y, size + 3 + waveOffset, angle, angle + Math.PI * 0.6)
           ctx.stroke()
         }
-        ctx.fillStyle = '#ffff00'
-        ctx.font = 'bold 10px Arial'
-        ctx.textAlign = 'center'
-        ctx.fillText('⬇️', monster.x, monster.y - size - 8)
-        ctx.restore()
+        if (detailed) {
+          ctx.fillStyle = '#ffff00'
+          ctx.font = 'bold 10px Arial'
+          ctx.textAlign = 'center'
+          ctx.fillText('⬇️', monster.x, monster.y - size - 8)
+        }
       }
 
       this.drawMonsterByType(ctx, monster, size)
 
-      if (monster.burnTimer > 0) {
+      if (monster.burnTimer > 0 && detailed) {
         this.drawBurningEffect(ctx, monster, size)
       }
       ctx.restore()

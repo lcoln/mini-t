@@ -38,13 +38,14 @@ const IDLE_RENDER_INTERVAL = 120
 const MIN_SUMMON_COST = 10
 const DRAG_START_THRESHOLD = 10
 const FIELD_DRAG_PICK_RADIUS = 28
-const FIELD_MERGE_RADIUS = 72
+// 场上合成：需更贴近目标塔才吸附，避免路过旁边空位时误触发合并
+const FIELD_MERGE_RADIUS = 42
 const TOWER_SLOT_SNAP_RADIUS = 34
 const INVENTORY_HIT_TOLERANCE = 16
-// 仓库合并：放宽吸附/松手判定，避免怪多卡顿时对不齐
-const INVENTORY_MERGE_RADIUS = 48
-const INVENTORY_MERGE_COMMIT_RADIUS = 64
-const INVENTORY_MERGE_CORE_RATIO = 0.72
+// 仓库合并：略收紧，仍保留松手时稍宽的提交半径
+const INVENTORY_MERGE_RADIUS = 40
+const INVENTORY_MERGE_COMMIT_RADIUS = 52
+const INVENTORY_MERGE_CORE_RATIO = 0.58
 // Boss 不再额外抬场景压力：出场不应切换 busy/intense，避免草地/弹道/特效被精简
 const BOSS_PRESSURE_BONUS = 0
 const BOSS_PROFILE_GRACE_MS = 520
@@ -53,11 +54,11 @@ const PERFORMANCE_PROFILE_INTERVALS = {
   elevated: 80
 }
 const PERFORMANCE_PROFILE_HYSTERESIS = {
-  // 怪一多早点进 busy：只砍弹道/特效频率，不砍地图与外形
-  busyEnter: 32,
-  busyExit: 22,
-  intenseEnter: 68,
-  intenseExit: 50,
+  // 不要在十来只怪时就骤降帧率；外形不变，优先削减特效。
+  busyEnter: 52,
+  busyExit: 38,
+  intenseEnter: 115,
+  intenseExit: 88,
   // 保留字段兼容旧逻辑，但数值对齐普通档位，Boss 不再单独降画质
   bossBusyFloor: 52,
   bossIntenseEnter: 94,
@@ -205,7 +206,7 @@ const PERFORMANCE_PROFILES = {
     bossDamageTextCooldown: 0
   },
   busy: {
-    renderInterval: 40,
+    renderInterval: 33,
     simplifyTowers: false,
     simplifyMonsters: false,
     simplifyBosses: false,
@@ -220,7 +221,7 @@ const PERFORMANCE_PROFILES = {
     bossDamageTextCooldown: 60
   },
   intense: {
-    renderInterval: 66,
+    renderInterval: 50,
     simplifyTowers: false,
     simplifyMonsters: false,
     simplifyBosses: false,
@@ -823,7 +824,7 @@ const MONSTER_TYPES = {
     bodyColor: '#ff4400', 
     outlineColor: '#aa0000',
     eyeColor: '#ffff00',
-    baseHp: 800, 
+    baseHp: 620, 
     speed: 0.5, 
     goldDrop: 100, 
     isBoss: true,
@@ -836,7 +837,7 @@ const MONSTER_TYPES = {
     bodyColor: '#3a6622',
     outlineColor: '#1a4400',
     eyeColor: '#ffff00',
-    baseHp: 1000,
+    baseHp: 760,
     speed: 0.35,
     goldDrop: 120,
     isBoss: true,
@@ -849,7 +850,7 @@ const MONSTER_TYPES = {
     bodyColor: '#5522aa',
     outlineColor: '#330066',
     eyeColor: '#00ffff',
-    baseHp: 900,
+    baseHp: 700,
     speed: 0.55,
     goldDrop: 130,
     isBoss: true,
@@ -862,7 +863,7 @@ const MONSTER_TYPES = {
     bodyColor: '#ff8800',
     outlineColor: '#cc4400',
     eyeColor: '#ffffff',
-    baseHp: 750,
+    baseHp: 580,
     speed: 0.7,
     goldDrop: 140,
     isBoss: true,

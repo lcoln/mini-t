@@ -561,8 +561,8 @@ Page(Object.assign({
     const monsterCount = this.monsters ? this.monsters.length : 0
     const profileKey = this.performanceProfileKey || 'relaxed'
     let scale = 1
-    if (profileKey === 'busy' || monsterCount >= 22) scale = 0.55
-    if (profileKey === 'intense' || monsterCount >= 40) scale = 0.35
+    if (profileKey === 'busy' || monsterCount >= 20) scale = 0.45
+    if (profileKey === 'intense' || monsterCount >= 34) scale = 0.28
     const scaleLimit = (n) => Math.max(8, Math.floor(n * scale))
     return {
       particles: scaleLimit(PERFORMANCE_LIMITS.particles),
@@ -663,36 +663,35 @@ Page(Object.assign({
     this.ensureSoundPool()
   },
 
-  ensureSoundPool() {
-    if (this.soundInitialized) return
+  ensureSoundPool(key = '') {
+    if (!this.soundInitialized) {
+      this.soundPool = {}
+      this.soundPoolCursor = {}
+      this.soundLastPlayedAt = {}
+      this.soundInitialized = true
+    }
 
-    this.soundPool = {}
-    this.soundPoolCursor = {}
-    this.soundLastPlayedAt = {}
+    // 按需创建，避免进游戏一次性初始化数十个 InnerAudioContext。
+    if (!key || String(key).endsWith('Ambience') || !SOUND_ASSETS[key] || this.soundPool[key]) return
 
-    Object.keys(SOUND_ASSETS).forEach((key) => {
-      if (String(key).endsWith('Ambience')) return
+    const configuredSize = SOUND_POOL_SIZES[key] || 1
+    const size = Math.min(configuredSize, String(key).includes('Attack') ? 2 : 1)
+    this.soundPool[key] = []
+    this.soundPoolCursor[key] = 0
 
-      const size = SOUND_POOL_SIZES[key] || 1
-      this.soundPool[key] = []
-      this.soundPoolCursor[key] = 0
-
-      for (let i = 0; i < size; i++) {
-        try {
-          const audio = wx.createInnerAudioContext()
-          audio.src = SOUND_ASSETS[key]
-          audio.autoplay = false
-          audio.loop = false
-          audio.obeyMuteSwitch = true
-          audio.volume = SOUND_VOLUMES[key] ?? 0.5
-          this.soundPool[key].push(audio)
-        } catch (error) {
-          // 忽略单个音频实例初始化失败
-        }
+    for (let i = 0; i < size; i++) {
+      try {
+        const audio = wx.createInnerAudioContext()
+        audio.src = SOUND_ASSETS[key]
+        audio.autoplay = false
+        audio.loop = false
+        audio.obeyMuteSwitch = true
+        audio.volume = SOUND_VOLUMES[key] ?? 0.5
+        this.soundPool[key].push(audio)
+      } catch (error) {
+        // 忽略单个音频实例初始化失败
       }
-    })
-
-    this.soundInitialized = true
+    }
   },
 
   ensureAmbientAudio() {
@@ -744,7 +743,7 @@ Page(Object.assign({
 
   playSound(key, options = {}) {
     if (!this.soundEnabled) return
-    this.ensureSoundPool()
+    this.ensureSoundPool(key)
 
     const pool = this.soundPool && this.soundPool[key]
     if (!pool || pool.length === 0) return
@@ -2859,23 +2858,27 @@ Page(Object.assign({
       return !config.isBoss && config.unlockWave <= wave
     })
 
-    // 前 2 个地图：血量/护甲缓涨，保证合成塔能打穿。
+    // 前 2 个地图：血量/护甲更软，方便合成塔打穿；第 3 图起再爬升。
     // 第 3 图起：以第 2 图末为锚点爬升，真正难度主要由场上塔数/等级在 spawn 时加压。
     let progressionHpMultiplier
     let baseArmor
     if (level <= 2) {
-      progressionHpMultiplier = (1 + (wave - 1) * 0.18) * (1 + (level - 1) * 0.12)
-      baseArmor = Math.min(0.28, (wave - 1) * 0.007 + (level - 1) * 0.03)
+      const earlyHpEase = level === 1 ? 0.86 : 0.9
+      progressionHpMultiplier = (1 + (wave - 1) * 0.13) * (1 + (level - 1) * 0.08) * earlyHpEase
+      baseArmor = Math.min(0.18, (wave - 1) * 0.004 + (level - 1) * 0.018)
     } else {
-      const map2EndMultiplier = (1 + 19 * 0.18) * (1 + 1 * 0.12)
+      const map2EndMultiplier = (1 + 19 * 0.13) * (1 + 1 * 0.08) * 0.9
       progressionHpMultiplier = map2EndMultiplier * (1 + (wave - 20) * 0.08) * (1 + (level - 2) * 0.12)
-      baseArmor = Math.min(0.55, 0.1 + (wave - 20) * 0.01 + (level - 2) * 0.04)
+      baseArmor = Math.min(0.55, 0.08 + (wave - 20) * 0.01 + (level - 2) * 0.04)
     }
     const hpMultiplier = progressionHpMultiplier *
       (threat.hpMultiplier || 1) * (waveModifier?.hpMultiplier || 1)
-    const speedMultiplier = (threat.speedMultiplier || 1) * (waveModifier?.speedMultiplier || 1)
+    // 前三关只小幅放慢；随后恢复原速，不影响中后期节奏。
+    const earlySpeedFactor = level === 1 ? 0.9 : (level === 2 ? 0.94 : (level === 3 ? 0.97 : 1))
+    const speedMultiplier = (threat.speedMultiplier || 1) *
+      (waveModifier?.speedMultiplier || 1) * earlySpeedFactor
     const goldMultiplier = waveModifier?.goldMultiplier || 1
-    const armorCap = level <= 2 ? 0.28 : 0.55
+    const armorCap = level <= 2 ? 0.18 : 0.55
 
     for (let i = 0; i < baseCount; i++) {
       let type
@@ -2917,8 +2920,8 @@ Page(Object.assign({
       const bossType = bossTypes[(level - 1) % bossTypes.length]
       const bossConfig = MONSTER_TYPES[bossType]
       const bossHpMultiplier = (level <= 2
-        ? (1 + (wave - 1) * 0.16)
-        : progressionHpMultiplier * 1.35) * (threat.bossHpMultiplier || 1)
+        ? (1 + (wave - 1) * 0.07) * (level === 1 ? 0.58 : 0.66)
+        : progressionHpMultiplier * 1.05) * (threat.bossHpMultiplier || 1)
       this.waveMonsters.push({
         type: bossType,
         ...bossConfig,
@@ -2926,7 +2929,7 @@ Page(Object.assign({
         maxHp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
         speed: Number((bossConfig.speed * speedMultiplier).toFixed(2)),
         goldDrop: bossConfig.goldDrop * Math.ceil(wave / 5) + (threat.bossGoldBonus || 0),
-        armor: Math.min(armorCap, baseArmor + (level <= 2 ? 0.18 : 0.22))
+        armor: Math.min(armorCap, baseArmor + (level <= 2 ? 0.04 : 0.12))
       })
     }
 
@@ -3051,8 +3054,8 @@ Page(Object.assign({
       this.nextWave()
     }
 
-    // Boss 在场时塔攻击力 -35%（动态维护 runBossDamagePenalty，applyDamage 读取）
-    this.runBossDamagePenalty = this.hasBossOnField() ? 0.65 : 1
+    // Boss 在场时塔攻击力轻幅下降（动态维护 runBossDamagePenalty，applyDamage 读取）
+    this.runBossDamagePenalty = this.hasBossOnField() ? 0.85 : 1
 
     // 看门狗：波次推进卡在 choice 分支（overlay 未真正切入 choice 状态）时，超时兜底推进，避免整局冻结
     if (this.pendingWaveAdvance && this.data.gameState === 'playing') {
@@ -3155,7 +3158,7 @@ Page(Object.assign({
   },
 
   updateMonsters() {
-    const crowded = this.monsters.length >= 24
+    const crowded = this.monsters.length >= 18
     const effectStride = crowded ? 3 : 1
 
     this.monsters = this.monsters.filter(monster => {
@@ -3682,7 +3685,7 @@ Page(Object.assign({
     }
 
     this.playTowerAttackSound(tower)
-    if (this.monsters.length < 18 && this.performanceProfileKey === 'relaxed') {
+    if (this.monsters.length < 12 && this.performanceProfileKey === 'relaxed') {
       this.createParticles(tower.x, tower.y - 15, shotColor, commanderBoosted ? 4 : 2)
     }
   },
@@ -3811,7 +3814,7 @@ Page(Object.assign({
       armoredDamage = Math.floor(damage * (1 - monster.armor))
     }
 
-    // Boss 在场时全场塔攻击力 -35%（boss 威胁感、避免无脑碾压；update 动态维护 runBossDamagePenalty）
+    // Boss 在场时全场塔攻击力轻幅下降（update 动态维护 runBossDamagePenalty）
     const bossPenalty = this.runBossDamagePenalty || 1
     const bossPenalized = bossPenalty !== 1 ? Math.floor(armoredDamage * bossPenalty) : armoredDamage
 
@@ -3884,7 +3887,7 @@ Page(Object.assign({
       if (distSq < 225) {
         this.applyDamage(currentTarget, proj.damage, proj.towerType)
         this.applyTowerEffect(currentTarget, proj.towerType, proj.damage, proj.towerLevel)
-        if (monsters.length < 24 && this.performanceProfileKey === 'relaxed') {
+        if (monsters.length < 14 && this.performanceProfileKey === 'relaxed') {
           this.createHitEffect(currentTarget.x, currentTarget.y, proj.towerType, proj.towerLevel)
         }
         
@@ -5307,7 +5310,7 @@ Page(Object.assign({
       }
 
       let bestField = null
-      let bestDist = FIELD_MERGE_RADIUS * 1.25
+      let bestDist = FIELD_MERGE_RADIUS * 1.08
       for (const tower of this.towers) {
         if (!this.draggingFromInventory && this.draggingTower && tower.id === this.draggingTower.id) continue
         if (!this.draggingTower ||
@@ -5329,9 +5332,9 @@ Page(Object.assign({
       }
     }
 
-    // 卡顿时松手瞬间可能丢命中：200ms 内粘滞上次合法目标
+    // 卡顿时松手瞬间可能丢命中：短窗口粘滞上次合法目标
     const sticky = this._stickyMerge
-    if (sticky && Date.now() - sticky.at <= 220) {
+    if (sticky && Date.now() - sticky.at <= 120) {
       if (sticky.type === 'inventory' &&
           sticky.inventoryIndex >= 0 &&
           sticky.inventoryIndex < this.inventory.length) {
