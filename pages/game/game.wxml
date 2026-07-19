@@ -101,15 +101,20 @@
   <view class="inventory-area" style="{{inventoryBottomStyle}}">
     <view class="inventory-header">
       <text class="inventory-title">🏰 防御塔仓库</text>
-      <view class="summon-btn {{gold < summonCost || inventoryFull ? 'disabled' : ''}}" catchtap="summonTower">
-        <text class="summon-icon">✨</text>
-        <text class="summon-text">召唤</text>
-        <text class="summon-cost">💰{{summonCost}}</text>
+      <view class="inventory-actions">
+        <view class="organize-btn" catchtap="autoMergeInventory">
+          <text>⚙️ 整理</text>
+        </view>
+        <view class="summon-btn {{gold < summonCost ? 'disabled' : (inventoryFull ? 'full' : '')}}" catchtap="summonTower">
+          <text class="summon-icon">✨</text>
+          <text class="summon-text">召唤</text>
+          <text class="summon-cost">💰{{summonCost}}</text>
+        </view>
       </view>
     </view>
     
     <view class="inventory-hint">
-      <text>点选或拖拽放置，相同塔可合成</text>
+      <text>拖拽同类同级塔合成 · 长按可回收 · 满仓点整理</text>
     </view>
     
     <view class="inventory-grid">
@@ -119,6 +124,7 @@
         wx:key="index"
         data-index="{{index}}"
         catchtouchstart="onInventoryTouchStart"
+        bindlongpress="recycleInventoryTower"
         bindtap="handleInventorySlotTap"
       >
         <block wx:if="{{item}}">

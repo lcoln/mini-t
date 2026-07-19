@@ -52,6 +52,36 @@ const renderTowers = require('./render-towers')
 const renderMonsters = require('./render-monsters')
 const renderEffects = require('./render-effects')
 
+const HIGH_LEVEL_TOWER_DAMAGE_GROWTH = 1.42
+const TOWER_RANGE_PER_LEVEL = 6
+const TOWER_SPEED_GAIN_PER_LEVEL = 55
+const MIN_TOWER_ATTACK_INTERVAL = 480
+
+function hslToHex(hue, saturation, lightness) {
+  const h = ((hue % 360) + 360) % 360
+  const s = Math.max(0, Math.min(100, saturation)) / 100
+  const l = Math.max(0, Math.min(100, lightness)) / 100
+  const chroma = (1 - Math.abs(2 * l - 1)) * s
+  const x = chroma * (1 - Math.abs((h / 60) % 2 - 1))
+  const m = l - chroma / 2
+  let rgb = [0, 0, 0]
+  if (h < 60) rgb = [chroma, x, 0]
+  else if (h < 120) rgb = [x, chroma, 0]
+  else if (h < 180) rgb = [0, chroma, x]
+  else if (h < 240) rgb = [0, x, chroma]
+  else if (h < 300) rgb = [x, 0, chroma]
+  else rgb = [chroma, 0, x]
+  return `#${rgb.map((value) => Math.round((value + m) * 255).toString(16).padStart(2, '0')).join('')}`
+}
+
+function hslaColor(hue, saturation, lightness, alpha) {
+  const hex = hslToHex(hue, saturation, lightness)
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 Page(Object.assign({
   data: {
     wave: 1,
@@ -197,6 +227,13 @@ Page(Object.assign({
     if (this.canvas && !this.gameLoop) {
       this.startGame()
       this.requestRender()
+    }
+  },
+
+  onShareAppMessage() {
+    return {
+      title: `合成塔防：我已经守到第${this.data.level || 1}关，你能超过吗？`,
+      path: '/pages/index/index'
     }
   },
 
@@ -361,6 +398,10 @@ Page(Object.assign({
       return
     }
 
+    // Canvas 尺寸变化会让部分真机上的旧 CanvasGradient 失效，必须重建。
+    this._cachedBgGradientKey = ''
+    this._cachedBgGradient = null
+
     // 上下留白给塔尖/塔座；整块网格必须落在 canvas 内，绝不能伸进仓库区域
     const topInset = 20
     const bottomInset = 36
@@ -406,19 +447,18 @@ Page(Object.assign({
     const hasDressing = Array.isArray(this.grassDots) && this.grassDots.length > 0
     const refreshDressing = !hasDressing
     // 局中只重算路径几何并等比缩放装饰，避免随机重生成导致整图抖动
+    // 格子尺寸/偏移一变，路径几何必变，塔位必须跟着重算，否则圈会漂离路边
     this.generatePath(themeKey, {
       refreshDressing,
-      rebuildSlots: this.data.gameState === 'prep' || !Array.isArray(this.towerSlots) || !this.towerSlots.length,
-      relocateTowers: false
+      rebuildSlots: true,
+      relocateTowers: this.data.gameState === 'prep' || this.data.gameState === 'playing'
     })
     if (!refreshDressing) {
       this.scaleBattlefieldDressing(prevW, prevH, width, height)
     }
     if (Array.isArray(this.grid) && this.grid.length === CONFIG.gridRows) {
       this.rebuildGridFromTowers()
-      if (this.data.gameState === 'prep') {
-        this.syncPrepTowerSlots(themeKey)
-      }
+      this.syncPrepTowerSlots(themeKey)
     }
 
     // gridOffset 仅缓存给逻辑用，避免无意义 setData 触发视图层抖动
@@ -551,7 +591,7 @@ Page(Object.assign({
     })
 
     // 防御性硬上限：防止后期/Boss 波弹丸与怪物瞬时堆积把堆冲爆
-    const MAX_PROJECTILES_HARD = this.performanceProfileKey === 'intense' ? 90 : 140
+    const MAX_PROJECTILES_HARD = this.performanceProfileKey === 'intense' ? 70 : 110
     if (this.projectiles.length > MAX_PROJECTILES_HARD) {
       this.projectiles.splice(0, this.projectiles.length - MAX_PROJECTILES_HARD)
     }
@@ -1022,11 +1062,14 @@ Page(Object.assign({
       this.poisonEffects.length + this.arcaneEffects.length + this.lightningEffects.length +
       this.mergeEffects.length
     const bossCount = this.monsters.filter((monster) => monster.isBoss).length
+    const towerLoad = this.towers.reduce((sum, tower) => {
+      return sum + 1.25 + Math.max(0, (tower.level || 1) - 4) * 0.45
+    }, 0)
 
     return this.monsters.length * 3.6 +
       bossCount * BOSS_PRESSURE_BONUS +
       this.projectiles.length * 2.35 +
-      this.towers.length * 0.95 +
+      towerLoad +
       effectLoad * 0.26 +
       this.floatingTexts.length * 0.7 +
       (this.isDragging ? 12 : 0)
@@ -1151,20 +1194,19 @@ Page(Object.assign({
     let attackSpeed = config.baseAttackSpeed
 
     if (level > 1) {
-      if (mode === 'inventory') {
-        damage = Math.floor(config.baseDamage * Math.pow(1.8, level - 1))
-        range = config.baseRange + (level - 1) * 12
-        attackSpeed = Math.max(300, config.baseAttackSpeed - (level - 1) * 100)
-      } else {
-        damage = Math.floor(config.baseDamage * Math.pow(1.5, level - 1))
-        range = config.baseRange + (level - 1) * 8
-        attackSpeed = Math.max(400, config.baseAttackSpeed - (level - 1) * 80)
-      }
+      // 旧版仓库1.8倍/场上1.5倍指数成长会让5级以上塔迅速碾压入口，
+      // 统一成长曲线也避免同一座塔在仓库和场上显示两套战力。
+      damage = Math.floor(config.baseDamage * Math.pow(HIGH_LEVEL_TOWER_DAMAGE_GROWTH, level - 1))
+      range = config.baseRange + (level - 1) * TOWER_RANGE_PER_LEVEL
+      attackSpeed = Math.max(
+        MIN_TOWER_ATTACK_INTERVAL,
+        config.baseAttackSpeed - (level - 1) * TOWER_SPEED_GAIN_PER_LEVEL
+      )
     }
 
     damage += this.runDamageBonus
     range += this.runRangeBonus
-    attackSpeed = Math.max(300, attackSpeed - this.runAttackSpeedBonus)
+    attackSpeed = Math.max(420, attackSpeed - this.runAttackSpeedBonus)
 
     const stats = this.applyBlessingToTower({
       type,
@@ -1180,7 +1222,7 @@ Page(Object.assign({
       if (specialization) {
         stats.damage = (stats.damage || damage) + (specialization.damageBonus || 0)
         stats.range = (stats.range || range) + (specialization.rangeBonus || 0)
-        stats.attackSpeed = Math.max(300, (stats.attackSpeed || attackSpeed) - (specialization.attackSpeedBonus || 0))
+        stats.attackSpeed = Math.max(420, (stats.attackSpeed || attackSpeed) - (specialization.attackSpeedBonus || 0))
       }
     }
 
@@ -1237,6 +1279,11 @@ Page(Object.assign({
     if (Array.isArray(this.towerSlots) && this.towerSlots.length > 0) {
       return this.towerSlots
     }
+    // 有路径时绝不回退主题硬编码槽位（那些点并不贴路）
+    if (Array.isArray(this.pathPoints) && this.pathPoints.length >= 2) {
+      this.towerSlots = this.buildTowerSlotsAlongPath()
+      return this.towerSlots
+    }
     const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
     return (theme && theme.towerSlots) || []
   },
@@ -1289,205 +1336,137 @@ Page(Object.assign({
     return len
   },
 
-  // 沿路径法线两侧采样，再吸附到网格，保证贴路且双侧都有位
-  collectFlankSlotCandidates() {
-    const cellSize = CONFIG.cellSize
-    const pathHalf = this.getPathHalfWidth()
-    const offsetX = this.getGridOffsetX()
-    const offsetY = this.getGridOffsetY()
-    const idealOffset = pathHalf + cellSize * 0.58
-    const farOffset = pathHalf + cellSize * 0.95
-    const minDist = pathHalf + cellSize * 0.2
-    const maxDist = pathHalf + cellSize * 1.2
-    const byKey = new Map()
+  // 全图扫描贴路格，再按路径进度左右分桶挑选 → 稳定约 16 个、两侧都有
+  buildTowerSlotsAlongPath(targetCount = 16) {
+    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) {
+      return []
+    }
 
-    const upsert = (row, col, t, side, dist, prefer = 0) => {
-      if (row < 0 || row >= CONFIG.gridRows || col < 0 || col >= CONFIG.gridCols) return
-      if (this.isOnPath(row, col)) return
-      const info = this.getCellPathInfo(row, col)
-      if (info.dist < minDist || info.dist > maxDist) return
-      const key = `${row},${col}`
-      const score = prefer - Math.abs(info.dist - idealOffset) * 0.02
-      const prev = byKey.get(key)
-      if (!prev || score > prev.score) {
-        byKey.set(key, {
+    const cellSize = CONFIG.cellSize
+    if (!Number.isFinite(cellSize) || cellSize <= 0) return []
+
+    const pathHalf = this.getPathHalfWidth()
+    const pathLen = this.getPathLength()
+    if (pathLen < cellSize) return []
+
+    const idealDist = pathHalf + cellSize * 0.6
+    // 贴路边约 0.5~1.5 格，保证两侧都有可选格
+    const minDist = pathHalf + cellSize * 0.22
+    const maxDist = pathHalf + cellSize * 1.55
+
+    const candidates = []
+    for (let row = 0; row < CONFIG.gridRows; row++) {
+      for (let col = 0; col < CONFIG.gridCols; col++) {
+        if (this.isOnPath(row, col)) continue
+        const info = this.getCellPathInfo(row, col)
+        if (!info.side) continue
+        if (info.dist < minDist || info.dist > maxDist) continue
+        candidates.push({
           row,
           col,
-          t: Number.isFinite(t) ? t : info.t,
-          side: side || info.side || 0,
+          t: info.t,
+          side: info.side,
           dist: info.dist,
-          score
+          score: -Math.abs(info.dist - idealDist)
         })
       }
     }
-
-    // 1) 沿路径按步长双侧抛点（主来源，保证不空）
-    let pathLen = 0
-    const step = Math.max(cellSize * 0.75, 18)
-    for (let i = 0; i < this.pathPoints.length - 1; i++) {
-      const p1 = this.pathPoints[i]
-      const p2 = this.pathPoints[i + 1]
-      const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y)
-      if (segLen < 1) continue
-      const tx = (p2.x - p1.x) / segLen
-      const ty = (p2.y - p1.y) / segLen
-      const nx = -ty
-      const ny = tx
-      const samples = Math.max(1, Math.ceil(segLen / step))
-      for (let s = 0; s <= samples; s++) {
-        const param = s / samples
-        const x = p1.x + (p2.x - p1.x) * param
-        const y = p1.y + (p2.y - p1.y) * param
-        const t = pathLen + param * segLen
-        for (const side of [-1, 1]) {
-          for (const off of [idealOffset, farOffset]) {
-            const fx = x + nx * off * side
-            const fy = y + ny * off * side
-            const col = Math.floor((fx - offsetX) / cellSize)
-            const row = Math.floor((fy - offsetY) / cellSize)
-            upsert(row, col, t, side, off, side === -1 ? 0.01 : 0)
-            // 邻格也试一下，提高贴路边的命中率
-            upsert(row, col + side, t, side, off, -0.05)
-            upsert(row + (Math.abs(ty) > Math.abs(tx) ? side : 0), col, t, side, off, -0.05)
-          }
-        }
-      }
-      pathLen += segLen
-    }
-
-    // 2) 全图扫描补漏：只收紧在贴路甜区
-    for (let row = 0; row < CONFIG.gridRows; row++) {
-      for (let col = 0; col < CONFIG.gridCols; col++) {
-        const info = this.getCellPathInfo(row, col)
-        if (info.dist >= minDist && info.dist <= maxDist && info.side !== 0) {
-          upsert(row, col, info.t, info.side, info.dist, -0.1)
-        }
-      }
-    }
-
-    return {
-      candidates: Array.from(byKey.values()),
-      pathLen,
-      minDist,
-      maxDist,
-      idealOffset
-    }
-  },
-
-  // 沿路径两侧挑选塔位：贴路、双侧均衡、塔距不过近、整段不空
-  buildTowerSlotsAlongPath(targetCount = 20) {
-    if (!Array.isArray(this.pathPoints) || this.pathPoints.length < 2) {
-      const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-      return (theme && theme.towerSlots) ? theme.towerSlots.map((s) => ({ row: s.row, col: s.col })) : []
-    }
-
-    const cellSize = CONFIG.cellSize
-    const { candidates, pathLen, maxDist, idealOffset } = this.collectFlankSlotCandidates()
-    if (!candidates.length) {
-      const theme = MAP_THEMES[this.data.currentTheme] || MAP_THEMES.forest
-      return (theme && theme.towerSlots) ? theme.towerSlots.map((s) => ({ row: s.row, col: s.col })) : []
-    }
-
-    const minChebyshev = 2 // 至少隔一格，避免塔挤在一起
-    const minPathGap = cellSize * 0.95
-    const tooClose = (a, b) => {
-      const gridDist = Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col))
-      if (gridDist < minChebyshev) return true
-      // 同侧更严格一点，避免单边扎堆
-      if (a.side && b.side && a.side === b.side && Math.abs(a.t - b.t) < minPathGap) return true
-      return Math.abs(a.t - b.t) < cellSize * 0.55 && gridDist < 3
-    }
+    if (!candidates.length) return []
 
     const selected = []
-    const tryAdd = (c) => {
-      if (!c) return false
-      if (selected.some((s) => s.row === c.row && s.col === c.col)) return false
-      if (selected.some((s) => tooClose(s, c))) return false
+    const keyOf = (c) => `${c.row},${c.col}`
+    const selectedKeys = new Set()
+    const tooClose = (a, b, minGrid) => {
+      const gridDist = Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col))
+      if (gridDist < minGrid) return true
+      // 同侧沿路别挤在一起；异侧允许隔路对放
+      if (a.side === b.side && Math.abs(a.t - b.t) < cellSize * 1.05) return true
+      return false
+    }
+    const tryAdd = (c, minGrid) => {
+      if (!c || selectedKeys.has(keyOf(c))) return false
+      if (selected.some((s) => tooClose(s, c, minGrid))) return false
       selected.push(c)
+      selectedKeys.add(keyOf(c))
       return true
     }
 
-    // 按路径进度分桶，每桶尽量左右各取 1 个 → 两边不空、全程有覆盖
-    const bucketCount = Math.max(6, Math.min(12, Math.round(pathLen / (cellSize * 2.2))))
+    // 按路径进度分桶：每桶左右各取最贴路的 1 个
+    const bucketCount = Math.max(6, Math.min(8, Math.ceil(targetCount / 2)))
     const buckets = Array.from({ length: bucketCount }, () => ({ left: [], right: [] }))
     candidates.forEach((c) => {
-      const idx = pathLen <= 0
-        ? 0
-        : Math.min(bucketCount - 1, Math.max(0, Math.floor((c.t / pathLen) * bucketCount)))
-      const score = c.score - Math.abs(c.dist - idealOffset) * 0.01
-      const item = { ...c, score }
-      if (c.side < 0) buckets[idx].left.push(item)
-      else buckets[idx].right.push(item)
+      const idx = Math.min(
+        bucketCount - 1,
+        Math.max(0, Math.floor((c.t / pathLen) * bucketCount))
+      )
+      if (c.side < 0) buckets[idx].left.push(c)
+      else buckets[idx].right.push(c)
     })
+    const byScore = (a, b) => b.score - a.score || a.dist - b.dist
     buckets.forEach((b) => {
-      b.left.sort((a, c) => c.score - a.score)
-      b.right.sort((a, c) => c.score - a.score)
+      b.left.sort(byScore)
+      b.right.sort(byScore)
     })
 
-    // 第一轮：交错取左右，保证双侧与全程
+    // 第一轮：严格隔一格，左右成对
     for (let i = 0; i < bucketCount && selected.length < targetCount; i++) {
-      const preferLeftFirst = i % 2 === 0
-      const order = preferLeftFirst
-        ? [buckets[i].left, buckets[i].right]
-        : [buckets[i].right, buckets[i].left]
-      order.forEach((list) => {
-        if (selected.length >= targetCount) return
+      for (const list of [buckets[i].left, buckets[i].right]) {
+        if (selected.length >= targetCount) break
         for (let k = 0; k < list.length; k++) {
-          if (tryAdd(list[k])) break
+          if (tryAdd(list[k], 2)) break
         }
-      })
+      }
     }
 
-    // 第二轮：补空桶（仍空的一侧）
+    // 第二轮：补缺侧（仍隔一格）
     for (let i = 0; i < bucketCount && selected.length < targetCount; i++) {
       const hasLeft = selected.some((s) => {
-        const idx = pathLen <= 0 ? 0 : Math.min(bucketCount - 1, Math.floor((s.t / pathLen) * bucketCount))
+        const idx = Math.min(bucketCount - 1, Math.floor((s.t / pathLen) * bucketCount))
         return idx === i && s.side < 0
       })
       const hasRight = selected.some((s) => {
-        const idx = pathLen <= 0 ? 0 : Math.min(bucketCount - 1, Math.floor((s.t / pathLen) * bucketCount))
+        const idx = Math.min(bucketCount - 1, Math.floor((s.t / pathLen) * bucketCount))
         return idx === i && s.side > 0
       })
       if (!hasLeft) {
         for (const c of buckets[i].left) {
-          if (tryAdd(c)) break
+          if (tryAdd(c, 2)) break
         }
       }
       if (!hasRight && selected.length < targetCount) {
         for (const c of buckets[i].right) {
-          if (tryAdd(c)) break
+          if (tryAdd(c, 2)) break
         }
       }
     }
 
-    // 第三轮：按分数补满，间距始终保持
-    const leftovers = candidates
-      .slice()
-      .sort((a, b) => (b.score - Math.abs(b.dist - idealOffset)) - (a.score - Math.abs(a.dist - idealOffset)))
-    for (let i = 0; i < leftovers.length && selected.length < targetCount; i++) {
-      tryAdd(leftovers[i])
-    }
-
-    // 若仍偏少，略微放宽同侧路径间距再补
-    if (selected.length < Math.floor(targetCount * 0.75)) {
-      const relaxed = (a, b) => Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col)) < 2
+    // 第三轮：全局按贴路分补满
+    if (selected.length < targetCount) {
+      const leftovers = candidates.slice().sort(byScore)
       for (let i = 0; i < leftovers.length && selected.length < targetCount; i++) {
-        const c = leftovers[i]
-        if (selected.some((s) => s.row === c.row && s.col === c.col)) continue
-        if (selected.some((s) => relaxed(s, c))) continue
-        selected.push(c)
+        tryAdd(leftovers[i], 2)
       }
     }
 
-    // 布局重算时保留已有塔所占格（须仍贴路且不在路上）
+    // 第四轮：仍不足则允许相邻格（仅不同格）
+    if (selected.length < targetCount) {
+      const leftovers = candidates.slice().sort(byScore)
+      for (let i = 0; i < leftovers.length && selected.length < targetCount; i++) {
+        tryAdd(leftovers[i], 1)
+      }
+    }
+
+    // 保留场上已有塔的格子
     if (Array.isArray(this.towers)) {
       this.towers.forEach((tower) => {
         if (tower.row == null || tower.col == null) return
         if (this.isOnPath(tower.row, tower.col)) return
         const info = this.getCellPathInfo(tower.row, tower.col)
-        if (info.dist > maxDist) return
-        if (!selected.some((s) => s.row === tower.row && s.col === tower.col)) {
-          selected.push({ row: tower.row, col: tower.col, dist: info.dist, t: info.t, side: info.side })
+        if (info.dist > maxDist * 1.25) return
+        const c = { row: tower.row, col: tower.col, t: info.t, side: info.side, dist: info.dist }
+        if (!selectedKeys.has(keyOf(c))) {
+          selected.push(c)
+          selectedKeys.add(keyOf(c))
         }
       })
     }
@@ -1737,6 +1716,90 @@ Page(Object.assign({
     })
   },
 
+  ensureProceduralTheme(level = this.data.level || 1) {
+    const normalizedLevel = Math.max(1, Math.floor(level))
+    if (normalizedLevel === 1) return 'forest'
+
+    const key = `realm_${normalizedLevel}`
+    if (MAP_THEMES[key] && MAP_THEMES[key].colorFormat === 'rgb-v1') return key
+
+    const adjectives = ['暮光', '星砂', '苍翠', '绯炎', '霜月', '雷鸣', '幽蓝', '金辉', '紫雾', '赤晶', '碧潮', '黑曜']
+    const nouns = ['荒原', '秘境', '峡谷', '高地', '沼泽', '天穹', '遗迹', '海岸', '盆地', '群岛', '裂谷', '庭院']
+    const decorSets = [
+      ['tree', 'bush', 'flower', 'mushroom', 'rock'],
+      ['cactus', 'rock', 'skull', 'tumbleweed'],
+      ['ice_crystal', 'snow_pile', 'frozen_tree', 'rock'],
+      ['lava_rock', 'fire_vent', 'ash_pile', 'dead_tree']
+    ]
+    const layoutKeys = ['forest', 'desert', 'ice', 'volcano']
+    // 黄金角推进色相；即使关卡无限增长，也不会按四张地图循环颜色。
+    const hue = Math.round((normalizedLevel * 137.508) % 360)
+    const pathHue = (hue + 28 + normalizedLevel * 7) % 360
+    const accentHue = (hue + 95) % 360
+    const decorIndex = (normalizedLevel * 5 + Math.floor(normalizedLevel / 3)) % decorSets.length
+
+    MAP_THEMES[key] = {
+      name: `${adjectives[(normalizedLevel - 1) % adjectives.length]}${nouns[Math.floor((normalizedLevel - 1) / adjectives.length) % nouns.length]}·第${normalizedLevel}境`,
+      bgColors: [
+        hslToHex(hue, 48, 8),
+        hslToHex((hue + 12) % 360, 42, 15),
+        hslToHex((hue + 26) % 360, 50, 7)
+      ],
+      pathColors: [
+        hslToHex(pathHue, 42, 14),
+        hslToHex(pathHue, 35, 30),
+        hslToHex((pathHue + 8) % 360, 38, 43)
+      ],
+      grassColor: hslaColor(accentHue, 58, 55, 0.14),
+      gridColor: hslaColor(accentHue, 72, 64, 0.22),
+      colorFormat: 'rgb-v1',
+      decorTypes: decorSets[decorIndex],
+      pathLayoutKey: layoutKeys[(normalizedLevel - 1) % layoutKeys.length],
+      terrainLevel: normalizedLevel,
+      // 动态塔位会覆盖此项；保留基础槽位用于极端尺寸下的 fallback。
+      towerSlots: MAP_THEMES[layoutKeys[(normalizedLevel - 1) % layoutKeys.length]].towerSlots
+        .map((slot) => ({ ...slot }))
+    }
+    return key
+  },
+
+  ensureThemeForKey(themeKey, level = this.data.level || 1) {
+    if (MAP_THEMES[themeKey]) return themeKey
+    const matched = /^realm_(\d+)$/.exec(themeKey || '')
+    if (matched) return this.ensureProceduralTheme(Number(matched[1]))
+    return this.ensureProceduralTheme(level)
+  },
+
+  buildProceduralPath(level, offsetX, offsetY, cellSize) {
+    // 仅由关卡号推导，读档和画布重测时都能还原同一路线。
+    let seed = (Math.imul(Math.max(2, level), 2654435761) ^ 0x9e3779b9) >>> 0
+    const random = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed / 4294967296
+    }
+    const pickRow = (previous) => {
+      let row = 1 + Math.floor(random() * 9)
+      if (Math.abs(row - previous) < 2) {
+        row = (row + 4 + Math.floor(random() * 3)) % 10 + 1
+      }
+      return row + 0.5
+    }
+
+    const columns = [1.5, 3.5, 5.5, 7.5, 9.5]
+    let row = pickRow(-10)
+    const points = [{ x: -20, y: offsetY + cellSize * row }]
+
+    columns.forEach((column) => {
+      const x = offsetX + cellSize * column
+      points.push({ x, y: offsetY + cellSize * row })
+      const nextRow = pickRow(row - 0.5)
+      points.push({ x, y: offsetY + cellSize * nextRow })
+      row = nextRow
+    })
+    points.push({ x: CONFIG.canvasWidth + 20, y: offsetY + cellSize * row })
+    return points
+  },
+
   generatePath(themeKey = 'forest', options = {}) {
     const {
       refreshDressing = true,
@@ -1810,7 +1873,12 @@ Page(Object.assign({
       ]
     }
     
-    this.pathPoints = pathLayouts[themeKey] || pathLayouts.forest
+    const resolvedThemeKey = this.ensureThemeForKey(themeKey)
+    const theme = MAP_THEMES[resolvedThemeKey] || MAP_THEMES.forest
+    const layoutKey = theme.pathLayoutKey || resolvedThemeKey
+    this.pathPoints = theme.terrainLevel
+      ? this.buildProceduralPath(theme.terrainLevel, offsetX, offsetY, cellSize)
+      : (pathLayouts[layoutKey] || pathLayouts.forest)
 
     if (rebuildSlots) {
       // 按当前路径重新生成两侧塔位（避免各主题硬编码与路线错位）
@@ -1827,7 +1895,7 @@ Page(Object.assign({
     }
     
     this.rebuildPathDecorations(true)
-    this.generateMapDecorations(themeKey)
+    this.generateMapDecorations(resolvedThemeKey)
     
     // 预生成背景纹理点 - 控制密度，减少持续绘制负担
     this.grassDots = []
@@ -1906,13 +1974,11 @@ Page(Object.assign({
     const hasDressing = Array.isArray(this.grassDots) && this.grassDots.length > 0
     this.generatePath(this.data.currentTheme, {
       refreshDressing: !hasDressing,
-      rebuildSlots: !Array.isArray(this.towerSlots) || this.towerSlots.length === 0,
+      rebuildSlots: true,
       relocateTowers: false
     })
     this.rebuildGridFromTowers()
-    if (this.data.gameState === 'prep') {
-      this.syncPrepTowerSlots(this.data.currentTheme)
-    }
+    this.syncPrepTowerSlots(this.data.currentTheme)
     return false
   },
 
@@ -2068,7 +2134,7 @@ Page(Object.assign({
   },
 
   normalizeSavedTower(tower, mode = 'field', blessingKey = this.data.selectedBlessingKey) {
-    if (!tower || !tower.type) return null
+    if (!tower || !tower.type || !TOWER_TYPES[tower.type]) return null
     const stats = this.getTowerStatsForLevel(
       tower.type,
       tower.level || 1,
@@ -2099,6 +2165,7 @@ Page(Object.assign({
       const savedData = snapshot.data
       const blessingKey = savedData.selectedBlessingKey || ''
       const themeKey = savedData.currentTheme || 'forest'
+      this.ensureThemeForKey(themeKey, savedData.level || 1)
       const threat = (typeof this.resolveWaveThreat === 'function'
         ? this.resolveWaveThreat(savedData.wave || 1)
         : null) || {
@@ -2342,10 +2409,13 @@ Page(Object.assign({
       this.pendingNextWaveModifier = null
     }
 
-    // 基础怪物数量随波次增加，并受威胁类型调节
-    const rawBaseCount = 5 + Math.floor(wave * 1.5)
+    // 基础怪物数量随波次增加，并受威胁类型调节；前两图略少，避免开局被数量压垮
+    const level = Math.ceil(wave / 10)
+    const rawBaseCount = level <= 2
+      ? 4 + Math.floor(wave * 1.15)
+      : 5 + Math.floor(wave * 1.5)
     const baseCount = Math.max(
-      5,
+      level <= 2 ? 4 : 5,
       Math.min(
         70,
         Math.round(rawBaseCount * (threat.countMultiplier || 1) * (waveModifier?.countMultiplier || 1))
@@ -2358,12 +2428,23 @@ Page(Object.assign({
       return !config.isBoss && config.unlockWave <= wave
     })
 
-    // 怪物生命值倍率：每波+35%、每关+30%，让中后期能跟上塔的指数输出；护甲按波次/关卡累加
-    const level = Math.ceil(wave / 10)
-    const baseArmor = Math.min(0.55, (wave - 1) * 0.016 + (level - 1) * 0.07)
-    const hpMultiplier = (1 + (wave - 1) * 0.35) * (1 + (level - 1) * 0.3) * (threat.hpMultiplier || 1) * (waveModifier?.hpMultiplier || 1)
+    // 前 2 个地图：血量/护甲缓涨，保证合成塔能打穿。
+    // 第 3 图起：以第 2 图末为锚点爬升，真正难度主要由场上塔数/等级在 spawn 时加压。
+    let progressionHpMultiplier
+    let baseArmor
+    if (level <= 2) {
+      progressionHpMultiplier = (1 + (wave - 1) * 0.18) * (1 + (level - 1) * 0.12)
+      baseArmor = Math.min(0.28, (wave - 1) * 0.007 + (level - 1) * 0.03)
+    } else {
+      const map2EndMultiplier = (1 + 19 * 0.18) * (1 + 1 * 0.12)
+      progressionHpMultiplier = map2EndMultiplier * (1 + (wave - 20) * 0.08) * (1 + (level - 2) * 0.12)
+      baseArmor = Math.min(0.55, 0.1 + (wave - 20) * 0.01 + (level - 2) * 0.04)
+    }
+    const hpMultiplier = progressionHpMultiplier *
+      (threat.hpMultiplier || 1) * (waveModifier?.hpMultiplier || 1)
     const speedMultiplier = (threat.speedMultiplier || 1) * (waveModifier?.speedMultiplier || 1)
     const goldMultiplier = waveModifier?.goldMultiplier || 1
+    const armorCap = level <= 2 ? 0.28 : 0.55
 
     for (let i = 0; i < baseCount; i++) {
       let type
@@ -2395,7 +2476,7 @@ Page(Object.assign({
         maxHp: Math.floor(config.baseHp * hpMultiplier),
         speed: Number((config.speed * speedMultiplier).toFixed(2)),
         goldDrop: Math.floor(config.goldDrop * (1 + (wave - 1) * 0.06) * goldMultiplier),
-        armor: Math.min(0.55, baseArmor + (config.armor || 0))
+        armor: Math.min(armorCap, baseArmor + (config.armor || 0))
       })
     }
 
@@ -2404,7 +2485,9 @@ Page(Object.assign({
       const bossTypes = ['dragon', 'treant', 'lich', 'phoenix']
       const bossType = bossTypes[(level - 1) % bossTypes.length]
       const bossConfig = MONSTER_TYPES[bossType]
-      const bossHpMultiplier = (1 + (wave - 1) * 0.3) * (threat.bossHpMultiplier || 1)
+      const bossHpMultiplier = (level <= 2
+        ? (1 + (wave - 1) * 0.16)
+        : progressionHpMultiplier * 1.35) * (threat.bossHpMultiplier || 1)
       this.waveMonsters.push({
         type: bossType,
         ...bossConfig,
@@ -2412,7 +2495,7 @@ Page(Object.assign({
         maxHp: Math.floor(bossConfig.baseHp * bossHpMultiplier),
         speed: Number((bossConfig.speed * speedMultiplier).toFixed(2)),
         goldDrop: bossConfig.goldDrop * Math.ceil(wave / 5) + (threat.bossGoldBonus || 0),
-        armor: Math.min(0.55, baseArmor + 0.4)
+        armor: Math.min(armorCap, baseArmor + (level <= 2 ? 0.18 : 0.22))
       })
     }
 
@@ -2498,7 +2581,13 @@ Page(Object.assign({
     }
 
     this.safeUpdate('monsters', this.updateMonsters)
-    this.safeUpdate('towers', this.updateTowers, now)
+    this._towerUpdateTick = (this._towerUpdateTick || 0) + 1
+    const towerUpdateStride = this.performanceProfileKey === 'intense'
+      ? 3
+      : (this.performanceProfileKey === 'busy' ? 2 : 1)
+    if (this._towerUpdateTick % towerUpdateStride === 0) {
+      this.safeUpdate('towers', this.updateTowers, now)
+    }
     this.safeUpdate('projectiles', this.updateProjectiles)
 
     // 拖拽合成时优先保证触摸命中：跳过重特效更新与存档，减轻主线程抢占
@@ -2518,7 +2607,11 @@ Page(Object.assign({
       this.safeUpdate('persistProgress', this.persistRunProgress)
     }
 
-    this.safeUpdate('performanceCaps', this.enforcePerformanceCaps)
+    this._performanceCapTick = (this._performanceCapTick || 0) + 1
+    const capStride = this.performanceProfileKey === 'intense' ? 3 : 2
+    if (this._performanceCapTick % capStride === 0) {
+      this.safeUpdate('performanceCaps', this.enforcePerformanceCaps)
+    }
     this.safeUpdate('flushStats', this.flushQueuedStats)
 
     if (this.spawnIndex >= this.waveMonsters.length && this.monsters.length === 0 && !this.waveComplete) {
@@ -2569,9 +2662,46 @@ Page(Object.assign({
     }
   },
 
+  // 第 3 图起：怪物强度与场上塔数量/等级强相关；前两图不加压，保证开局。
+  getDefensePressure() {
+    const level = this.data.level || Math.ceil((this.data.wave || 1) / 10)
+    if (level < 3) {
+      return {
+        active: false,
+        hpMultiplier: 1,
+        armorBonus: 0,
+        speedMultiplier: 1,
+        powerScore: 0
+      }
+    }
+
+    const towers = this.towers || []
+    const towerCount = towers.length
+    const powerScore = towers.reduce((sum, tower) => {
+      return sum + Math.pow(Math.max(1, tower.level || 1), 1.25)
+    }, 0)
+    // 约 6 座 3 级塔附近开始明显加压；高阶塔权重更大，上限防止失控。
+    const excessPower = Math.max(0, powerScore - 10)
+    return {
+      active: true,
+      powerScore,
+      hpMultiplier: 1 + Math.min(5.5, Math.pow(excessPower, 0.78) * 0.22 + towerCount * 0.03),
+      armorBonus: Math.min(0.2, excessPower * 0.008 + towerCount * 0.004),
+      speedMultiplier: 1 + Math.min(0.18, excessPower * 0.003 + towerCount * 0.002)
+    }
+  },
+
   spawnMonster(template) {
+    const pressure = this.getDefensePressure()
+    const templateMaxHp = template.maxHp || template.hp || template.baseHp || 1
+    const scaledHp = Math.max(1, Math.floor(templateMaxHp * pressure.hpMultiplier))
     this.monsters.push({
       ...template,
+      hp: scaledHp,
+      maxHp: scaledHp,
+      armor: Math.min(0.7, (template.armor || 0) + pressure.armorBonus),
+      speed: Number((template.speed * pressure.speedMultiplier).toFixed(2)),
+      defensePressureScore: pressure.powerScore,
       x: this.pathPoints[0].x,
       y: this.pathPoints[0].y,
       pathIndex: 0,
@@ -2637,7 +2767,7 @@ Page(Object.assign({
           })
         }
       }
-      
+
       // 藤蔓缠绕效果 - 减速30% + 易伤
       if (monster.vineTimer > 0) {
         speedMod *= 0.7  // 额外减速30%
@@ -2701,18 +2831,21 @@ Page(Object.assign({
 
     const crowded = this.monsters.length >= 20
     // 怪多时只留一条飘字，避免击杀洪峰打爆主线程
-    this.floatingTexts.push({
-      x: monster.x,
-      y: monster.y - 20,
-      text: `+${gold}`,
-      color: '#ffd700',
-      life: crowded ? 36 : 60,
-      maxLife: crowded ? 36 : 60,
-      vy: -1.5,
-      vx: 0,
-      scale: crowded ? 1.1 : 1.5,
-      isBold: true
-    })
+    this._killTextTick = (this._killTextTick || 0) + 1
+    if (!crowded || monster.isBoss || this._killTextTick % 3 === 0) {
+      this.floatingTexts.push({
+        x: monster.x,
+        y: monster.y - 20,
+        text: `+${gold}`,
+        color: '#ffd700',
+        life: crowded ? 36 : 60,
+        maxLife: crowded ? 36 : 60,
+        vy: -1.5,
+        vx: 0,
+        scale: crowded ? 1.1 : 1.5,
+        isBold: true
+      })
+    }
 
     if (!crowded) {
       this.createMonsterDeathEffect(monster)
@@ -3072,6 +3205,15 @@ Page(Object.assign({
     if (tower.type === 'lightning') {
       this.lightningAttack(tower, target)
     } else {
+      const projectileBudget = this.performanceProfileKey === 'intense'
+        ? 56
+        : (this.performanceProfileKey === 'busy' ? 80 : 110)
+      if (this.projectiles.length >= projectileBudget) {
+        // 弹道预算满时直接结算，保留伤害但不再分配新对象/轨迹。
+        this.applyDamage(target, tower.damage, tower.type)
+        this.applyTowerEffect(target, tower.type, tower.damage, tower.level)
+        return
+      }
       this.projectiles.push({
         x: tower.x,
         y: tower.y - 10,
@@ -3088,14 +3230,14 @@ Page(Object.assign({
       })
     }
     
-    if (this.monsters.length < 28) {
+    if (this.monsters.length < 18 && this.performanceProfileKey === 'relaxed') {
       this.createParticles(tower.x, tower.y - 15, config.color, 2)
     }
   },
 
   lightningAttack(tower, target) {
     const lv = tower.level || 1
-    const chainCount = Math.min(3, 1 + Math.floor((lv + 1) / 2))  // 高等级仍有连锁，但不再指数堆特效
+    const chainCount = Math.min(3, 1 + Math.floor((lv + 1) / 2))
     
     this.applyDamage(target, tower.damage, 'lightning')
     
@@ -3114,7 +3256,9 @@ Page(Object.assign({
     })
     
     // 电击光环 - 等级越高光环越大
-    this.createElectricBurst(target.x, target.y, lv)
+    if (this.performanceProfileKey !== 'intense') {
+      this.createElectricBurst(target.x, target.y, lv)
+    }
     
     let lastTarget = target
     let hitTargets = [target]
@@ -3138,18 +3282,22 @@ Page(Object.assign({
         this.applyDamage(nearestMonster, tower.damage * (0.6 + lv * 0.05), 'lightning')
         
         const chainColor = lv >= 4 ? '#ffff88' : lv >= 3 ? '#ffff66' : lv >= 2 ? '#eeee33' : '#cccc00'
-        this.lightningEffects.push({
-          x1: lastTarget.x,
-          y1: lastTarget.y,
-          x2: nearestMonster.x,
-          y2: nearestMonster.y,
-          life: 14 + lv * 2,
-          maxLife: 14 + lv * 2,
-          color: chainColor,
-          width: mainWidth * 0.75
-        })
+        if (this.performanceProfileKey !== 'intense' || i === 0) {
+          this.lightningEffects.push({
+            x1: lastTarget.x,
+            y1: lastTarget.y,
+            x2: nearestMonster.x,
+            y2: nearestMonster.y,
+            life: 14 + lv * 2,
+            maxLife: 14 + lv * 2,
+            color: chainColor,
+            width: mainWidth * 0.75
+          })
+        }
         
-        this.createElectricBurst(nearestMonster.x, nearestMonster.y, lv)
+        if (this.performanceProfileKey === 'relaxed') {
+          this.createElectricBurst(nearestMonster.x, nearestMonster.y, lv)
+        }
         
         hitTargets.push(nearestMonster)
         lastTarget = nearestMonster
@@ -3181,17 +3329,19 @@ Page(Object.assign({
 
     // 闪避判定（高机动怪：幽影等）—— 完全不受伤害
     if (monster.evasionChance && Math.random() < monster.evasionChance) {
-      this.floatingTexts.push({
-        x: monster.x + (Math.random() - 0.5) * 18,
-        y: monster.y - 22,
-        text: '闪避',
-        color: '#aaaaff',
-        life: 18,
-        maxLife: 18,
-        vy: -1.2,
-        vx: (Math.random() - 0.5) * 0.6,
-        scale: 0.85
-      })
+      if (this.performanceProfileKey === 'relaxed' || monster.isBoss) {
+        this.floatingTexts.push({
+          x: monster.x + (Math.random() - 0.5) * 18,
+          y: monster.y - 22,
+          text: '闪避',
+          color: '#aaaaff',
+          life: 18,
+          maxLife: 18,
+          vy: -1.2,
+          vx: (Math.random() - 0.5) * 0.6,
+          scale: 0.85
+        })
+      }
       return
     }
 
@@ -3282,7 +3432,7 @@ Page(Object.assign({
       if (distSq < 225) {
         this.applyDamage(currentTarget, proj.damage, proj.towerType)
         this.applyTowerEffect(currentTarget, proj.towerType, proj.damage, proj.towerLevel)
-        if (monsters.length < 32) {
+        if (monsters.length < 24 && this.performanceProfileKey === 'relaxed') {
           this.createHitEffect(currentTarget.x, currentTarget.y, proj.towerType, proj.towerLevel)
         }
         
@@ -3299,10 +3449,14 @@ Page(Object.assign({
       proj.x += (dx / dist) * proj.speed
       proj.y += (dy / dist) * proj.speed
       
-      if (!proj.trail) proj.trail = []
-      proj.trail.push({ x: proj.x, y: proj.y })
-      const trailLimit = this.getProjectileTrailLimit ? this.getProjectileTrailLimit() : 4
-      if (proj.trail.length > trailLimit) proj.trail.shift()
+      if (!this.shouldUseSimplifiedProjectiles()) {
+        if (!proj.trail) proj.trail = []
+        proj.trail.push({ x: proj.x, y: proj.y })
+        const trailLimit = this.getProjectileTrailLimit ? this.getProjectileTrailLimit() : 4
+        if (proj.trail.length > trailLimit) proj.trail.shift()
+      } else if (proj.trail && proj.trail.length) {
+        proj.trail.length = 0
+      }
       
       return true
     })
@@ -3414,18 +3568,18 @@ Page(Object.assign({
   applyTowerEffect(monster, type, damage, level) {
     switch (type) {
       case 'fire':
-        // 灼烧：持续伤害
+        // 灼烧按帧结算：旧版 damage×0.1×level 每帧会在高等级时放大数十倍。
         monster.burnTimer = 180
-        monster.burnDamage = damage * 0.1 * level
+        monster.burnDamage = damage * (0.22 + Math.min(10, level) * 0.018) / 60
         break
       case 'ice':
         // 冰冻：减速50%
         monster.slowTimer = 120
         break
       case 'nature':
-        // 藤蔓：减速30% + 受伤加深25%（易伤效果）
+        // 藤蔓易伤缓慢随等级成长并封顶，避免高等级达到数倍伤害。
         monster.vineTimer = 180  // 3秒
-        monster.vineVulnerability = 0.25 * level  // 每级增加25%易伤
+        monster.vineVulnerability = Math.min(0.5, 0.22 + Math.max(1, level) * 0.03)
         break
     }
   },
@@ -3642,6 +3796,7 @@ Page(Object.assign({
       // 重置 ctx 状态避免泄漏
       ctx.shadowBlur = 0
       ctx.globalAlpha = 1
+      ctx.globalCompositeOperation = 'source-over'
       ctx.setLineDash([])
 
       // 背景渐变（按主题缓存，避免每帧重建 CanvasGradient）
@@ -4268,19 +4423,106 @@ Page(Object.assign({
   },
 
   // 召唤新塔
+  _autoMergeInventory(silent = false, reserveGold = 0) {
+    let availableGold = this.data.gold
+    let mergeCount = 0
+    let hasMergePair = false
+
+    while (true) {
+      let pair = null
+      for (let i = 0; i < this.inventory.length && !pair; i++) {
+        const first = this.inventory[i]
+        if (!first || first.level >= MAX_TOWER_LEVEL) continue
+        for (let j = i + 1; j < this.inventory.length; j++) {
+          const second = this.inventory[j]
+          if (!second || second.type !== first.type || second.level !== first.level) continue
+          hasMergePair = true
+          const nextLevel = first.level + 1
+          const cost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
+          if (availableGold - cost >= reserveGold) {
+            pair = { targetIndex: i, sourceIndex: j, nextLevel, cost }
+            break
+          }
+        }
+      }
+      if (!pair) break
+
+      const target = this.inventory[pair.targetIndex]
+      target.level = pair.nextLevel
+      Object.assign(target, this.getTowerStatsForLevel(target.type, target.level, 'inventory'))
+      this.inventory.splice(pair.sourceIndex, 1)
+      availableGold -= pair.cost
+      mergeCount++
+    }
+
+    if (mergeCount > 0) {
+      this.setData({ gold: availableGold, selectedInventoryIndex: -1 })
+      this.updateInventoryDisplay()
+      this.playSound('merge', { cooldown: 0, volume: 0.58 })
+      if (!silent) {
+        wx.showToast({ title: `自动合成 ${mergeCount} 次`, icon: 'none' })
+      }
+    } else if (!silent) {
+      wx.showToast({
+        title: hasMergePair ? '金币不足，暂时无法整理' : '没有可合成的同类同级塔',
+        icon: 'none'
+      })
+    }
+    return mergeCount
+  },
+
+  autoMergeInventory() {
+    this._autoMergeInventory(false, 0)
+  },
+
+  recycleInventoryTower(e) {
+    const index = Number(e.currentTarget.dataset.index)
+    const tower = this.inventory[index]
+    if (!tower) return
+
+    this._suppressNextTouchEnd = true
+    this.resetDrag()
+    const config = TOWER_TYPES[tower.type]
+    const recycleGold = Math.max(6, Math.floor(8 * Math.pow(1.7, (tower.level || 1) - 1)))
+    wx.showModal({
+      title: `回收${config.name} Lv.${tower.level}`,
+      content: `回收后获得 ${recycleGold} 金币，此操作无法撤销。`,
+      confirmText: '确认回收',
+      confirmColor: '#d88a2e',
+      success: (result) => {
+        if (!result.confirm || this.inventory[index] !== tower) return
+        this.inventory.splice(index, 1)
+        this.setData({
+          gold: this.data.gold + recycleGold,
+          selectedInventoryIndex: -1
+        })
+        this.updateInventoryDisplay()
+        wx.showToast({ title: `回收获得 ${recycleGold} 金币`, icon: 'none' })
+      }
+    })
+  },
+
   summonTower() {
+    if (this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS) {
+      this._autoMergeInventory(true, this.data.summonCost)
+      if (this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS) {
+        wx.showToast({ title: '仓库已满，请点整理或长按回收', icon: 'none' })
+        return
+      }
+    }
+
     if (this.data.gold < this.data.summonCost) {
       wx.showToast({ title: '金币不足!', icon: 'none' })
       return
     }
     
-    if (this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS) {
-      wx.showToast({ title: '仓库已满!', icon: 'none' })
-      return
-    }
-    
     const types = Object.keys(TOWER_TYPES)
-    const type = types[Math.floor(Math.random() * types.length)]
+    // 仓库接近满时优先召出已有1级塔，降低8种塔导致的“永远凑不成一对”。
+    const mergeFriendlyTypes = this.inventory.length >= 14
+      ? [...new Set(this.inventory.filter((tower) => tower.level === 1).map((tower) => tower.type))]
+      : []
+    const summonPool = mergeFriendlyTypes.length > 0 ? mergeFriendlyTypes : types
+    const type = summonPool[Math.floor(Math.random() * summonPool.length)]
     this.inventory.push(this.createTowerData(type))
     
     this.setData({ gold: this.data.gold - this.data.summonCost })
@@ -4664,6 +4906,11 @@ Page(Object.assign({
 
   // 统一处理触摸结束
   handleTouchEnd(e) {
+    if (this._suppressNextTouchEnd) {
+      this._suppressNextTouchEnd = false
+      this.resetDrag()
+      return
+    }
     // 如果没有待拖动的塔，直接返回
     if (!this.pendingDragTower) {
       this.resetDrag()
@@ -4985,11 +5232,9 @@ Page(Object.assign({
       isBold: true
     })
     
-    // 每10波切换地形
+    // 每10波进入一个全新的程序化地形，不再循环四张固定地图
     if (newWave % 10 === 1 && newWave > 1) {
-      const themes = Object.keys(MAP_THEMES)
-      const currentIndex = themes.indexOf(this.data.currentTheme)
-      const nextTheme = themes[(currentIndex + 1) % themes.length]
+      const nextTheme = this.ensureProceduralTheme(newLevel)
       
       this.scheduleTimeout(() => {
         this.floatingTexts.push({

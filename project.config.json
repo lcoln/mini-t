@@ -1,5 +1,5 @@
 {
-  "description": "赛博雷电 - Cyber Thunder Game",
+  "description": "合成塔防：这塔还能再合",
   "packOptions": {
     "ignore": [],
     "include": []
@@ -43,7 +43,7 @@
   "compileType": "miniprogram",
   "libVersion": "3.13.2",
   "appid": "wx24eac4d0de76e014",
-  "projectname": "cyber-thunder",
+  "projectname": "合成塔防-这塔还能再合",
   "condition": {},
   "editorSetting": {
     "tabIndent": "insertSpaces",

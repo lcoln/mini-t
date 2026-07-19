@@ -1,6 +1,6 @@
 App({
   onLaunch() {
-    console.log('元素守护者游戏启动')
+    console.log('合成塔防：这塔还能再合 游戏启动')
   },
   globalData: {
     userInfo: null,

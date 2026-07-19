@@ -9,9 +9,9 @@
       <text class="hero-badge">拖拽合成</text>
       <text class="hero-badge">每3波补给</text>
     </view>
-    <text class="main-title">元素守护者</text>
-    <text class="sub-title">ELEMENT GUARDIAN</text>
-    <text class="hero-desc">选祝福、摆防线、每3波选强化，三分钟一局。</text>
+    <text class="main-title">合成塔防</text>
+    <text class="sub-title">这塔还能再合</text>
+    <text class="hero-desc">合成升级防御塔，挑战无限地图，看看你能守到第几关！</text>
   </view>
 
   <view class="menu-section">

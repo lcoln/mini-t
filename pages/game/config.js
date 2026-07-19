@@ -22,14 +22,14 @@ const CONFIG = {
 }
 
 const PERFORMANCE_LIMITS = {
-  particles: 70,
-  floatingTexts: 16,
-  lightningEffects: 40,
-  fireEffects: 50,
-  iceEffects: 36,
-  poisonEffects: 40,
-  arcaneEffects: 40,
-  mergeEffects: 16,
+  particles: 52,
+  floatingTexts: 12,
+  lightningEffects: 30,
+  fireEffects: 34,
+  iceEffects: 28,
+  poisonEffects: 30,
+  arcaneEffects: 30,
+  mergeEffects: 12,
   trailPoints: 4
 }
 
@@ -54,10 +54,10 @@ const PERFORMANCE_PROFILE_INTERVALS = {
 }
 const PERFORMANCE_PROFILE_HYSTERESIS = {
   // 怪一多早点进 busy：只砍弹道/特效频率，不砍地图与外形
-  busyEnter: 40,
-  busyExit: 28,
-  intenseEnter: 88,
-  intenseExit: 64,
+  busyEnter: 32,
+  busyExit: 22,
+  intenseEnter: 68,
+  intenseExit: 50,
   // 保留字段兼容旧逻辑，但数值对齐普通档位，Boss 不再单独降画质
   bossBusyFloor: 52,
   bossIntenseEnter: 94,
@@ -187,7 +187,7 @@ const TOWER_ATTACK_SOUNDS = {
   lightning: { keys: ['lightningAttack', 'lightningAttackAlt'], cooldownKey: 'lightningAttack', levelBoost: 0.018 }
 }
 
-// 压力升高时：降帧 + 精简弹道/特效；地图装饰与怪/塔外形始终保留（不压成圆点、不抽稀草地）
+// 压力升高时：降帧 + 精简弹道/特效；怪/塔外形始终完整绘制，避免战斗中突然切简化版
 const PERFORMANCE_PROFILES = {
   relaxed: {
     renderInterval: 16,
@@ -205,30 +205,30 @@ const PERFORMANCE_PROFILES = {
     bossDamageTextCooldown: 0
   },
   busy: {
-    renderInterval: 34,
+    renderInterval: 40,
     simplifyTowers: false,
-    simplifyMonsters: true,
+    simplifyMonsters: false,
     simplifyBosses: false,
     simplifyProjectiles: true,
     skipDecorations: false,
     decorStride: 1,
     animatedDecorations: false,
-    effectRenderStride: 3,
+    effectRenderStride: 4,
     projectileTrailPoints: 1,
     damageTextStride: 3,
     compactBossHp: false,
     bossDamageTextCooldown: 60
   },
   intense: {
-    renderInterval: 50,
-    simplifyTowers: true,
-    simplifyMonsters: true,
-    simplifyBosses: true,
+    renderInterval: 66,
+    simplifyTowers: false,
+    simplifyMonsters: false,
+    simplifyBosses: false,
     simplifyProjectiles: true,
     skipDecorations: false,
     decorStride: 1,
     animatedDecorations: false,
-    effectRenderStride: 4,
+    effectRenderStride: 6,
     projectileTrailPoints: 1,
     damageTextStride: 5,
     compactBossHp: true,
@@ -673,6 +673,149 @@ const MONSTER_TYPES = {
     shape: 'troll',
     unlockWave: 15,
     regenPerSec: 14
+  },
+  scarab: {
+    name: '甲虫卫兵',
+    emoji: '🪲',
+    bodyColor: '#8a6a24',
+    outlineColor: '#4d3510',
+    eyeColor: '#ffdd44',
+    baseHp: 105,
+    speed: 1.05,
+    goldDrop: 9,
+    shape: 'generic',
+    unlockWave: 1,
+    armor: 0.06
+  },
+  direwolf: {
+    name: '荒原魔狼',
+    emoji: '🐺',
+    bodyColor: '#667080',
+    outlineColor: '#303844',
+    eyeColor: '#66ddff',
+    baseHp: 165,
+    speed: 1.55,
+    goldDrop: 16,
+    shape: 'generic',
+    unlockWave: 11
+  },
+  shaman: {
+    name: '沼泽萨满',
+    emoji: '🧙',
+    bodyColor: '#477a55',
+    outlineColor: '#20482c',
+    eyeColor: '#aaff66',
+    baseHp: 260,
+    speed: 0.92,
+    goldDrop: 24,
+    shape: 'generic',
+    unlockWave: 31,
+    regenPerSec: 6
+  },
+  darkKnight: {
+    name: '暗甲骑士',
+    emoji: '♞',
+    bodyColor: '#3f4455',
+    outlineColor: '#171923',
+    eyeColor: '#ff3344',
+    baseHp: 480,
+    speed: 0.72,
+    goldDrop: 36,
+    shape: 'generic',
+    unlockWave: 51,
+    armor: 0.16
+  },
+  spider: {
+    name: '晶背魔蛛',
+    emoji: '🕷️',
+    bodyColor: '#713c88',
+    outlineColor: '#351844',
+    eyeColor: '#ff88ff',
+    baseHp: 250,
+    speed: 1.62,
+    goldDrop: 34,
+    shape: 'generic',
+    unlockWave: 71,
+    evasionChance: 0.12
+  },
+  elemental: {
+    name: '混沌元素',
+    emoji: '🌀',
+    bodyColor: '#2c9aaa',
+    outlineColor: '#14505c',
+    eyeColor: '#ffffff',
+    baseHp: 520,
+    speed: 1.0,
+    goldDrop: 48,
+    shape: 'generic',
+    unlockWave: 91,
+    armor: 0.1
+  },
+  assassin: {
+    name: '虚空刺客',
+    emoji: '🥷',
+    bodyColor: '#29243f',
+    outlineColor: '#0e0b18',
+    eyeColor: '#dd66ff',
+    baseHp: 340,
+    speed: 1.85,
+    goldDrop: 52,
+    shape: 'generic',
+    unlockWave: 111,
+    evasionChance: 0.22
+  },
+  mammoth: {
+    name: '冰原猛犸',
+    emoji: '🦣',
+    bodyColor: '#7993a3',
+    outlineColor: '#3c5665',
+    eyeColor: '#cfffff',
+    baseHp: 920,
+    speed: 0.58,
+    goldDrop: 68,
+    shape: 'generic',
+    unlockWave: 131,
+    armor: 0.2
+  },
+  harpy: {
+    name: '风暴鹰身女妖',
+    emoji: '🦅',
+    bodyColor: '#8d7a52',
+    outlineColor: '#493b25',
+    eyeColor: '#ffee66',
+    baseHp: 480,
+    speed: 1.72,
+    goldDrop: 64,
+    shape: 'generic',
+    unlockWave: 151,
+    evasionChance: 0.16
+  },
+  voidling: {
+    name: '噬界虚灵',
+    emoji: '👁️',
+    bodyColor: '#42205f',
+    outlineColor: '#190a2b',
+    eyeColor: '#ff44ee',
+    baseHp: 760,
+    speed: 1.18,
+    goldDrop: 78,
+    shape: 'generic',
+    unlockWave: 171,
+    regenPerSec: 10
+  },
+  colossus: {
+    name: '远古巨像',
+    emoji: '🦾',
+    bodyColor: '#685d4d',
+    outlineColor: '#30291f',
+    eyeColor: '#ffb52e',
+    baseHp: 1450,
+    speed: 0.48,
+    goldDrop: 105,
+    shape: 'generic',
+    unlockWave: 191,
+    armor: 0.26,
+    regenPerSec: 8
   },
   dragon: { 
     name: '巨龙', 

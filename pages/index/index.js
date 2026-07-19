@@ -17,6 +17,12 @@ Page({
     this.setData({ highScore, maxWave })
   },
 
+  onShareAppMessage() {
+    return {
+      title: '合成塔防：这塔还能再合｜你能守到第几关？',
+      path: '/pages/index/index'
+    }
+  },
 
   startGame() {
     wx.navigateTo({

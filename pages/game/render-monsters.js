@@ -76,21 +76,15 @@ module.exports = {
   drawMonsters() {
     const profile = this.getActivePerformanceProfile()
     const monsterCount = this.monsters.length
-    const crowded = monsterCount >= 20
-    const intense = monsterCount >= 36 || profile.effectRenderStride >= 4
+    // 仅在极多怪时精简阴影/血条样式，不再切换简化外形
+    const crowded = monsterCount >= 40
+    const intense = monsterCount >= 48 || profile.effectRenderStride >= 6
     const now = Date.now()
 
     this.monsters.forEach(monster => {
       const ctx = this.ctx
-      const config = MONSTER_TYPES[monster.type]
       const size = monster.isBoss ? 22 : 14
-      // 仅在 intense 等档位精简；Boss 完整绘制已去掉 shadowBlur，不再强制 compact
-      const useCompactMonster = monster.isBoss
-        ? !!profile.simplifyBosses
-        : (crowded || !!profile.simplifyMonsters)
-      const motion = useCompactMonster
-        ? { bob: 0, squashX: 1, squashY: 1, lean: 0, sway: 0, shadowScale: 1 }
-        : this.getMonsterWalkMotion(monster, size)
+      const motion = this.getMonsterWalkMotion(monster, size)
 
       // 硬重置，避免上一只怪泄漏的 shadow/alpha 污染本帧
       ctx.shadowBlur = 0
@@ -118,48 +112,40 @@ module.exports = {
       ctx.scale(motion.squashX, motion.squashY)
       ctx.translate(-(monster.x), -footY)
 
-      if (useCompactMonster) {
-        this.drawCompactMonster(ctx, monster, size, config)
-      } else {
-        // 状态光环
-        if (monster.slowTimer > 0) {
-          ctx.save()
-          ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
-          ctx.lineWidth = 3
+      // 状态光环
+      if (monster.slowTimer > 0) {
+        ctx.save()
+        ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)'
+        ctx.lineWidth = 3
+        ctx.beginPath()
+        ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
+      if (monster.vineTimer > 0) {
+        // 藤蔓缠绕效果 - 绿色藤蔓环绕
+        ctx.save()
+        ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
+        ctx.lineWidth = 2
+        const time = now
+        for (let i = 0; i < 3; i++) {
+          const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
+          const waveOffset = Math.sin(time * 0.005 + i) * 2
           ctx.beginPath()
-          ctx.arc(monster.x, monster.y, size + 5, 0, Math.PI * 2)
+          ctx.arc(monster.x, monster.y, size + 3 + waveOffset, angle, angle + Math.PI * 0.6)
           ctx.stroke()
-          ctx.restore()
         }
-        if (monster.vineTimer > 0) {
-          // 藤蔓缠绕效果 - 绿色藤蔓环绕
-          ctx.save()
-          ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
-          ctx.lineWidth = 2
-          // 绘制缠绕的藤蔓
-          const time = now
-          for (let i = 0; i < 3; i++) {
-            const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
-            const waveOffset = Math.sin(time * 0.005 + i) * 2
-            ctx.beginPath()
-            ctx.arc(monster.x, monster.y, size + 3 + waveOffset, angle, angle + Math.PI * 0.6)
-            ctx.stroke()
-          }
-          // 易伤标记
-          ctx.fillStyle = '#ffff00'
-          ctx.font = 'bold 10px Arial'
-          ctx.textAlign = 'center'
-          ctx.fillText('⬇️', monster.x, monster.y - size - 8)
-          ctx.restore()
-        }
+        ctx.fillStyle = '#ffff00'
+        ctx.font = 'bold 10px Arial'
+        ctx.textAlign = 'center'
+        ctx.fillText('⬇️', monster.x, monster.y - size - 8)
+        ctx.restore()
+      }
 
-        // 根据怪物类型绘制不同外观
-        this.drawMonsterByType(ctx, monster, size)
+      this.drawMonsterByType(ctx, monster, size)
 
-        // 燃烧效果 - 绘制在怪物身上
-        if (monster.burnTimer > 0) {
-          this.drawBurningEffect(ctx, monster, size)
-        }
+      if (monster.burnTimer > 0) {
+        this.drawBurningEffect(ctx, monster, size)
       }
       ctx.restore()
 
@@ -224,20 +210,81 @@ module.exports = {
       ctx.stroke()
     }
 
-    ctx.fillStyle = config.bodyColor
-    ctx.beginPath()
-    ctx.arc(monster.x, monster.y, size, 0, Math.PI * 2)
-    ctx.fill()
+    this.drawCompactMonsterSilhouette(ctx, monster, size, config)
+    ctx.restore()
+  },
 
+  drawCompactMonsterSilhouette(ctx, monster, size, config) {
+    const x = monster.x
+    const y = monster.y
+    const type = monster.type
+    const flying = ['bat', 'harpy', 'phoenix', 'dragon'].includes(type)
+    const crawler = ['scarab', 'spider'].includes(type)
+    const beast = ['direwolf', 'mammoth'].includes(type)
+    const spectral = ['ghost', 'wraith', 'voidling', 'elemental'].includes(type)
+    const armored = ['golem', 'troll', 'darkKnight', 'colossus', 'treant'].includes(type)
+
+    ctx.fillStyle = config.bodyColor
     ctx.strokeStyle = config.outlineColor
     ctx.lineWidth = monster.isBoss ? 2.5 : 1.5
+    ctx.beginPath()
+    if (flying) {
+      ctx.moveTo(x, y - size * 0.55)
+      ctx.lineTo(x - size * 1.15, y - size * 0.15)
+      ctx.lineTo(x - size * 0.65, y + size * 0.55)
+      ctx.lineTo(x, y + size * 0.25)
+      ctx.lineTo(x + size * 0.65, y + size * 0.55)
+      ctx.lineTo(x + size * 1.15, y - size * 0.15)
+    } else if (crawler) {
+      ctx.ellipse(x, y, size * 0.82, size * 0.62, 0, 0, Math.PI * 2)
+    } else if (beast) {
+      ctx.ellipse(x - size * 0.1, y + size * 0.08, size, size * 0.62, 0, 0, Math.PI * 2)
+    } else if (spectral) {
+      ctx.moveTo(x, y - size)
+      ctx.quadraticCurveTo(x + size, y - size * 0.45, x + size * 0.72, y + size * 0.55)
+      ctx.lineTo(x + size * 0.25, y + size)
+      ctx.lineTo(x, y + size * 0.58)
+      ctx.lineTo(x - size * 0.28, y + size)
+      ctx.lineTo(x - size * 0.72, y + size * 0.55)
+      ctx.quadraticCurveTo(x - size, y - size * 0.45, x, y - size)
+    } else if (armored) {
+      ctx.moveTo(x - size * 0.72, y - size * 0.72)
+      ctx.lineTo(x + size * 0.72, y - size * 0.72)
+      ctx.lineTo(x + size, y + size * 0.72)
+      ctx.lineTo(x, y + size)
+      ctx.lineTo(x - size, y + size * 0.72)
+    } else {
+      ctx.ellipse(x, y, size * 0.78, size, 0, 0, Math.PI * 2)
+    }
+    ctx.closePath()
+    ctx.fill()
     ctx.stroke()
 
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.font = `${monster.isBoss ? '18px' : '14px'} Arial`
-    ctx.fillText(config.emoji, monster.x, monster.y + 0.5)
-    ctx.restore()
+    // 只保留两眼/核心，不再贴 Emoji；两三笔即可维持性能和类型辨识度。
+    ctx.fillStyle = config.eyeColor || '#fff'
+    if (spectral || type === 'elemental') {
+      ctx.beginPath()
+      ctx.ellipse(x, y - size * 0.12, size * 0.3, size * 0.18, 0, 0, Math.PI * 2)
+      ctx.fill()
+    } else {
+      ctx.beginPath()
+      ctx.arc(x - size * 0.25, y - size * 0.18, Math.max(1.3, size * 0.1), 0, Math.PI * 2)
+      ctx.arc(x + size * 0.25, y - size * 0.18, Math.max(1.3, size * 0.1), 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    if (crawler) {
+      ctx.strokeStyle = config.outlineColor
+      ctx.lineWidth = 1.2
+      for (let side = -1; side <= 1; side += 2) {
+        for (let leg = -1; leg <= 1; leg++) {
+          ctx.beginPath()
+          ctx.moveTo(x + side * size * 0.55, y + leg * size * 0.25)
+          ctx.lineTo(x + side * size * 1.1, y + leg * size * 0.55)
+          ctx.stroke()
+        }
+      }
+    }
   },
 
   drawCompactTower(ctx, x, y, type, level, alpha = 1) {
@@ -447,6 +494,354 @@ module.exports = {
     ctx.arc(monster.x, monster.y, size + 5 + Math.sin(time * 0.01) * 3, 0, Math.PI * 2)
     ctx.stroke()
     
+    ctx.restore()
+  },
+
+  drawExpandedMonster(ctx, monster, size, config) {
+    const x = monster.x
+    const y = monster.y
+    const body = config.bodyColor || '#777'
+    const outline = config.outlineColor || '#333'
+    const eye = config.eyeColor || '#fff'
+    const phase = this.getMonsterAnimPhase(monster)
+    const step = Math.sin(phase) * 2
+    const ellipse = (cx, cy, rx, ry, color = body) => {
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = outline
+      ctx.stroke()
+    }
+    const eyePair = (cx, cy, gap = 4, radius = 1.8) => {
+      ctx.fillStyle = eye
+      ctx.beginPath()
+      ctx.arc(cx - gap, cy, radius, 0, Math.PI * 2)
+      ctx.arc(cx + gap, cy, radius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    const strokeLine = (points, color = outline, width = 2) => {
+      ctx.strokeStyle = color
+      ctx.lineWidth = width
+      ctx.beginPath()
+      points.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point[0], point[1])
+        else ctx.lineTo(point[0], point[1])
+      })
+      ctx.stroke()
+    }
+
+    ctx.save()
+    ctx.lineWidth = 2
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+
+    switch (monster.type) {
+      case 'scarab': {
+        for (let side = -1; side <= 1; side += 2) {
+          for (let leg = -1; leg <= 1; leg++) {
+            strokeLine([
+              [x + side * 7, y + leg * 4],
+              [x + side * 14, y + leg * 8],
+              [x + side * 17, y + leg * 6]
+            ], outline, 2)
+          }
+        }
+        ellipse(x, y + 1, 10, 12)
+        ctx.strokeStyle = '#d6b24b'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(x, y - 10)
+        ctx.lineTo(x, y + 11)
+        ctx.stroke()
+        ellipse(x, y - 10, 7, 5, outline)
+        eyePair(x, y - 11, 2.5, 1.2)
+        strokeLine([[x - 3, y - 14], [x - 7, y - 19]], outline, 1.5)
+        strokeLine([[x + 3, y - 14], [x + 7, y - 19]], outline, 1.5)
+        break
+      }
+      case 'direwolf': {
+        ctx.fillStyle = body
+        ctx.beginPath()
+        ctx.moveTo(x - 10, y + 3)
+        ctx.lineTo(x - 18, y - 5 + step)
+        ctx.lineTo(x - 15, y + 7)
+        ctx.closePath()
+        ctx.fill()
+        ellipse(x - 2, y + 3, 12, 7)
+        ctx.fillStyle = body
+        ctx.fillRect(x - 9, y + 6, 4, 9 + step)
+        ctx.fillRect(x + 4, y + 6, 4, 9 - step)
+        ctx.beginPath()
+        ctx.moveTo(x + 6, y)
+        ctx.lineTo(x + 12, y - 9)
+        ctx.lineTo(x + 16, y - 2)
+        ctx.lineTo(x + 14, y + 6)
+        ctx.lineTo(x + 7, y + 5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = outline
+        ctx.stroke()
+        ctx.fillStyle = body
+        ctx.beginPath()
+        ctx.moveTo(x + 9, y - 7)
+        ctx.lineTo(x + 9, y - 15)
+        ctx.lineTo(x + 13, y - 9)
+        ctx.lineTo(x + 16, y - 14)
+        ctx.lineTo(x + 16, y - 6)
+        ctx.fill()
+        eyePair(x + 12, y - 5, 2.2, 1.3)
+        break
+      }
+      case 'shaman': {
+        ctx.fillStyle = body
+        ctx.beginPath()
+        ctx.moveTo(x, y - 13)
+        ctx.quadraticCurveTo(x + 10, y - 8, x + 11, y + 13)
+        ctx.lineTo(x - 11, y + 13)
+        ctx.quadraticCurveTo(x - 10, y - 8, x, y - 13)
+        ctx.fill()
+        ctx.strokeStyle = outline
+        ctx.stroke()
+        ellipse(x, y - 8, 7, 7, '#263c2d')
+        eyePair(x, y - 8, 2.5, 1.2)
+        strokeLine([[x + 12, y + 13], [x + 16, y - 14]], '#6b4824', 2.5)
+        ellipse(x + 16, y - 16, 3.5, 3.5, '#9cff6a')
+        ctx.strokeStyle = '#8fd46a'
+        ctx.beginPath()
+        ctx.arc(x, y + 3, 5, 0.2, Math.PI - 0.2)
+        ctx.stroke()
+        break
+      }
+      case 'darkKnight': {
+        ctx.fillStyle = '#262b37'
+        ctx.fillRect(x - 8, y + 5, 6, 10 + step)
+        ctx.fillRect(x + 2, y + 5, 6, 10 - step)
+        ctx.fillStyle = body
+        ctx.beginPath()
+        ctx.moveTo(x - 10, y - 7)
+        ctx.lineTo(x + 10, y - 7)
+        ctx.lineTo(x + 12, y + 8)
+        ctx.lineTo(x, y + 12)
+        ctx.lineTo(x - 12, y + 8)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = outline
+        ctx.stroke()
+        ctx.fillStyle = '#242936'
+        ctx.beginPath()
+        ctx.arc(x, y - 9, 8, Math.PI, 0)
+        ctx.lineTo(x + 8, y - 2)
+        ctx.lineTo(x - 8, y - 2)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        strokeLine([[x - 6, y - 7], [x + 6, y - 7]], '#aeb7c6', 2)
+        eyePair(x, y - 6.5, 3.2, 1.1)
+        ctx.fillStyle = '#596276'
+        ctx.beginPath()
+        ctx.arc(x - 13, y + 2, 7, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#bbc3d0'
+        ctx.stroke()
+        break
+      }
+      case 'spider': {
+        for (let side = -1; side <= 1; side += 2) {
+          for (let leg = 0; leg < 4; leg++) {
+            const ly = y - 8 + leg * 5
+            strokeLine([
+              [x + side * 5, ly],
+              [x + side * (12 + leg % 2 * 2), ly - 4 + leg * 2],
+              [x + side * 17, ly + (leg - 1.5) * 3]
+            ], outline, 2)
+          }
+        }
+        ellipse(x, y + 5, 9, 10)
+        ellipse(x, y - 7, 7, 6, '#4d255e')
+        ctx.fillStyle = eye
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath()
+          ctx.arc(x - 4.5 + i * 3, y - 8 + (i % 2) * 2, 1.2, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        break
+      }
+      case 'elemental': {
+        ctx.strokeStyle = '#7ff5ff'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(x, y, size + 2, phase, phase + Math.PI * 1.45)
+        ctx.stroke()
+        ctx.fillStyle = body
+        ctx.beginPath()
+        ctx.moveTo(x, y - 15)
+        ctx.lineTo(x + 11, y)
+        ctx.lineTo(x, y + 15)
+        ctx.lineTo(x - 11, y)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = outline
+        ctx.stroke()
+        ctx.fillStyle = '#baffff'
+        ctx.beginPath()
+        ctx.moveTo(x, y - 7)
+        ctx.lineTo(x + 5, y)
+        ctx.lineTo(x, y + 7)
+        ctx.lineTo(x - 5, y)
+        ctx.closePath()
+        ctx.fill()
+        break
+      }
+      case 'assassin': {
+        ctx.fillStyle = body
+        ctx.beginPath()
+        ctx.moveTo(x, y - 14)
+        ctx.lineTo(x + 11, y + 13)
+        ctx.lineTo(x, y + 9)
+        ctx.lineTo(x - 11, y + 13)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = outline
+        ctx.stroke()
+        ctx.fillStyle = '#171225'
+        ctx.beginPath()
+        ctx.arc(x, y - 8, 8, Math.PI, 0)
+        ctx.lineTo(x + 7, y - 3)
+        ctx.lineTo(x - 7, y - 3)
+        ctx.closePath()
+        ctx.fill()
+        strokeLine([[x - 5, y - 7], [x + 5, y - 7]], eye, 1.8)
+        strokeLine([[x - 7, y + 3], [x - 15, y - 4]], '#d8e4ef', 2)
+        strokeLine([[x + 7, y + 3], [x + 15, y - 4]], '#d8e4ef', 2)
+        break
+      }
+      case 'mammoth': {
+        ctx.fillStyle = body
+        ctx.fillRect(x - 10, y + 5, 5, 11 + step)
+        ctx.fillRect(x + 4, y + 5, 5, 11 - step)
+        ellipse(x - 2, y + 1, 13, 10)
+        ellipse(x + 9, y - 4, 8, 8, '#6f8999')
+        ellipse(x + 3, y - 5, 5, 7, '#8aa7b8')
+        ctx.strokeStyle = '#718896'
+        ctx.lineWidth = 5
+        ctx.beginPath()
+        ctx.moveTo(x + 14, y)
+        ctx.quadraticCurveTo(x + 18, y + 9, x + 13, y + 14)
+        ctx.stroke()
+        ctx.strokeStyle = '#fff4d2'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(x + 12, y + 1)
+        ctx.quadraticCurveTo(x + 19, y + 4, x + 18, y - 1)
+        ctx.stroke()
+        eyePair(x + 9, y - 6, 2, 1.2)
+        break
+      }
+      case 'harpy': {
+        ctx.fillStyle = '#9d8a61'
+        ctx.beginPath()
+        ctx.moveTo(x - 3, y - 5)
+        ctx.lineTo(x - 18, y - 12 + step)
+        ctx.lineTo(x - 12, y + 5)
+        ctx.lineTo(x - 4, y + 2)
+        ctx.lineTo(x + 4, y + 2)
+        ctx.lineTo(x + 12, y + 5)
+        ctx.lineTo(x + 18, y - 12 - step)
+        ctx.lineTo(x + 3, y - 5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = outline
+        ctx.stroke()
+        ellipse(x, y + 2, 6, 10)
+        ellipse(x, y - 9, 6, 6, '#b99b68')
+        ctx.fillStyle = '#d6a43d'
+        ctx.beginPath()
+        ctx.moveTo(x - 2, y - 8)
+        ctx.lineTo(x + 6, y - 6)
+        ctx.lineTo(x - 1, y - 4)
+        ctx.closePath()
+        ctx.fill()
+        eyePair(x, y - 10, 2.3, 1.1)
+        strokeLine([[x - 3, y + 10], [x - 6, y + 16]], '#d5a849', 1.5)
+        strokeLine([[x + 3, y + 10], [x + 6, y + 16]], '#d5a849', 1.5)
+        break
+      }
+      case 'wraith':
+      case 'voidling': {
+        ctx.fillStyle = body
+        ctx.beginPath()
+        ctx.moveTo(x, y - 15)
+        ctx.quadraticCurveTo(x + 12, y - 10, x + 10, y + 5)
+        ctx.quadraticCurveTo(x + 8, y + 14, x + 3, y + 9 + step)
+        ctx.lineTo(x, y + 15)
+        ctx.lineTo(x - 4, y + 9 - step)
+        ctx.quadraticCurveTo(x - 10, y + 12, x - 10, y + 3)
+        ctx.quadraticCurveTo(x - 12, y - 10, x, y - 15)
+        ctx.fill()
+        ctx.strokeStyle = outline
+        ctx.stroke()
+        ctx.fillStyle = eye
+        ctx.beginPath()
+        ctx.ellipse(x, y - 4, monster.type === 'voidling' ? 5 : 3, 2.5, 0, 0, Math.PI * 2)
+        ctx.fill()
+        if (monster.type === 'voidling') {
+          ctx.fillStyle = outline
+          ctx.beginPath()
+          ctx.arc(x, y - 4, 1.8, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        break
+      }
+      case 'troll': {
+        ellipse(x, y + 2, 11, 12)
+        ellipse(x, y - 10, 8, 7, '#63754e')
+        ctx.fillStyle = body
+        ctx.fillRect(x - 15, y - 1, 6, 14 + step)
+        ctx.fillRect(x + 9, y - 1, 6, 14 - step)
+        eyePair(x, y - 11, 3, 1.5)
+        ctx.fillStyle = '#d8c08a'
+        ctx.beginPath()
+        ctx.moveTo(x - 5, y - 6)
+        ctx.lineTo(x - 8, y - 2)
+        ctx.lineTo(x - 3, y - 4)
+        ctx.moveTo(x + 5, y - 6)
+        ctx.lineTo(x + 8, y - 2)
+        ctx.lineTo(x + 3, y - 4)
+        ctx.fill()
+        break
+      }
+      case 'colossus': {
+        ctx.fillStyle = body
+        ctx.fillRect(x - 10, y - 9, 20, 22)
+        ctx.strokeStyle = outline
+        ctx.strokeRect(x - 10, y - 9, 20, 22)
+        ctx.fillRect(x - 16, y - 5, 6, 17 + step)
+        ctx.fillRect(x + 10, y - 5, 6, 17 - step)
+        ctx.fillRect(x - 9, y + 12, 7, 6)
+        ctx.fillRect(x + 2, y + 12, 7, 6)
+        ctx.fillStyle = '#30291f'
+        ctx.fillRect(x - 8, y - 13, 16, 7)
+        ctx.fillStyle = eye
+        ctx.beginPath()
+        ctx.arc(x, y + 1, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+        strokeLine([[x - 7, y + 7], [x + 7, y + 7]], '#8a775e', 1.5)
+        break
+      }
+      default: {
+        ellipse(x, y + 1, 10, 13)
+        ctx.fillStyle = outline
+        ctx.beginPath()
+        ctx.moveTo(x - 7, y - 9)
+        ctx.lineTo(x - 3, y - 16)
+        ctx.lineTo(x, y - 10)
+        ctx.lineTo(x + 4, y - 16)
+        ctx.lineTo(x + 7, y - 8)
+        ctx.fill()
+        eyePair(x, y - 3, 3.5, 1.6)
+      }
+    }
     ctx.restore()
   },
 
@@ -1078,14 +1473,7 @@ module.exports = {
         break
       
       default:
-        // 默认绘制 - 圆形
-        ctx.fillStyle = config.bodyColor || '#888'
-        ctx.beginPath()
-        ctx.arc(monster.x, monster.y, size, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.strokeStyle = config.outlineColor || '#444'
-        ctx.lineWidth = 2
-        ctx.stroke()
+        this.drawExpandedMonster(ctx, monster, size, config)
         break
     }
   },

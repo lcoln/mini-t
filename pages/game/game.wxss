@@ -271,6 +271,27 @@ page {
   text-shadow: 0 0 15rpx rgba(80, 255, 80, 0.5);
 }
 
+.inventory-actions {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.organize-btn {
+  padding: 9rpx 12rpx;
+  border-radius: 22rpx;
+  color: #bfffc2;
+  font-size: 19rpx;
+  font-weight: bold;
+  background: rgba(45, 105, 54, 0.72);
+  border: 2rpx solid rgba(100, 255, 120, 0.35);
+}
+
+.organize-btn:active {
+  transform: scale(0.96);
+  background: rgba(65, 145, 75, 0.8);
+}
+
 .summon-btn {
   display: flex;
   align-items: center;
@@ -291,6 +312,11 @@ page {
   box-shadow: none;
   opacity: 0.5;
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+.summon-btn.full {
+  background: linear-gradient(135deg, #9a7621 0%, #66501d 100%);
+  box-shadow: 0 0 12rpx rgba(255, 205, 70, 0.25);
 }
 
 .summon-icon {

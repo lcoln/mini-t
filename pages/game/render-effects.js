@@ -547,7 +547,10 @@ module.exports = {
       const l = this.lightningEffects[index]
       const ctx = this.ctx
       ctx.save()
-      ctx.globalAlpha = l.alpha
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.globalAlpha = Number.isFinite(l.alpha)
+        ? Math.max(0, Math.min(0.85, l.alpha))
+        : 0.65
 
       ctx.strokeStyle = l.color
       ctx.lineWidth = compact ? l.width + 1 : l.width + 3
@@ -587,10 +590,10 @@ module.exports = {
       ctx.save()
       ctx.globalAlpha = m.alpha
 
-      ctx.strokeStyle = m.color
-      ctx.lineWidth = 4
       ctx.shadowBlur = compact ? 0 : 10
       ctx.shadowColor = compact ? 'rgba(0,0,0,0)' : m.color
+      ctx.strokeStyle = m.color
+      ctx.lineWidth = 4
       ctx.beginPath()
       ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2)
       ctx.stroke()
