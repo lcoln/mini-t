@@ -519,6 +519,7 @@ module.exports = {
 
   drawArcaneEffects() {
     const stride = this.getEffectRenderStride()
+    const compact = stride >= 3
     for (let index = 0; index < this.arcaneEffects.length; index += stride) {
       const a = this.arcaneEffects[index]
       const ctx = this.ctx
@@ -529,8 +530,8 @@ module.exports = {
       const y = a.y + Math.sin(a.angle) * a.dist
 
       ctx.fillStyle = '#aa44ff'
-      ctx.shadowBlur = 10
-      ctx.shadowColor = '#aa44ff'
+      ctx.shadowBlur = compact ? 0 : 6
+      ctx.shadowColor = compact ? 'rgba(0,0,0,0)' : '#aa44ff'
       ctx.beginPath()
       ctx.arc(x, y, a.size, 0, Math.PI * 2)
       ctx.fill()
@@ -541,6 +542,7 @@ module.exports = {
 
   drawLightningEffects() {
     const stride = this.getEffectRenderStride()
+    const compact = stride >= 3
     for (let index = 0; index < this.lightningEffects.length; index += stride) {
       const l = this.lightningEffects[index]
       const ctx = this.ctx
@@ -548,15 +550,15 @@ module.exports = {
       ctx.globalAlpha = l.alpha
 
       ctx.strokeStyle = l.color
-      ctx.lineWidth = l.width + 4
-      ctx.shadowBlur = 25
-      ctx.shadowColor = l.color
+      ctx.lineWidth = compact ? l.width + 1 : l.width + 3
+      ctx.shadowBlur = 0
+      ctx.shadowColor = 'rgba(0,0,0,0)'
       ctx.lineCap = 'round'
 
       ctx.beginPath()
       ctx.moveTo(l.x1, l.y1)
 
-      const segments = 6
+      const segments = compact ? 3 : 5
       const dx = (l.x2 - l.x1) / segments
       const dy = (l.y2 - l.y1) / segments
 
@@ -568,16 +570,18 @@ module.exports = {
       ctx.lineTo(l.x2, l.y2)
       ctx.stroke()
 
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = l.width * 0.5
-      ctx.shadowBlur = 0
-      ctx.stroke()
+      if (!compact) {
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = l.width * 0.5
+        ctx.stroke()
+      }
 
       ctx.restore()
     }
   },
 
   drawMergeEffects() {
+    const compact = this.getEffectRenderStride() >= 3
     this.mergeEffects.forEach(m => {
       const ctx = this.ctx
       ctx.save()
@@ -585,8 +589,8 @@ module.exports = {
 
       ctx.strokeStyle = m.color
       ctx.lineWidth = 4
-      ctx.shadowBlur = 20
-      ctx.shadowColor = m.color
+      ctx.shadowBlur = compact ? 0 : 10
+      ctx.shadowColor = compact ? 'rgba(0,0,0,0)' : m.color
       ctx.beginPath()
       ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2)
       ctx.stroke()
@@ -603,19 +607,19 @@ module.exports = {
 
   drawParticles() {
     const stride = this.getEffectRenderStride()
+    const ctx = this.ctx
+    ctx.save()
+    ctx.shadowBlur = 0
+    ctx.shadowColor = 'rgba(0,0,0,0)'
     for (let index = 0; index < this.particles.length; index += stride) {
       const p = this.particles[index]
-      const ctx = this.ctx
-      ctx.save()
       ctx.globalAlpha = p.alpha
       ctx.fillStyle = p.color
-      ctx.shadowBlur = 5
-      ctx.shadowColor = p.color
       ctx.beginPath()
       ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2)
       ctx.fill()
-      ctx.restore()
     }
+    ctx.restore()
   },
 
   drawFloatingTexts() {

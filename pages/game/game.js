@@ -119,7 +119,9 @@ Page(Object.assign({
     commanderAiming: false,
     commanderReadyText: '3 点可火力标记',
     commandPoints: 0,
-    soundEnabled: true
+    soundEnabled: true,
+    isIOS: false,
+    inventoryBottomStyle: ''
   },
 
   canvas: null,
@@ -185,10 +187,13 @@ Page(Object.assign({
   mergeTargetInventoryIndex: -1,
 
   onLoad() {
+    this.setupIOSGestureSafeArea()
+    this.enableLeaveGuard()
     this.initCanvas()
   },
 
   onShow() {
+    this.enableLeaveGuard()
     if (this.canvas && !this.gameLoop) {
       this.startGame()
       this.requestRender()
@@ -207,6 +212,55 @@ Page(Object.assign({
     }
     this.persistRunProgress({ immediate: true })
     this.stopGame()
+  },
+
+  // 微信 iOS 7.0.5+ 强制保留边缘侧滑返回，无法通过 disableSwipeBack 关闭。
+  // 用离页确认拦截误滑；主动“返回菜单”时会先关闭确认。
+  enableLeaveGuard() {
+    if (this._leaveGuardEnabled || typeof wx.enableAlertBeforeUnload !== 'function') return
+    try {
+      wx.enableAlertBeforeUnload({
+        message: '战局正在进行，确定要离开吗？进度会自动保存。',
+        success: () => {
+          this._leaveGuardEnabled = true
+        }
+      })
+    } catch (error) {
+      this._leaveGuardEnabled = false
+    }
+  },
+
+  disableLeaveGuard() {
+    if (typeof wx.disableAlertBeforeUnload !== 'function') return
+    try {
+      wx.disableAlertBeforeUnload()
+    } catch (error) {
+      // 低版本基础库不支持时忽略
+    }
+    this._leaveGuardEnabled = false
+  },
+
+  setupIOSGestureSafeArea() {
+    try {
+      const info = wx.getWindowInfo()
+      const isIOS = info.platform === 'ios'
+      if (!isIOS) {
+        this.setData({ isIOS: false, inventoryBottomStyle: '' })
+        return
+      }
+
+      const safeBottom = info.safeArea && Number.isFinite(info.safeArea.bottom)
+        ? Math.max(0, (info.screenHeight || info.windowHeight) - info.safeArea.bottom)
+        : 0
+      // Home 指示条本身约 34px，再多留 18px，避免从塔位起手时进入系统横滑区。
+      const gestureInset = Math.max(44, safeBottom + 18)
+      this.setData({
+        isIOS: true,
+        inventoryBottomStyle: `padding-bottom: ${gestureInset}px;`
+      })
+    } catch (error) {
+      this.setData({ isIOS: false, inventoryBottomStyle: '' })
+    }
   },
 
   initCanvas() {
@@ -1957,6 +2011,10 @@ Page(Object.assign({
     }
 
     const now = Date.now()
+    // 怪潮时 JSON 快照 + storage 会造成明显尖峰；退出/暂停仍会 immediate 同步保存
+    if (!immediate && this.performanceProfileKey && this.performanceProfileKey !== 'relaxed') {
+      return false
+    }
     if (!immediate && now - (this.lastRunPersistedAt || 0) < RUN_PROGRESS_INTERVAL) {
       return false
     }
@@ -2445,14 +2503,18 @@ Page(Object.assign({
 
     // 拖拽合成时优先保证触摸命中：跳过重特效更新与存档，减轻主线程抢占
     if (!this.isDragging) {
-      this.safeUpdate('particles', this.updateParticles)
-      this.safeUpdate('floatingTexts', this.updateFloatingTexts)
-      this.safeUpdate('lightningEffects', this.updateLightningEffects)
-      this.safeUpdate('fireEffects', this.updateFireEffects)
-      this.safeUpdate('iceEffects', this.updateIceEffects)
-      this.safeUpdate('poisonEffects', this.updatePoisonEffects)
-      this.safeUpdate('arcaneEffects', this.updateArcaneEffects)
-      this.safeUpdate('mergeEffects', this.updateMergeEffects)
+      this._effectUpdateTick = (this._effectUpdateTick || 0) + 1
+      const effectUpdateStride = this.performanceProfileKey === 'intense' ? 2 : 1
+      if (this._effectUpdateTick % effectUpdateStride === 0) {
+        this.safeUpdate('particles', this.updateParticles)
+        this.safeUpdate('floatingTexts', this.updateFloatingTexts)
+        this.safeUpdate('lightningEffects', this.updateLightningEffects)
+        this.safeUpdate('fireEffects', this.updateFireEffects)
+        this.safeUpdate('iceEffects', this.updateIceEffects)
+        this.safeUpdate('poisonEffects', this.updatePoisonEffects)
+        this.safeUpdate('arcaneEffects', this.updateArcaneEffects)
+        this.safeUpdate('mergeEffects', this.updateMergeEffects)
+      }
       this.safeUpdate('persistProgress', this.persistRunProgress)
     }
 
@@ -5132,6 +5194,7 @@ Page(Object.assign({
   },
 
   gameOver() {
+    this.disableLeaveGuard()
     this.clearRunProgress()
     this.stopGame()
     
@@ -5187,6 +5250,7 @@ Page(Object.assign({
   },
 
   restartGame() {
+    this.enableLeaveGuard()
     this.clearRunProgress()
     this.stopGame()
     this.initGame()
@@ -5196,6 +5260,7 @@ Page(Object.assign({
   backToMenu() {
     this.persistRunProgress({ immediate: true })
     this.stopGame()
+    this.disableLeaveGuard()
     wx.navigateBack()
   }
 }, renderTowers, renderMonsters, renderEffects))

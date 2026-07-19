@@ -75,6 +75,10 @@ module.exports = {
 
   drawMonsters() {
     const profile = this.getActivePerformanceProfile()
+    const monsterCount = this.monsters.length
+    const crowded = monsterCount >= 20
+    const intense = monsterCount >= 36 || profile.effectRenderStride >= 4
+    const now = Date.now()
 
     this.monsters.forEach(monster => {
       const ctx = this.ctx
@@ -83,25 +87,29 @@ module.exports = {
       // 仅在 intense 等档位精简；Boss 完整绘制已去掉 shadowBlur，不再强制 compact
       const useCompactMonster = monster.isBoss
         ? !!profile.simplifyBosses
-        : !!profile.simplifyMonsters
-      const motion = this.getMonsterWalkMotion(monster, size)
+        : (crowded || !!profile.simplifyMonsters)
+      const motion = useCompactMonster
+        ? { bob: 0, squashX: 1, squashY: 1, lean: 0, sway: 0, shadowScale: 1 }
+        : this.getMonsterWalkMotion(monster, size)
 
       // 硬重置，避免上一只怪泄漏的 shadow/alpha 污染本帧
       ctx.shadowBlur = 0
       ctx.shadowColor = 'rgba(0,0,0,0)'
       ctx.globalAlpha = 1
 
-      // 脚下阴影（随步伐缩放，更有落地感）
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
-      ctx.beginPath()
-      const shadowW = size * 0.8 * motion.shadowScale
-      const shadowH = size * 0.3 * motion.shadowScale
-      if (typeof ctx.ellipse === 'function') {
-        ctx.ellipse(monster.x + motion.sway * 0.3, monster.y + size + 4, shadowW, shadowH, 0, 0, Math.PI * 2)
-      } else {
-        ctx.arc(monster.x, monster.y + size + 4, size * 0.55 * motion.shadowScale, 0, Math.PI * 2)
+      // 怪潮时省略每只怪的阴影，减少额外路径和填充
+      if (!crowded || monster.isBoss) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+        ctx.beginPath()
+        const shadowW = size * 0.8 * motion.shadowScale
+        const shadowH = size * 0.3 * motion.shadowScale
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(monster.x + motion.sway * 0.3, monster.y + size + 4, shadowW, shadowH, 0, 0, Math.PI * 2)
+        } else {
+          ctx.arc(monster.x, monster.y + size + 4, size * 0.55 * motion.shadowScale, 0, Math.PI * 2)
+        }
+        ctx.fill()
       }
-      ctx.fill()
 
       // 以脚底为轴做弹跳缩放，走路不那么僵
       const footY = monster.y + size * 0.85
@@ -129,7 +137,7 @@ module.exports = {
           ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)'
           ctx.lineWidth = 2
           // 绘制缠绕的藤蔓
-          const time = Date.now()
+          const time = now
           for (let i = 0; i < 3; i++) {
             const angle = (time * 0.003 + i * Math.PI * 2 / 3) % (Math.PI * 2)
             const waveOffset = Math.sin(time * 0.005 + i) * 2
@@ -167,22 +175,32 @@ module.exports = {
       const hpPercent = Math.max(0, monster.hp / monster.maxHp)
 
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
-      ctx.beginPath()
-      drawRoundRect(ctx, monster.x - barWidth / 2 - 2, barY - 2, barWidth + 4, barHeight + 4, 3)
-      ctx.fill()
+      if (crowded && !monster.isBoss) {
+        ctx.fillRect(monster.x - barWidth / 2, barY, barWidth, 4)
+      } else {
+        ctx.beginPath()
+        drawRoundRect(ctx, monster.x - barWidth / 2 - 2, barY - 2, barWidth + 4, barHeight + 4, 3)
+        ctx.fill()
+      }
 
       // 血条
       const hpColor = hpPercent > 0.6 ? '#44ff44' : hpPercent > 0.3 ? '#ffaa00' : '#ff4444'
       ctx.fillStyle = hpColor
-      ctx.beginPath()
-      drawRoundRect(ctx, monster.x - barWidth / 2, barY, Math.max(1, barWidth * hpPercent), barHeight, 2)
-      ctx.fill()
+      if (crowded && !monster.isBoss) {
+        ctx.fillRect(monster.x - barWidth / 2, barY, Math.max(1, barWidth * hpPercent), 4)
+      } else {
+        ctx.beginPath()
+        drawRoundRect(ctx, monster.x - barWidth / 2, barY, Math.max(1, barWidth * hpPercent), barHeight, 2)
+        ctx.fill()
+      }
 
       // 血量百分比
-      ctx.fillStyle = '#fff'
-      ctx.font = 'bold 9px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText(`${Math.floor(hpPercent * 100)}%`, monster.x, barY + barHeight + 10)
+      if (!intense || monster.isBoss) {
+        ctx.fillStyle = '#fff'
+        ctx.font = 'bold 9px Arial'
+        ctx.textAlign = 'center'
+        ctx.fillText(`${Math.floor(hpPercent * 100)}%`, monster.x, barY + barHeight + 10)
+      }
     })
   },
 

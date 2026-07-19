@@ -205,24 +205,9 @@ const PERFORMANCE_PROFILES = {
     bossDamageTextCooldown: 0
   },
   busy: {
-    renderInterval: 30,
+    renderInterval: 34,
     simplifyTowers: false,
-    simplifyMonsters: false,
-    simplifyBosses: false,
-    simplifyProjectiles: true,
-    skipDecorations: false,
-    decorStride: 1,
-    animatedDecorations: false,
-    effectRenderStride: 2,
-    projectileTrailPoints: 2,
-    damageTextStride: 2,
-    compactBossHp: false,
-    bossDamageTextCooldown: 60
-  },
-  intense: {
-    renderInterval: 42,
-    simplifyTowers: false,
-    simplifyMonsters: false,
+    simplifyMonsters: true,
     simplifyBosses: false,
     simplifyProjectiles: true,
     skipDecorations: false,
@@ -231,6 +216,21 @@ const PERFORMANCE_PROFILES = {
     effectRenderStride: 3,
     projectileTrailPoints: 1,
     damageTextStride: 3,
+    compactBossHp: false,
+    bossDamageTextCooldown: 60
+  },
+  intense: {
+    renderInterval: 50,
+    simplifyTowers: true,
+    simplifyMonsters: true,
+    simplifyBosses: true,
+    simplifyProjectiles: true,
+    skipDecorations: false,
+    decorStride: 1,
+    animatedDecorations: false,
+    effectRenderStride: 4,
+    projectileTrailPoints: 1,
+    damageTextStride: 5,
     compactBossHp: true,
     bossDamageTextCooldown: 100
   }

@@ -1,4 +1,4 @@
-<view class="game-container" catchtouchmove="onGlobalTouchMove" catchtouchend="onGlobalTouchEnd">
+<view class="game-container {{isIOS ? 'ios-device' : ''}}" catchtouchmove="onGlobalTouchMove" catchtouchend="onGlobalTouchEnd">
   <!-- 顶部状态栏 -->
   <view class="status-bar">
     <view class="status-item wave">
@@ -98,7 +98,7 @@
   </view>
 
   <!-- 底部仓库区域 -->
-  <view class="inventory-area">
+  <view class="inventory-area" style="{{inventoryBottomStyle}}">
     <view class="inventory-header">
       <text class="inventory-title">🏰 防御塔仓库</text>
       <view class="summon-btn {{gold < summonCost || inventoryFull ? 'disabled' : ''}}" catchtap="summonTower">
@@ -155,6 +155,9 @@
           <text class="empty-slot">+</text>
         </block>
       </view>
+    </view>
+    <view class="ios-home-gesture-zone" wx:if="{{isIOS}}">
+      <text>系统手势区</text>
     </view>
   </view>
 
