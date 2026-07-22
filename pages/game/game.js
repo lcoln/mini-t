@@ -410,8 +410,9 @@ Page(Object.assign({
     this._cachedBgGradient = null
 
     // 上下留白给塔尖/塔座；整块网格必须落在 canvas 内，绝不能伸进仓库区域
-    const topInset = 20
-    const bottomInset = 36
+    // 小游戏模式：HUD/仓库改为 canvas 手绘，需为其预留上下带（由入口设置 _uiTopInset/_uiBottomInset）
+    const topInset = Number.isFinite(this._uiTopInset) ? this._uiTopInset : 20
+    const bottomInset = Number.isFinite(this._uiBottomInset) ? this._uiBottomInset : 36
     const maxCellByWidth = Math.floor(width / CONFIG.gridCols)
     const maxCellByHeight = Math.floor(
       (height - topInset - bottomInset) / CONFIG.gridRows
@@ -1342,12 +1343,11 @@ Page(Object.assign({
         waveInLevel: pendingWave.waveInLevel,
         totalWavesInLevel: 10,
         gameState: 'playing'
-      }, () => {
-        this.updateRunBuffSummary(pendingWave.wave)
-        this.generateWave(pendingWave.wave)
-        this.lastSpawnTime = Date.now() + 300
-        this.requestRender()
       })
+      this.updateRunBuffSummary(pendingWave.wave)
+      this.generateWave(pendingWave.wave)
+      this.lastSpawnTime = Date.now() + 300
+      this.requestRender()
       return
     }
 
@@ -1362,12 +1362,12 @@ Page(Object.assign({
       waveInLevel: pendingWave.waveInLevel,
       totalWavesInLevel: 10,
       gameState: 'playing'
-    }, () => {
-      this.updateRunBuffSummary(pendingWave.wave)
-      this.generateWave(pendingWave.wave)
-      this.lastSpawnTime = Date.now() + 300
-      this.requestRender()
     })
+    // 不依赖 setData 回调：小游戏 shim 也必须立刻生成下一波，避免选完补给后不出怪
+    this.updateRunBuffSummary(pendingWave.wave)
+    this.generateWave(pendingWave.wave)
+    this.lastSpawnTime = Date.now() + 300
+    this.requestRender()
   },
 
   initGame() {
@@ -1776,10 +1776,10 @@ Page(Object.assign({
     const pathLen = this.getPathLength()
     if (pathLen < cellSize) return []
 
-    const idealDist = pathHalf + cellSize * 0.6
-    // 贴路边约 0.5~1.5 格，保证两侧都有可选格
-    const minDist = pathHalf + cellSize * 0.22
-    const maxDist = pathHalf + cellSize * 1.55
+    const idealDist = pathHalf + cellSize * 0.75
+    // 离路边再远一点，避免圈看起来在路上、点了却判定不能放
+    const minDist = pathHalf + cellSize * 0.48
+    const maxDist = pathHalf + cellSize * 1.7
 
     const candidates = []
     for (let row = 0; row < CONFIG.gridRows; row++) {
@@ -3081,11 +3081,10 @@ Page(Object.assign({
           nextSupplyWave: this.getNextSupplyWave(pw.wave),
           gameState: 'playing',
           commanderAiming: false
-        }, () => {
-          this.generateWave(pw.wave)
-          this.lastSpawnTime = Date.now() + 300
-          this.requestRender()
         })
+        this.generateWave(pw.wave)
+        this.lastSpawnTime = Date.now() + 300
+        this.requestRender()
         console.warn('watchdog: force-advance wave (choice overlay did not enter choice state)', pw)
       }
     } else {
@@ -4292,7 +4291,10 @@ Page(Object.assign({
       this.safeRender('particles', this.drawParticles)
       this.safeRender('floatingTexts', this.drawFloatingTexts)
       this.safeRender('draggingTower', this.drawDraggingTower)
-      this.safeRender('waveHUD', this.drawWaveHUD)
+      // 小游戏模式由 canvas-ui 画波次条，避免再叠一层挡住地图
+      if (!this._uiTopInset) {
+        this.safeRender('waveHUD', this.drawWaveHUD)
+      }
     } catch (error) {
       const now = Date.now()
       if (now - (this.lastRenderWarnAt || 0) >= 2000) {
@@ -4767,7 +4769,7 @@ Page(Object.assign({
     const offsetY = this.getGridOffsetY()
     const cellCenterX = offsetX + col * CONFIG.cellSize + CONFIG.cellSize / 2
     const cellCenterY = offsetY + row * CONFIG.cellSize + CONFIG.cellSize / 2
-    const clearance = this.getPathHalfWidth() + Math.max(2, CONFIG.cellSize * 0.08)
+    const clearance = this.getPathHalfWidth() + Math.max(4, CONFIG.cellSize * 0.22)
     
     for (let i = 0; i < this.pathPoints.length - 1; i++) {
       const dist = this.pointToSegmentDist(
@@ -4997,6 +4999,8 @@ Page(Object.assign({
     
     const touch = e.touches[0]
     const tower = this.inventory[index]
+    // 小游戏 canvas 仓库是固定 5x4 格，点到空格 tower 为 undefined，直接忽略（避免 TOWER_TYPES[tower.type] 崩）
+    if (!tower || !TOWER_TYPES[tower.type]) return
     const startClientX = touch.clientX
     const startClientY = touch.clientY
 
@@ -5379,8 +5383,13 @@ Page(Object.assign({
       return
     }
     
-    // 如果没有真正开始拖动（没移动足够距离），直接重置
+    // 短按仓库格：prep 下视为选中，方便再点发光圈放置
     if (!this.isDragging || !this.hasMoved) {
+      if (this.draggingFromInventory &&
+          this.data.gameState === 'prep' &&
+          this.draggingInventoryIndex >= 0) {
+        this.setData({ selectedInventoryIndex: this.draggingInventoryIndex })
+      }
       this.resetDrag()
       return
     }
@@ -5405,15 +5414,30 @@ Page(Object.assign({
         this.mergeTowers(this.draggingTower, this.mergeTarget)
       }
     } else if (this.draggingFromInventory) {
-      // 从仓库拖到场上放置 - 只能放在塔位上
+      if (this.data.gameState === 'prep' && !this.data.selectedBlessingKey) {
+        wx.showToast({ title: '先选祝福', icon: 'none' })
+        this.resetDrag()
+        return
+      }
+      // 从仓库拖到场上：吸附最近空塔位，避免对准圈却落到邻格判定失败
       const col = Math.floor((this.dragX - offsetX) / CONFIG.cellSize)
       const row = Math.floor((this.dragY - offsetY) / CONFIG.cellSize)
-      
+      let placeRow = null
+      let placeCol = null
       if (row >= 0 && row < CONFIG.gridRows && col >= 0 && col < CONFIG.gridCols) {
-        // 检查是否是有效塔位且没有塔
-        if (this.isTowerSlot(row, col) && !this.grid[row][col]) {
-          this.placeTowerFromInventory(row, col)
+        if (this.isTowerSlot(row, col) && !(this.grid[row] && this.grid[row][col])) {
+          placeRow = row
+          placeCol = col
+        } else {
+          const near = this.findNearestFreeSlot(row, col)
+          if (near && Math.abs(near.row - row) + Math.abs(near.col - col) <= 2) {
+            placeRow = near.row
+            placeCol = near.col
+          }
         }
+      }
+      if (placeRow != null && this.isTowerSlot(placeRow, placeCol) && !(this.grid[placeRow] && this.grid[placeRow][placeCol])) {
+        this.placeTowerFromInventory(placeRow, placeCol)
       }
     } else {
       // 场上塔拖动到新位置 - 只能放在塔位上
@@ -5772,11 +5796,10 @@ Page(Object.assign({
             nextSupplyWave: this.getNextSupplyWave(pw ? pw.wave : newWave),
             gameState: isNewLevel ? 'prep' : 'playing',
             commanderAiming: false
-          }, () => {
-            this.generateWave(pw ? pw.wave : newWave)
-            this.lastSpawnTime = isNewLevel ? Date.now() + 60000 : Date.now() + 300
-            this.requestRender()
           })
+          this.generateWave(pw ? pw.wave : newWave)
+          this.lastSpawnTime = isNewLevel ? Date.now() + 60000 : Date.now() + 300
+          this.requestRender()
         }
       }, 850)
       return
@@ -5793,9 +5816,8 @@ Page(Object.assign({
         commanderAiming: false
       })
       this.generateWave(newWave)
-      if (isNewLevel) {
-        this.lastSpawnTime = Date.now() + 60000
-      }
+      // 非新关也要重置出怪时间，避免沿用上一波末的 lastSpawnTime 导致长时间不出怪
+      this.lastSpawnTime = isNewLevel ? Date.now() + 60000 : Date.now() + 300
       this.requestRender()
     }, 1800)
   },
