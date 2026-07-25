@@ -244,66 +244,66 @@ const MAX_TOWER_LEVEL = 10
 const TOWER_UPGRADE_GOLD_BASE = 15
 const TOWER_UPGRADE_GOLD_PER_LEVEL_SQ = 5
 
-// 塔类型配置
+// 免疫细胞配置（内部 key 保持不变，避免影响战斗与存档）
 const TOWER_TYPES = {
   fire: {
     id: 'fire',
-    name: '火焰塔',
+    name: '胃壁细胞',
     color: '#ff4400',
     glowColor: 'rgba(255, 68, 0, 0.6)',
-    emoji: '🔥',
+    emoji: '🔬',
     baseDamage: 5,
     baseRange: 70,
     baseAttackSpeed: 1200,
-    description: '灼烧：持续烧伤3秒',
+    description: '胞内小管泌酸：持续腐蚀坏菌3秒',
     projectileType: 'fireball'
   },
   ice: {
     id: 'ice',
-    name: '寒冰塔',
+    name: '嗜中性粒细胞',
     color: '#00ccff',
     glowColor: 'rgba(0, 204, 255, 0.6)',
-    emoji: '❄️',
+    emoji: '⚪',
     baseDamage: 4,
     baseRange: 80,
     baseAttackSpeed: 1400,
-    description: '冰冻：减速50%持续2秒',
+    description: '颗粒吞噬：减速50%持续2秒',
     projectileType: 'iceball'
   },
   nature: {
     id: 'nature',
-    name: '自然塔',
+    name: '乳酸杆菌群',
     color: '#44ff44',
     glowColor: 'rgba(68, 255, 68, 0.6)',
-    emoji: '🌿',
+    emoji: '🦠',
     baseDamage: 4,
     baseRange: 65,
     baseAttackSpeed: 1300,
-    description: '藤蔓：缠绕减速30%+受伤加深25%',
+    description: '短链定植：减速30%并使受伤加深25%',
     projectileType: 'vineball'
   },
   arcane: {
     id: 'arcane',
-    name: '奥术塔',
+    name: '腺泡细胞',
     color: '#aa44ff',
     glowColor: 'rgba(170, 68, 255, 0.6)',
-    emoji: '🔮',
+    emoji: '🧬',
     baseDamage: 8,
     baseRange: 90,
     baseAttackSpeed: 1600,
-    description: '穿透：可穿透多个敌人',
+    description: '酶原释放：可穿透多个菌体',
     projectileType: 'arcaneball'
   },
   lightning: {
     id: 'lightning',
-    name: '闪电塔',
+    name: '树突细胞',
     color: '#ffff00',
     glowColor: 'rgba(255, 255, 0, 0.6)',
     emoji: '⚡',
     baseDamage: 6,
     baseRange: 85,
     baseAttackSpeed: 1100,
-    description: '连锁：电击周围3个敌人',
+    description: '抗原呈递：连锁攻击周围3个菌体',
     projectileType: 'lightning'
   }
 }
@@ -311,10 +311,10 @@ const TOWER_TYPES = {
 const BLESSINGS = {
   ember: {
     key: 'ember',
-    icon: '🔥',
-    name: '烈焰纹章',
-    subtitle: '高爆发开局',
-    description: '额外获得 1 座火焰塔，所有火焰塔伤害 +2，开局金币 +20。',
+    icon: '🧪',
+    name: '高酸反应',
+    subtitle: '强力酸蚀开局',
+    description: '额外获得 1 个胃壁细胞，所有胃壁细胞伤害 +2，开局营养点 +20。',
     towerType: 'fire',
     extraTowerType: 'fire',
     damageBonus: 2,
@@ -324,9 +324,9 @@ const BLESSINGS = {
   storm: {
     key: 'storm',
     icon: '⚡',
-    name: '风暴线圈',
-    subtitle: '快节奏清场',
-    description: '额外获得 1 座闪电塔，所有闪电塔攻速提升，开局金币 +15。',
+    name: '免疫脉冲',
+    subtitle: '快速清菌开局',
+    description: '额外获得 1 个树突细胞，同类细胞攻速提升，开局营养点 +15。',
     towerType: 'lightning',
     extraTowerType: 'lightning',
     attackSpeedBonus: 180,
@@ -335,10 +335,10 @@ const BLESSINGS = {
   },
   grove: {
     key: 'grove',
-    icon: '🌿',
-    name: '森灵古种',
-    subtitle: '稳健续航开局',
-    description: '额外获得 1 座自然塔，所有自然塔射程 +12，生命 +4。',
+    icon: '🦠',
+    name: '乳酸杆菌定植',
+    subtitle: '稳健屏障开局',
+    description: '额外获得 1 个乳酸杆菌群，同类菌群射程 +12，健康度 +4。',
     towerType: 'nature',
     extraTowerType: 'nature',
     rangeBonus: 12,
@@ -351,55 +351,55 @@ const SUPPLY_REWARDS = {
   forge: {
     key: 'forge',
     icon: '🔧',
-    title: '火力铸造',
-    description: '全塔伤害 +1，本局持续生效。',
+    title: '免疫强化',
+    description: '全体免疫细胞伤害 +1，本局持续生效。',
     type: 'damage',
     amount: 1
   },
   overclock: {
     key: 'overclock',
     icon: '⚙️',
-    title: '超频线圈',
-    description: '全塔攻速提升，攻击间隔 -90ms。',
+    title: '反应加速',
+    description: '全体免疫细胞反应加快，攻击间隔 -90ms。',
     type: 'attackSpeed',
     amount: 90
   },
   radar: {
     key: 'radar',
     icon: '📡',
-    title: '追猎雷达',
-    description: '全塔射程 +8，补足压线能力。',
+    title: '感知延伸',
+    description: '全体免疫细胞射程 +8，扩大清菌范围。',
     type: 'range',
     amount: 8
   },
   cache: {
     key: 'cache',
     icon: '💰',
-    title: '金币补给',
-    description: '立刻获得 80 金币，快速补经济。',
+    title: '营养点补给',
+    description: '立刻获得 80 营养点，快速部署细胞。',
     type: 'gold',
     amount: 80
   },
   repair: {
     key: 'repair',
     icon: '❤️',
-    title: '紧急修复',
-    description: '立刻恢复 3 点生命。',
+    title: '屏障修复',
+    description: '立刻恢复 3 点肠道健康度。',
     type: 'lives',
     amount: 3
   },
   airdrop: {
     key: 'airdrop',
     icon: '📦',
-    title: '元素空投',
-    description: '获得 1 座与当前祝福同流派的塔。',
+    title: '细胞增殖',
+    description: '获得 1 个与当前增益同类型的免疫细胞。',
     type: 'tower'
   },
   discount: {
     key: 'discount',
     icon: '🛒',
-    title: '招募折扣',
-    description: '召唤价格 -2，最低 8 金币。',
+    title: '增殖折扣',
+    description: '细胞增殖价格 -2，最低 8 营养点。',
     type: 'summonCost',
     amount: 2
   }
@@ -415,9 +415,9 @@ const THREAT_CHAIN_RULES = {
   blitz: {
     key: 'blitz',
     icon: '⚡',
-    title: '闪电突袭',
-    description: '敌人又快又脆，适合高攻速点杀流。',
-    detail: '数量 -28% · 速度 +30% · 血量 ×0.75 · 金币 +15%',
+    title: '快攻菌潮',
+    description: '坏菌又快又脆，适合高攻速清除。',
+    detail: '数量 -28% · 速度 +30% · 血量 ×0.75 · 营养点 +15%',
     countMultiplier: 0.72,
     speedMultiplier: 1.30,
     hpMultiplier: 0.75,
@@ -426,9 +426,9 @@ const THREAT_CHAIN_RULES = {
   greed: {
     key: 'greed',
     icon: '💎',
-    title: '黄金潮汐',
-    description: '海量弱怪涌来，守住了就是一波肥。',
-    detail: '数量 +42% · 精英 +1 · 金币 +50% · 战术点 +1/精英',
+    title: '繁殖高峰',
+    description: '海量弱菌快速繁殖，清完可获得大量营养点。',
+    detail: '数量 +42% · 精英 +1 · 营养点 +50% · 免疫能量 +1/精英',
     countMultiplier: 1.42,
     goldMultiplier: 1.50,
     extraEliteCount: 1,
@@ -437,9 +437,9 @@ const THREAT_CHAIN_RULES = {
   fortress: {
     key: 'fortress',
     icon: '🛡️',
-    title: '钢铁堡垒',
-    description: '重甲慢速强敌，打穿一个就回本。',
-    detail: '血量 ×1.85 · 速度 -25% · 金币 +40% · 精英 +2 · 精英血量 ×1.5',
+    title: '厚壁菌团',
+    description: '厚壁慢速菌体，击穿后可获得更多营养点。',
+    detail: '血量 ×1.85 · 速度 -25% · 营养点 +40% · 精英 +2 · 精英血量 ×1.5',
     hpMultiplier: 1.85,
     speedMultiplier: 0.75,
     goldMultiplier: 1.40,
@@ -453,9 +453,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'inferno',
       icon: '🔥',
-      title: '炼狱焦芯',
-      description: '灼烧更久更痛，对精英/Boss 灼烧+60%，专烧硬骨头。',
-      shortName: '炼狱',
+      title: '强酸核心',
+      description: '酸蚀更久更强，对精英/Boss 酸蚀+60%。',
+      shortName: '强酸',
       burnDurationBonus: 150,
       burnDamageMultiplier: 1.85,
       damageBonus: 5
@@ -463,9 +463,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'volatile',
       icon: '💥',
-      title: '爆燃弹芯',
-      description: '命中大范围溅射，攻速更快，专清虫潮。',
-      shortName: '爆燃',
+      title: '扩散酶囊',
+      description: '命中大范围扩散，反应更快，专清菌潮。',
+      shortName: '扩散',
       splashRadius: 62,
       splashRatio: 0.75,
       rangeBonus: 2,
@@ -476,9 +476,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'frostlock',
       icon: '🧊',
-      title: '霜锁线圈',
-      description: '连续命中后可短暂冻结目标。',
-      shortName: '霜锁',
+      title: '低温锁菌',
+      description: '连续命中后可短暂冻结菌体。',
+      shortName: '锁菌',
       freezeHits: 3,
       freezeDuration: 34,
       rangeBonus: 8
@@ -486,9 +486,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'shatter',
       icon: '💠',
-      title: '碎晶协议',
-      description: '对减速目标造成更高伤害。',
-      shortName: '碎晶',
+      title: '结晶裂解',
+      description: '对被抑制菌体造成更高伤害。',
+      shortName: '裂解',
       shatterMultiplier: 1.38,
       damageBonus: 2,
       attackSpeedBonus: 40
@@ -498,9 +498,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'overgrowth',
       icon: '🌱',
-      title: '荆棘蔓延',
-      description: '藤蔓缠绕时间延长，易伤效果增强。',
-      shortName: '荆棘',
+      title: '菌群包裹',
+      description: '益生菌包裹时间延长，易伤效果增强。',
+      shortName: '包裹',
       vineDurationBonus: 40,
       vineVulnerabilityBonus: 0.12,
       rangeBonus: 5
@@ -508,9 +508,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'toxic',
       icon: '☠️',
-      title: '毒沼之种',
-      description: '命中附带持续毒素伤害。',
-      shortName: '毒沼',
+      title: '抑菌代谢',
+      description: '命中附带持续抑菌伤害。',
+      shortName: '代谢',
       poisonPerSec: 5,
       poisonDuration: 42,
       damageBonus: 2,
@@ -521,9 +521,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'astral',
       icon: '⭐',
-      title: '星空棱镜',
-      description: '穿透数量增加，射程更远。',
-      shortName: '星空',
+      title: '多酶棱镜',
+      description: '酶解穿透数量增加，作用范围更远。',
+      shortName: '多酶',
       piercingExtra: 2,
       rangeBonus: 12,
       damageBonus: 3
@@ -531,9 +531,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'converge',
       icon: '🌀',
-      title: '聚力法阵',
-      description: '单目标伤害大幅提升，穿透能力减弱。',
-      shortName: '聚力',
+      title: '靶向酶解',
+      description: '单个菌体伤害大幅提升，穿透能力减弱。',
+      shortName: '靶向',
       damageBonus: 10,
       attackSpeedBonus: -60,
       piercingExtra: -1
@@ -543,9 +543,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'stormchain',
       icon: '⛓️',
-      title: '雷霆锁链',
-      description: '连锁数量增加，连锁伤害提高。',
-      shortName: '雷霆',
+      title: '链式免疫',
+      description: '连锁菌体数量增加，连锁伤害提高。',
+      shortName: '链式',
       chainExtraTargets: 2,
       chainDamageBonus: 0.15,
       damageBonus: 4
@@ -553,9 +553,9 @@ const SPECIALIZATION_OPTIONS = {
     {
       key: 'overcharge',
       icon: '🔋',
-      title: '电涌核心',
-      description: '攻击频率更高，电弧更快。',
-      shortName: '电涌',
+      title: '脉冲过载',
+      description: '免疫反应频率更高，脉冲更快。',
+      shortName: '过载',
       attackSpeedBonus: -120,
       damageBonus: 1,
       rangeBonus: 3
@@ -563,11 +563,11 @@ const SPECIALIZATION_OPTIONS = {
   ]
 }
 
-// 怪物类型配置 - 添加独特外观
+// 有害菌类型配置（保留 shape 以兼容现有程序化绘制）
 const MONSTER_TYPES = {
   slime: { 
-    name: '史莱姆', 
-    emoji: '🟢',
+    name: '有害球菌',
+    emoji: '🦠',
     bodyColor: '#66ff66', 
     outlineColor: '#33aa33',
     eyeColor: '#000',
@@ -578,8 +578,8 @@ const MONSTER_TYPES = {
     unlockWave: 1
   },
   bat: {
-    name: '蝙蝠',
-    emoji: '🦇',
+    name: '飞散菌',
+    emoji: '🦠',
     bodyColor: '#555566',
     outlineColor: '#333344',
     eyeColor: '#ff0000',
@@ -590,8 +590,8 @@ const MONSTER_TYPES = {
     unlockWave: 2
   },
   skeleton: { 
-    name: '骷髅', 
-    emoji: '💀',
+    name: '坏死菌团',
+    emoji: '🦠',
     bodyColor: '#eeeeee', 
     outlineColor: '#999999',
     eyeColor: '#ff0000',
@@ -602,8 +602,8 @@ const MONSTER_TYPES = {
     unlockWave: 3
   },
   ghost: { 
-    name: '幽灵', 
-    emoji: '👻',
+    name: '潜伏孢子',
+    emoji: '🦠',
     bodyColor: 'rgba(180, 180, 255, 0.7)', 
     outlineColor: '#8888ff',
     eyeColor: '#ff00ff',
@@ -614,8 +614,8 @@ const MONSTER_TYPES = {
     unlockWave: 4
   },
   orc: {
-    name: '兽人',
-    emoji: '👹',
+    name: '耐药菌',
+    emoji: '🦠',
     bodyColor: '#558844',
     outlineColor: '#336622',
     eyeColor: '#ffff00',
@@ -626,8 +626,8 @@ const MONSTER_TYPES = {
     unlockWave: 5
   },
   golem: { 
-    name: '石魔', 
-    emoji: '🗿',
+    name: '生物膜块',
+    emoji: '🦠',
     bodyColor: '#777777', 
     outlineColor: '#444444',
     eyeColor: '#ff6600',
@@ -638,8 +638,8 @@ const MONSTER_TYPES = {
     unlockWave: 7
   },
   demon: {
-    name: '恶魔',
-    emoji: '😈',
+    name: '毒素菌',
+    emoji: '🦠',
     bodyColor: '#aa2222',
     outlineColor: '#660000',
     eyeColor: '#ffff00',
@@ -650,8 +650,8 @@ const MONSTER_TYPES = {
     unlockWave: 9
   },
   wraith: {
-    name: '幽影',
-    emoji: '👤',
+    name: '隐匿菌',
+    emoji: '🦠',
     bodyColor: '#6644aa',
     outlineColor: '#332266',
     eyeColor: '#ff66ff',
@@ -663,8 +663,8 @@ const MONSTER_TYPES = {
     evasionChance: 0.3
   },
   troll: {
-    name: '巨魔',
-    emoji: '🧌',
+    name: '再生菌',
+    emoji: '🦠',
     bodyColor: '#556644',
     outlineColor: '#334422',
     eyeColor: '#ffaa00',
@@ -676,8 +676,8 @@ const MONSTER_TYPES = {
     regenPerSec: 14
   },
   scarab: {
-    name: '甲虫卫兵',
-    emoji: '🪲',
+    name: '装甲球菌',
+    emoji: '🦠',
     bodyColor: '#8a6a24',
     outlineColor: '#4d3510',
     eyeColor: '#ffdd44',
@@ -689,8 +689,8 @@ const MONSTER_TYPES = {
     armor: 0.06
   },
   direwolf: {
-    name: '荒原魔狼',
-    emoji: '🐺',
+    name: '侵袭杆菌',
+    emoji: '🦠',
     bodyColor: '#667080',
     outlineColor: '#303844',
     eyeColor: '#66ddff',
@@ -701,8 +701,8 @@ const MONSTER_TYPES = {
     unlockWave: 11
   },
   shaman: {
-    name: '沼泽萨满',
-    emoji: '🧙',
+    name: '变异菌群',
+    emoji: '🧫',
     bodyColor: '#477a55',
     outlineColor: '#20482c',
     eyeColor: '#aaff66',
@@ -714,8 +714,8 @@ const MONSTER_TYPES = {
     regenPerSec: 6
   },
   darkKnight: {
-    name: '暗甲骑士',
-    emoji: '♞',
+    name: '重甲菌',
+    emoji: '🦠',
     bodyColor: '#3f4455',
     outlineColor: '#171923',
     eyeColor: '#ff3344',
@@ -727,8 +727,8 @@ const MONSTER_TYPES = {
     armor: 0.16
   },
   spider: {
-    name: '晶背魔蛛',
-    emoji: '🕷️',
+    name: '织网菌',
+    emoji: '🦠',
     bodyColor: '#713c88',
     outlineColor: '#351844',
     eyeColor: '#ff88ff',
@@ -740,8 +740,8 @@ const MONSTER_TYPES = {
     evasionChance: 0.12
   },
   elemental: {
-    name: '混沌元素',
-    emoji: '🌀',
+    name: '混合菌群',
+    emoji: '🧫',
     bodyColor: '#2c9aaa',
     outlineColor: '#14505c',
     eyeColor: '#ffffff',
@@ -753,8 +753,8 @@ const MONSTER_TYPES = {
     armor: 0.1
   },
   assassin: {
-    name: '虚空刺客',
-    emoji: '🥷',
+    name: '突进菌',
+    emoji: '🦠',
     bodyColor: '#29243f',
     outlineColor: '#0e0b18',
     eyeColor: '#dd66ff',
@@ -766,8 +766,8 @@ const MONSTER_TYPES = {
     evasionChance: 0.22
   },
   mammoth: {
-    name: '冰原猛犸',
-    emoji: '🦣',
+    name: '巨型杆菌',
+    emoji: '🦠',
     bodyColor: '#7993a3',
     outlineColor: '#3c5665',
     eyeColor: '#cfffff',
@@ -779,8 +779,8 @@ const MONSTER_TYPES = {
     armor: 0.2
   },
   harpy: {
-    name: '风暴鹰身女妖',
-    emoji: '🦅',
+    name: '飞散孢子',
+    emoji: '🦠',
     bodyColor: '#8d7a52',
     outlineColor: '#493b25',
     eyeColor: '#ffee66',
@@ -792,8 +792,8 @@ const MONSTER_TYPES = {
     evasionChance: 0.16
   },
   voidling: {
-    name: '噬界虚灵',
-    emoji: '👁️',
+    name: '吞噬菌',
+    emoji: '🦠',
     bodyColor: '#42205f',
     outlineColor: '#190a2b',
     eyeColor: '#ff44ee',
@@ -805,8 +805,8 @@ const MONSTER_TYPES = {
     regenPerSec: 10
   },
   colossus: {
-    name: '远古巨像',
-    emoji: '🦾',
+    name: '巨型生物膜',
+    emoji: '🧫',
     bodyColor: '#685d4d',
     outlineColor: '#30291f',
     eyeColor: '#ffb52e',
@@ -819,8 +819,8 @@ const MONSTER_TYPES = {
     regenPerSec: 8
   },
   dragon: { 
-    name: '巨龙', 
-    emoji: '🐉',
+    name: '腐败巨菌',
+    emoji: '🦠',
     bodyColor: '#ff4400', 
     outlineColor: '#aa0000',
     eyeColor: '#ffff00',
@@ -832,8 +832,8 @@ const MONSTER_TYPES = {
     unlockWave: 5
   },
   treant: {
-    name: '树人王',
-    emoji: '🌳',
+    name: '根须菌王',
+    emoji: '🧫',
     bodyColor: '#3a6622',
     outlineColor: '#1a4400',
     eyeColor: '#ffff00',
@@ -845,8 +845,8 @@ const MONSTER_TYPES = {
     unlockWave: 10
   },
   lich: {
-    name: '巫妖',
-    emoji: '💀',
+    name: '毒素母体',
+    emoji: '☣️',
     bodyColor: '#5522aa',
     outlineColor: '#330066',
     eyeColor: '#00ffff',
@@ -858,8 +858,8 @@ const MONSTER_TYPES = {
     unlockWave: 15
   },
   phoenix: {
-    name: '凤凰',
-    emoji: '🔥',
+    name: '复燃孢子',
+    emoji: '🦠',
     bodyColor: '#ff8800',
     outlineColor: '#cc4400',
     eyeColor: '#ffffff',
@@ -876,14 +876,14 @@ const MONSTER_TYPES = {
 const INVENTORY_COLS = 5
 const INVENTORY_ROWS = 4
 
-// 地形主题配置
+// 肠道分段主题（内部 key 保持不变）
 const MAP_THEMES = {
   forest: {
-    name: '森林',
-    bgColors: ['#0a1a0a', '#152515', '#0a1a0a'],
-    pathColors: ['#2a1a0a', '#5a4030', '#7a5a40'],
-    grassColor: 'rgba(60, 120, 60, 0.15)',
-    gridColor: 'rgba(80, 180, 80, 0.2)',
+    name: '十二指肠',
+    bgColors: ['#32151c', '#51232e', '#2a1118'],
+    pathColors: ['#6b343b', '#b96b70', '#e5a0a0'],
+    grassColor: 'rgba(255, 170, 175, 0.12)',
+    gridColor: 'rgba(255, 190, 195, 0.16)',
     decorTypes: ['tree', 'bush', 'flower', 'mushroom', 'rock'],
     // 塔位放在路径两侧，不在路上
     towerSlots: [
@@ -897,11 +897,11 @@ const MAP_THEMES = {
     ]
   },
   desert: {
-    name: '沙漠',
-    bgColors: ['#2a200a', '#3a3015', '#2a200a'],
-    pathColors: ['#4a3a1a', '#8a7040', '#aa9060'],
-    grassColor: 'rgba(180, 150, 80, 0.1)',
-    gridColor: 'rgba(200, 180, 100, 0.2)',
+    name: '空肠',
+    bgColors: ['#3a1820', '#642d38', '#32141b'],
+    pathColors: ['#753d45', '#c8787d', '#edaaa8'],
+    grassColor: 'rgba(255, 180, 185, 0.1)',
+    gridColor: 'rgba(255, 195, 200, 0.16)',
     decorTypes: ['cactus', 'rock', 'skull', 'tumbleweed'],
     towerSlots: [
       {row: 1, col: 2}, {row: 1, col: 4}, {row: 1, col: 6}, {row: 1, col: 8}, {row: 1, col: 10},
@@ -914,11 +914,11 @@ const MAP_THEMES = {
     ]
   },
   ice: {
-    name: '冰原',
-    bgColors: ['#0a1a2a', '#152535', '#0a1a2a'],
-    pathColors: ['#1a2a3a', '#3a5a7a', '#5a7a9a'],
-    grassColor: 'rgba(150, 200, 255, 0.1)',
-    gridColor: 'rgba(100, 180, 255, 0.2)',
+    name: '回肠',
+    bgColors: ['#30172b', '#542748', '#291323'],
+    pathColors: ['#67405e', '#ae7197', '#dfa9c5'],
+    grassColor: 'rgba(225, 165, 210, 0.1)',
+    gridColor: 'rgba(240, 180, 220, 0.16)',
     decorTypes: ['ice_crystal', 'snow_pile', 'frozen_tree', 'rock'],
     towerSlots: [
       {row: 1, col: 1}, {row: 1, col: 3}, {row: 1, col: 6}, {row: 1, col: 9},
@@ -931,11 +931,11 @@ const MAP_THEMES = {
     ]
   },
   volcano: {
-    name: '火山',
-    bgColors: ['#1a0a0a', '#2a1510', '#1a0a0a'],
-    pathColors: ['#2a1a1a', '#5a3030', '#7a4040'],
-    grassColor: 'rgba(255, 100, 50, 0.08)',
-    gridColor: 'rgba(255, 150, 100, 0.15)',
+    name: '结肠',
+    bgColors: ['#291318', '#472127', '#211014'],
+    pathColors: ['#593036', '#98545b', '#c97d82'],
+    grassColor: 'rgba(220, 130, 140, 0.08)',
+    gridColor: 'rgba(235, 155, 165, 0.14)',
     decorTypes: ['lava_rock', 'fire_vent', 'ash_pile', 'dead_tree'],
     towerSlots: [
       {row: 1, col: 0}, {row: 1, col: 2}, {row: 1, col: 5}, {row: 1, col: 8}, {row: 1, col: 10},

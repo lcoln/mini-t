@@ -1,6 +1,6 @@
 App({
   onLaunch() {
-    console.log('合成塔防：这塔还能再合 游戏启动')
+    console.log('塔防: 肠道保卫战 游戏启动')
   },
   globalData: {
     userInfo: null,

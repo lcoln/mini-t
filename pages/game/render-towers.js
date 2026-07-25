@@ -70,45 +70,329 @@ module.exports = {
     const config = TOWER_TYPES[type]
     
     ctx.save()
-    ctx.globalAlpha = alpha
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    // 真机 shadowBlur 既贵又会把塔尖光晕裁到 battle-banner 里，统一禁用
-    ctx.shadowBlur = 0 /* was:  0 */
-    ctx.shadowColor = 'rgba(0,0,0,0)'
-    
-    // 底座阴影
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.beginPath()
-    ctx.ellipse(x, y + 14, 16, 6, 0, 0, Math.PI * 2)
-    ctx.fill()
+    try {
+      ctx.globalAlpha = alpha
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      // 真机 shadowBlur 既贵又会把塔尖光晕裁到 battle-banner 里，统一禁用
+      ctx.shadowBlur = 0 /* was:  0 */
+      ctx.shadowColor = 'rgba(0,0,0,0)'
 
-    // 根据塔类型绘制不同形状
-    if (type === 'fire') {
-      this._drawFireTower(ctx, x, y, config, level)
-    } else if (type === 'ice') {
-      this._drawIceTower(ctx, x, y, config, level)
-    } else if (type === 'nature') {
-      this._drawNatureTower(ctx, x, y, config, level)
-    } else if (type === 'arcane') {
-      this._drawArcaneTower(ctx, x, y, config, level)
-    } else if (type === 'lightning') {
-      this._drawLightningTower(ctx, x, y, config, level)
+      // 底座阴影
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+      ctx.beginPath()
+      ctx.ellipse(x, y + 14, 16, 6, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      // 肠道主题：防御单位统一为免疫细胞，不再绘制奇幻石塔
+      this._drawImmuneCell(ctx, x, y, config, level, type)
+
+      // 等级标签
+      ctx.shadowBlur = 0 /* was:  0 */
+      ctx.shadowColor = 'rgba(0,0,0,0)'
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
+      ctx.beginPath()
+      drawRoundRect(ctx, x - 14, y + 12, 28, 14, 4)
+      ctx.fill()
+
+      ctx.fillStyle = '#ffd700'
+      ctx.font = 'bold 10px Arial'
+      ctx.fillText(`Lv.${level}`, x, y + 19)
+    } finally {
+      // 任意绘图 API 在低版本微信 Canvas 抛错时，也不能污染后续帧的坐标系
+      ctx.restore()
     }
-    
-    // 等级标签
-    ctx.shadowBlur = 0 /* was:  0 */
-    ctx.shadowColor = 'rgba(0,0,0,0)'
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
-    ctx.beginPath()
-    drawRoundRect(ctx, x - 14, y + 12, 28, 14, 4)
-    ctx.fill()
-    
-    ctx.fillStyle = '#ffd700'
-    ctx.font = 'bold 10px Arial'
-    ctx.fillText(`Lv.${level}`, x, y + 19)
-    
-    ctx.restore()
+  },
+
+  _drawImmuneCell(ctx, x, y, config, level, type) {
+    const lv = Math.max(1, level || 1)
+    const radius = 11 + Math.min(4, lv * 0.55)
+    const phase = Date.now() * 0.002 + lv
+    const color = config.color || '#ff9dad'
+
+    const membraneGradient = (innerColor = '#fff') => {
+      const grad = ctx.createRadialGradient(x - radius * 0.35, y - radius * 0.4, 1, x, y, radius * 1.2)
+      grad.addColorStop(0, innerColor)
+      grad.addColorStop(0.25, color)
+      grad.addColorStop(1, config.glowColor || color)
+      return grad
+    }
+    const drawNucleus = (nx, ny, nr, nucleusColor) => {
+      ctx.fillStyle = nucleusColor
+      ctx.beginPath()
+      ctx.arc(nx, ny, nr, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(70,30,45,0.42)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+
+    ctx.save()
+    try {
+      ctx.lineJoin = 'round'
+      ctx.lineCap = 'round'
+
+    if (type === 'fire') {
+      // 胃壁细胞（parietal cell）：大梨形、中央圆核、胞内小管与丰富线粒体
+      ctx.fillStyle = membraneGradient('#ffe9e4')
+      ctx.strokeStyle = '#ff9a86'
+      ctx.lineWidth = 1.8 + lv * 0.08
+      ctx.beginPath()
+      ctx.moveTo(x, y - radius - 3)
+      ctx.bezierCurveTo(x + radius * 0.86, y - radius * 0.75, x + radius, y + radius * 0.3, x + radius * 0.64, y + radius)
+      ctx.lineTo(x - radius * 0.64, y + radius)
+      ctx.bezierCurveTo(x - radius, y + radius * 0.3, x - radius * 0.86, y - radius * 0.75, x, y - radius - 3)
+      ctx.fill()
+      ctx.stroke()
+      drawNucleus(x, y + radius * 0.16, radius * 0.3, '#b75a72')
+
+      // 胞内小管：升级后分支增多，表现酸分泌激活
+      const canalCount = 2 + Math.min(5, Math.floor((lv + 1) / 2))
+      ctx.strokeStyle = 'rgba(255,245,235,0.8)'
+      ctx.lineWidth = 1.1
+      for (let i = 0; i < canalCount; i++) {
+        const a = -Math.PI + (Math.PI * 2 * i) / canalCount
+        ctx.beginPath()
+        ctx.moveTo(x + Math.cos(a) * radius * 0.34, y + Math.sin(a) * radius * 0.28)
+        ctx.quadraticCurveTo(
+          x + Math.cos(a + 0.45) * radius * 0.68,
+          y + Math.sin(a + 0.45) * radius * 0.58,
+          x + Math.cos(a) * radius * 0.82,
+          y + Math.sin(a) * radius * 0.78
+        )
+        ctx.stroke()
+      }
+
+      // 线粒体颗粒随等级增加
+      ctx.fillStyle = '#ffbf78'
+      for (let i = 0; i < Math.min(9, lv + 2); i++) {
+        const a = i * 2.4
+        ctx.beginPath()
+        ctx.ellipse(
+          x + Math.cos(a) * radius * 0.55,
+          y + Math.sin(a * 1.3) * radius * 0.5,
+          1.5,
+          0.8,
+          a,
+          0,
+          Math.PI * 2
+        )
+        ctx.fill()
+      }
+    } else if (type === 'ice') {
+      // 嗜中性粒细胞：圆形/轻微变形，典型分叶核和胞质颗粒
+      ctx.fillStyle = membraneGradient('#f6f1ff')
+      ctx.strokeStyle = '#c6b6e8'
+      ctx.lineWidth = 1.8
+      ctx.beginPath()
+      const points = 14
+      for (let i = 0; i <= points; i++) {
+        const a = (Math.PI * 2 * i) / points
+        const wobble = 1 + Math.sin(phase * 0.35 + i * 1.7) * (0.025 + lv * 0.002)
+        const px = x + Math.cos(a) * radius * wobble
+        const py = y + Math.sin(a) * radius * wobble
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      // 分叶核：Lv1 两叶，逐步成熟到四至五叶
+      const lobes = Math.min(5, 2 + Math.floor((lv - 1) / 2))
+      ctx.strokeStyle = '#6d568f'
+      ctx.lineWidth = 2
+      for (let i = 0; i < lobes; i++) {
+        const a = -Math.PI / 2 + (Math.PI * 2 * i) / lobes
+        const nx = x + Math.cos(a) * radius * 0.3
+        const ny = y + Math.sin(a) * radius * 0.25
+        ctx.fillStyle = '#78609b'
+        ctx.beginPath()
+        ctx.ellipse(nx, ny, radius * 0.25, radius * 0.19, a, 0, Math.PI * 2)
+        ctx.fill()
+        if (i > 0) {
+          const pa = -Math.PI / 2 + (Math.PI * 2 * (i - 1)) / lobes
+          ctx.beginPath()
+          ctx.moveTo(x + Math.cos(pa) * radius * 0.3, y + Math.sin(pa) * radius * 0.25)
+          ctx.lineTo(nx, ny)
+          ctx.stroke()
+        }
+      }
+
+      // 中性颗粒：每级可见数量增加
+      for (let i = 0; i < 5 + lv; i++) {
+        const a = i * 2.17 + 0.4
+        ctx.fillStyle = i % 2 ? '#e8b9cf' : '#ccb6e8'
+        ctx.beginPath()
+        ctx.arc(
+          x + Math.cos(a) * radius * 0.7,
+          y + Math.sin(a * 1.37) * radius * 0.65,
+          0.9 + (i % 3) * 0.25,
+          0,
+          Math.PI * 2
+        )
+        ctx.fill()
+      }
+    } else if (type === 'nature') {
+      // 乳酸杆菌：真实为革兰阳性杆状菌，常成短链排列
+      const rods = Math.min(6, 2 + Math.floor((lv + 1) / 2))
+      const rodW = radius * 0.48
+      const rodH = radius * 1.16
+      for (let i = 0; i < rods; i++) {
+        const row = Math.floor(i / 3)
+        const col = i % 3
+        const ox = (col - Math.min(2, rods - 1) / 2) * radius * 0.62 + (row % 2) * 2
+        const oy = (row - 0.5) * radius * 0.72
+        const rot = -0.22 + col * 0.18
+        const rodX = x + ox
+        const rodY = y + oy
+        const g = ctx.createLinearGradient(rodX - rodW, rodY, rodX + rodW, rodY)
+        g.addColorStop(0, '#55b946')
+        g.addColorStop(0.5, '#b8ef80')
+        g.addColorStop(1, '#4a9f42')
+        ctx.fillStyle = g
+        ctx.strokeStyle = '#dcffc2'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        // 微信不同基础库的 roundRect 支持不一致，直接用稳定的椭圆绘制圆头杆菌
+        ctx.ellipse(rodX, rodY, rodW / 2, rodH / 2, rot, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        // 菌体中央分裂隔膜，高等级出现
+        if (lv >= 4) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.55)'
+          ctx.beginPath()
+          ctx.moveTo(
+            rodX - Math.cos(rot) * rodW * 0.35,
+            rodY - Math.sin(rot) * rodW * 0.35
+          )
+          ctx.lineTo(
+            rodX + Math.cos(rot) * rodW * 0.35,
+            rodY + Math.sin(rot) * rodW * 0.35
+          )
+          ctx.stroke()
+        }
+      }
+    } else if (type === 'arcane') {
+      // 消化酶腺泡细胞：锥体细胞围成腺泡，基底核 + 顶端酶原颗粒
+      const acinarCount = Math.min(7, 4 + Math.floor((lv - 1) / 2))
+      const lumenR = radius * (0.18 + Math.min(0.08, lv * 0.008))
+      for (let i = 0; i < acinarCount; i++) {
+        const a1 = -Math.PI / 2 + (Math.PI * 2 * i) / acinarCount
+        const a2 = -Math.PI / 2 + (Math.PI * 2 * (i + 1)) / acinarCount
+        ctx.fillStyle = i % 2 ? '#b889d8' : '#cc9bea'
+        ctx.strokeStyle = '#f1d7ff'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(x + Math.cos(a1) * lumenR, y + Math.sin(a1) * lumenR)
+        ctx.lineTo(x + Math.cos((a1 + a2) / 2) * (radius + 2), y + Math.sin((a1 + a2) / 2) * (radius + 2))
+        ctx.lineTo(x + Math.cos(a2) * lumenR, y + Math.sin(a2) * lumenR)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+
+        // 基底圆核
+        const mid = (a1 + a2) / 2
+        drawNucleus(
+          x + Math.cos(mid) * radius * 0.72,
+          y + Math.sin(mid) * radius * 0.72,
+          radius * 0.12,
+          '#5d3c7f'
+        )
+        // 顶端酶原颗粒
+        const granules = Math.min(4, 1 + Math.floor(lv / 3))
+        for (let k = 0; k < granules; k++) {
+          ctx.fillStyle = '#f4b2cf'
+          ctx.beginPath()
+          ctx.arc(
+            x + Math.cos(mid + (k - 1) * 0.08) * radius * (0.32 + k * 0.06),
+            y + Math.sin(mid + (k - 1) * 0.08) * radius * (0.32 + k * 0.06),
+            1.1,
+            0,
+            Math.PI * 2
+          )
+          ctx.fill()
+        }
+      }
+      ctx.fillStyle = '#fff4fa'
+      ctx.beginPath()
+      ctx.arc(x, y, lumenR, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = '#e8b7d0'
+      ctx.stroke()
+    } else {
+      // 树突细胞：不规则胞体、分支状树突，成熟时突起更多更长
+      const branches = 5 + Math.min(7, Math.floor((lv + 1) / 2))
+      ctx.strokeStyle = '#ffe777'
+      ctx.lineWidth = 1.3 + Math.min(1.3, lv * 0.1)
+      for (let i = 0; i < branches; i++) {
+        const a = -Math.PI / 2 + (Math.PI * 2 * i) / branches
+        const len = radius + 7 + lv * 0.65 + Math.sin(phase + i) * 1.2
+        const jointX = x + Math.cos(a) * len * 0.65
+        const jointY = y + Math.sin(a) * len * 0.65
+        ctx.beginPath()
+        ctx.moveTo(x + Math.cos(a) * radius * 0.65, y + Math.sin(a) * radius * 0.65)
+        ctx.quadraticCurveTo(jointX - Math.sin(a) * 2, jointY + Math.cos(a) * 2, x + Math.cos(a) * len, y + Math.sin(a) * len)
+        ctx.stroke()
+        if (lv >= 4) {
+          // 激活后树突出现二级分叉
+          ctx.beginPath()
+          ctx.moveTo(jointX, jointY)
+          ctx.lineTo(jointX + Math.cos(a + 0.55) * len * 0.28, jointY + Math.sin(a + 0.55) * len * 0.28)
+          ctx.stroke()
+        }
+      }
+      ctx.fillStyle = membraneGradient('#fffde1')
+      ctx.strokeStyle = '#fff19a'
+      ctx.lineWidth = 1.8
+      ctx.beginPath()
+      const bodyPoints = 16
+      for (let i = 0; i <= bodyPoints; i++) {
+        const a = (Math.PI * 2 * i) / bodyPoints
+        const wobble = 0.86 + Math.sin(i * 2.1 + phase * 0.2) * 0.08
+        const px = x + Math.cos(a) * radius * wobble
+        const py = y + Math.sin(a) * radius * wobble
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      drawNucleus(x - radius * 0.08, y + radius * 0.05, radius * 0.34, '#a88a3d')
+    }
+
+    // 升级形态：每级尺寸/颗粒数量已递增；关键等级再出现激活膜、分泌囊泡与成熟环
+    if (lv >= 3) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.42)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.arc(x, y, radius + 5, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    if (lv >= 6) {
+      const vesicles = Math.min(8, lv - 2)
+      for (let i = 0; i < vesicles; i++) {
+        const a = phase * 0.12 + (Math.PI * 2 * i) / vesicles
+        ctx.fillStyle = 'rgba(255,245,200,0.72)'
+        ctx.beginPath()
+        ctx.arc(x + Math.cos(a) * (radius + 7), y + Math.sin(a) * (radius + 7), 1.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+    if (lv >= 9) {
+      ctx.strokeStyle = lv >= 10 ? '#fff0a8' : 'rgba(255,226,150,0.72)'
+      ctx.lineWidth = lv >= 10 ? 2.2 : 1.5
+      // 不使用部分微信基础库不完整支持的 setLineDash
+      for (let i = 0; i < 8; i++) {
+        const start = phase * 0.08 + i * Math.PI / 4
+        ctx.beginPath()
+        ctx.arc(x, y, radius + 10, start, start + Math.PI / 8)
+        ctx.stroke()
+      }
+    }
+    } finally {
+      ctx.restore()
+    }
   },
 
   // 火焰塔 - 熔岩石塔造型，等级影响火焰强度和塔身

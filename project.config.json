@@ -1,5 +1,5 @@
 {
-  "description": "合成塔防：这塔还能再合",
+  "description": "塔防: 肠道保卫战",
   "packOptions": {
     "ignore": [],
     "include": []
@@ -43,7 +43,7 @@
   },
   "compileType": "game",
   "libVersion": "3.13.2",
-  "projectname": "合成塔防-这塔还能再合",
+  "projectname": "塔防: 肠道保卫战",
   "condition": {},
   "editorSetting": {
     "tabIndent": "insertSpaces",

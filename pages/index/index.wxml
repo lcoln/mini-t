@@ -9,15 +9,15 @@
       <text class="hero-badge">拖拽合成</text>
       <text class="hero-badge">每3波补给</text>
     </view>
-    <text class="main-title">合成塔防</text>
-    <text class="sub-title">这塔还能再合</text>
-    <text class="hero-desc">合成升级防御塔，挑战无限地图，看看你能守到第几关！</text>
+    <text class="main-title">塔防: 肠道保卫战</text>
+    <text class="sub-title">细胞出动，清剿坏菌</text>
+    <text class="hero-desc">合成升级免疫细胞，沿肠道抵御菌潮，守住健康屏障！</text>
   </view>
 
   <view class="menu-section">
     <button class="game-btn start-btn" bindtap="startGame">
-      <text class="btn-text">开始守护</text>
-      <text class="btn-icon">⚔️</text>
+      <text class="btn-text">开始清菌</text>
+      <text class="btn-icon">🛡️</text>
     </button>
 
     <view class="stats-panel">
@@ -40,30 +40,30 @@
     <view class="feature-section-head compact">
       <view>
         <text class="feature-section-title">3步上手</text>
-        <text class="feature-section-desc">不是模式选择，开局就按这三步打。</text>
+        <text class="feature-section-desc">部署细胞，合成进化，清除菌潮。</text>
       </view>
     </view>
 
     <view class="feature-grid compact tutorial-grid">
       <view class="feature-card compact tutorial-card">
         <text class="tutorial-step-no">1</text>
-        <text class="feature-title">先选祝福</text>
-        <text class="feature-text">定本局流派。</text>
+        <text class="feature-title">先选增益</text>
+        <text class="feature-text">确定免疫路线。</text>
       </view>
       <view class="feature-card compact tutorial-card">
         <text class="tutorial-step-no">2</text>
-        <text class="feature-title">再摆塔合成</text>
-        <text class="feature-text">同塔升级。</text>
+        <text class="feature-title">部署细胞</text>
+        <text class="feature-text">同类合成进化。</text>
       </view>
       <view class="feature-card compact tutorial-card">
         <text class="tutorial-step-no">3</text>
-        <text class="feature-title">清波选强化</text>
-        <text class="feature-text">每3波二选一补给。</text>
+        <text class="feature-title">清剿菌潮</text>
+        <text class="feature-text">每3波获得补给。</text>
       </view>
     </view>
   </view>
 
   <view class="footer">
-    <text class="version">v1.1 · Tactical Merge Tower Defense</text>
+    <text class="version">v1.1 · Gut Defense</text>
   </view>
 </view>

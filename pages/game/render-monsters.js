@@ -304,18 +304,122 @@ module.exports = {
     ctx.ellipse(x, y + 12, 15, 5, 0, 0, Math.PI * 2)
     ctx.fill()
 
+    const lv = Math.max(1, level || 1)
+    const r = 11 + Math.min(3, lv * 0.35)
     ctx.fillStyle = config.color
-    ctx.beginPath()
-    ctx.arc(x, y, 13, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.68)'
+    ctx.lineWidth = 1.5
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)'
-    ctx.lineWidth = 2
-    ctx.stroke()
+    if (type === 'fire') {
+      // 胃壁细胞：梨形胞体 + 中央核 + 胞内小管
+      ctx.beginPath()
+      ctx.moveTo(x, y - r - 2)
+      ctx.bezierCurveTo(x + r, y - r * 0.55, x + r, y + r * 0.5, x + r * 0.58, y + r)
+      ctx.lineTo(x - r * 0.58, y + r)
+      ctx.bezierCurveTo(x - r, y + r * 0.5, x - r, y - r * 0.55, x, y - r - 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.strokeStyle = '#fff0df'
+      for (let i = 0; i < Math.min(5, 2 + Math.floor(lv / 2)); i++) {
+        const a = (Math.PI * 2 * i) / Math.min(5, 2 + Math.floor(lv / 2))
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + Math.cos(a) * r * 0.75, y + Math.sin(a) * r * 0.68)
+        ctx.stroke()
+      }
+      ctx.fillStyle = '#9d4f68'
+      ctx.beginPath()
+      ctx.arc(x, y + 2, 3.5, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (type === 'ice') {
+      // 嗜中性粒细胞：圆形胞体 + 分叶核
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      const lobes = Math.min(5, 2 + Math.floor((lv - 1) / 2))
+      ctx.fillStyle = '#70548c'
+      for (let i = 0; i < lobes; i++) {
+        const a = (Math.PI * 2 * i) / lobes
+        ctx.beginPath()
+        ctx.ellipse(x + Math.cos(a) * 3.5, y + Math.sin(a) * 3, 3.5, 2.7, a, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    } else if (type === 'nature') {
+      // 乳酸杆菌群：随等级由双杆增殖为短链
+      const rods = Math.min(5, 2 + Math.floor(lv / 2))
+      for (let i = 0; i < rods; i++) {
+        const ox = (i - (rods - 1) / 2) * 5
+        ctx.save()
+        ctx.translate(x + ox, y)
+        ctx.rotate(-0.2 + i * 0.1)
+        ctx.fillStyle = config.color
+        ctx.strokeStyle = '#ddffc9'
+        ctx.beginPath()
+        ctx.ellipse(0, 0, 3.6, 10.5, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        if (lv >= 4) {
+          ctx.beginPath()
+          ctx.moveTo(-3, 0)
+          ctx.lineTo(3, 0)
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
+    } else if (type === 'arcane') {
+      // 腺泡细胞：围绕中央腺腔的放射状细胞
+      const cells = Math.min(7, 4 + Math.floor(lv / 2))
+      for (let i = 0; i < cells; i++) {
+        const a = (Math.PI * 2 * i) / cells
+        ctx.fillStyle = i % 2 ? '#b777db' : config.color
+        ctx.beginPath()
+        ctx.ellipse(x + Math.cos(a) * 6, y + Math.sin(a) * 6, 6.5, 4.2, a, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      }
+      ctx.fillStyle = '#fff1f8'
+      ctx.beginPath()
+      ctx.arc(x, y, 2.8, 0, Math.PI * 2)
+      ctx.fill()
+    } else {
+      // 树突细胞：成熟时增加并分叉突起
+      const branches = Math.min(10, 5 + Math.floor(lv / 2))
+      ctx.strokeStyle = config.color
+      ctx.lineWidth = 2
+      for (let i = 0; i < branches; i++) {
+        const a = (Math.PI * 2 * i) / branches
+        const ex = x + Math.cos(a) * (r + 5)
+        const ey = y + Math.sin(a) * (r + 5)
+        ctx.beginPath()
+        ctx.moveTo(x + Math.cos(a) * 5, y + Math.sin(a) * 5)
+        ctx.lineTo(ex, ey)
+        if (lv >= 4) {
+          ctx.moveTo(ex - Math.cos(a) * 4, ey - Math.sin(a) * 4)
+          ctx.lineTo(ex + Math.cos(a + 0.65) * 4, ey + Math.sin(a + 0.65) * 4)
+        }
+        ctx.stroke()
+      }
+      ctx.fillStyle = config.color
+      ctx.strokeStyle = 'rgba(255,255,255,0.68)'
+      ctx.beginPath()
+      ctx.arc(x, y, r * 0.72, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = '#8f7937'
+      ctx.beginPath()
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
 
-    ctx.fillStyle = '#ffffff'
-    ctx.font = '14px Arial'
-    ctx.fillText(config.emoji, x, y)
+    // 高等级在简化模式仍保留明显的成熟标记
+    if (lv >= 6) {
+      ctx.strokeStyle = lv >= 9 ? '#ffe8a0' : 'rgba(255,255,255,0.45)'
+      ctx.lineWidth = lv >= 9 ? 1.8 : 1
+      ctx.beginPath()
+      ctx.arc(x, y, r + 6, 0, Math.PI * 2)
+      ctx.stroke()
+    }
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.82)'
     ctx.beginPath()
@@ -849,8 +953,114 @@ module.exports = {
     ctx.restore()
   },
 
+  // 肠道主题菌体：保留不同类型的体型、鞭毛、孢子和生物膜差异
+  drawBacteriaByType(ctx, monster, size, config) {
+    const x = monster.x
+    const y = monster.y
+    const type = monster.type || ''
+    const phase = this.getMonsterAnimPhase(monster)
+    const isBoss = !!monster.isBoss
+    const rodTypes = ['bat', 'orc', 'direwolf', 'assassin', 'mammoth', 'harpy']
+    const sporeTypes = ['ghost', 'wraith', 'spider', 'voidling', 'phoenix']
+    const filmTypes = ['golem', 'troll', 'darkKnight', 'colossus', 'treant']
+    const rod = rodTypes.includes(type)
+    const spore = sporeTypes.includes(type)
+    const film = filmTypes.includes(type)
+    const rx = size * (isBoss ? 1.05 : (rod ? 1.0 : 0.78))
+    const ry = size * (isBoss ? 0.82 : (rod ? 0.52 : 0.78))
+    const rotation = rod ? Math.sin(phase * 0.45) * 0.18 : 0
+
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(rotation)
+
+    // 鞭毛 / 菌丝
+    const flagellaCount = isBoss ? 8 : (rod ? 5 : 3)
+    ctx.strokeStyle = config.outlineColor || '#5b2833'
+    ctx.lineWidth = isBoss ? 2 : 1.2
+    for (let i = 0; i < flagellaCount; i++) {
+      const a = (Math.PI * 2 * i) / flagellaCount
+      const sx = Math.cos(a) * rx * 0.7
+      const sy = Math.sin(a) * ry * 0.7
+      const wave = Math.sin(phase + i * 1.7) * size * 0.25
+      ctx.beginPath()
+      ctx.moveTo(sx, sy)
+      ctx.quadraticCurveTo(
+        Math.cos(a) * rx * 1.25 - Math.sin(a) * wave,
+        Math.sin(a) * ry * 1.25 + Math.cos(a) * wave,
+        Math.cos(a) * rx * 1.7,
+        Math.sin(a) * ry * 1.7
+      )
+      ctx.stroke()
+    }
+
+    // 菌体外膜
+    const grad = ctx.createRadialGradient(-rx * 0.3, -ry * 0.35, 1, 0, 0, Math.max(rx, ry))
+    grad.addColorStop(0, '#fff3d6')
+    grad.addColorStop(0.18, config.bodyColor || '#9bdc65')
+    grad.addColorStop(1, config.outlineColor || '#46752f')
+    ctx.fillStyle = grad
+    ctx.strokeStyle = config.outlineColor || '#46752f'
+    ctx.lineWidth = isBoss ? 3 : 1.8
+    ctx.beginPath()
+    if (film) {
+      // 生物膜类边缘不规则
+      const points = isBoss ? 14 : 10
+      for (let i = 0; i <= points; i++) {
+        const a = (Math.PI * 2 * i) / points
+        const wobble = 0.88 + Math.sin(i * 2.3 + phase * 0.25) * 0.12
+        const px = Math.cos(a) * rx * wobble
+        const py = Math.sin(a) * ry * wobble
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+      ctx.closePath()
+    } else {
+      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2)
+    }
+    ctx.fill()
+    ctx.stroke()
+
+    // 孢子囊 / 膜内颗粒
+    const dotCount = isBoss ? 8 : (spore ? 5 : 3)
+    for (let i = 0; i < dotCount; i++) {
+      const a = i * 2.35 + phase * 0.08
+      const px = Math.cos(a) * rx * 0.48
+      const py = Math.sin(a * 1.3) * ry * 0.46
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.5)' : (config.eyeColor || '#49202c')
+      ctx.beginPath()
+      ctx.arc(px, py, Math.max(1.5, size * (isBoss ? 0.1 : 0.08)), 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // Boss 菌核
+    if (isBoss) {
+      ctx.strokeStyle = 'rgba(255,245,210,0.72)'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.fillStyle = config.eyeColor || '#ffef70'
+      ctx.beginPath()
+      ctx.arc(0, 0, size * 0.16, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // 高光
+    ctx.fillStyle = 'rgba(255,255,255,0.38)'
+    ctx.beginPath()
+    ctx.ellipse(-rx * 0.32, -ry * 0.34, rx * 0.22, ry * 0.13, -0.35, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  },
+
   drawMonsterByType(ctx, monster, size) {
     const config = MONSTER_TYPES[monster.type]
+    // 新主题统一使用菌体造型；旧分支保留作兼容与后续细分参考
+    if (config) {
+      this.drawBacteriaByType(ctx, monster, size, config)
+      return
+    }
     const phase = this.getMonsterAnimPhase(monster)
     const bounce = Math.sin(phase) * 2
     

@@ -160,6 +160,8 @@ if (!pageInstance) {
   // Phase 0 安全开关：小游戏模式下跳过存档恢复，
   // 避免 tryRestoreRunProgress 读到小程序时代的不兼容脏数据导致空画面。
   pageInstance._skipRestoreRunProgress = true
+  // 冷启动先进首页；点「开始守护」后再进布阵（initCanvas 异步完成后也要落在 menu）
+  pageInstance._openMenuAfterInit = true
   // 劫持 tryRestoreRunProgress：小游戏模式强制返回 false → 走 initGame() 新局
   var _origTryRestore = null
   if (typeof pageInstance.tryRestoreRunProgress === 'function') {
@@ -170,6 +172,18 @@ if (!pageInstance) {
         return false
       }
       return _origTryRestore()
+    }.bind(pageInstance)
+  }
+  var _origInitGame = null
+  if (typeof pageInstance.initGame === 'function') {
+    _origInitGame = pageInstance.initGame.bind(pageInstance)
+    pageInstance.initGame = function () {
+      _origInitGame()
+      if (this._openMenuAfterInit) {
+        if (typeof this.refreshMenuStats === 'function') this.refreshMenuStats()
+        this.setData({ gameState: 'menu', showWaveChoice: false, commanderAiming: false })
+        console.log('[mini-game] 启动停在首页 menu')
+      }
     }.bind(pageInstance)
   }
 
@@ -198,9 +212,10 @@ if (!pageInstance) {
     pageInstance._uiBottomInset = ui.invH + SAFE.safeBottom
     pageInstance._syncUiTopInset = function () {
       const gs = this.data && this.data.gameState
-      const chrome = gs === 'prep' ? (ui.hudH + ui.prepH) : (ui.hudH + ui.bannerH)
-      // ui.hudH 已是「从屏顶到顶栏底」的完整高度（含刘海）
-      const nextTop = chrome
+      // menu 全屏首页；prep / playing 再给战场让位
+      let nextTop = ui.hudH + ui.bannerH
+      if (gs === 'prep') nextTop = ui.hudH + ui.prepH
+      else if (gs === 'menu') nextTop = ui.hudH
       if (this._uiTopInset === nextTop) return
       this._uiTopInset = nextTop
       if (typeof this.updateCanvasMetrics === 'function') {
@@ -213,6 +228,12 @@ if (!pageInstance) {
       }
     }
     pageInstance._syncUiTopInset()
+
+    // 若 initCanvas 已跑完，这里再确保一次停在首页
+    if (pageInstance._openMenuAfterInit) {
+      if (typeof pageInstance.refreshMenuStats === 'function') pageInstance.refreshMenuStats()
+      pageInstance.setData({ gameState: 'menu' })
+    }
   } catch (e) {
     console.error('[mini-game] canvas-ui 初始化失败:', e)
   }

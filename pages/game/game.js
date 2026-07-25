@@ -116,7 +116,7 @@ Page(Object.assign({
     // 当前地形主题
     currentTheme: 'forest',
     selectedBlessingKey: '',
-    selectedBlessingName: '尚未选择战术祝福',
+    selectedBlessingName: '尚未选择开局增益',
     selectedBlessingIcon: '✨',
     selectedBlessingDescription: '选择后会立刻生效，并持续整局。',
     blessingOptions: Object.values(BLESSINGS),
@@ -124,12 +124,12 @@ Page(Object.assign({
     canStartBattle: false,
     selectedInventoryIndex: -1,
     prepTowerSlots: [],
-    prepActionHint: '先选祝福',
+    prepActionHint: '先选增益',
     runBuffSummary: '未激活',
     nextSupplyWave: 3,
     showWaveChoice: false,
     waveChoiceMode: '',
-    waveChoicePanelTitle: '战术补给',
+    waveChoicePanelTitle: '肠道补给',
     waveChoiceTitle: '',
     waveChoiceHint: '',
     waveChoiceOptions: [],
@@ -139,19 +139,21 @@ Page(Object.assign({
     activeChainIcon: '',
     activeChainTitle: '',
     activeChainDescription: '',
-    currentThreatIcon: '🐜',
-    currentThreatTitle: '虫潮奔袭',
-    currentThreatDescription: '敌人更多，但单体更脆。',
-    currentThreatCounterText: '推荐：火焰 / 闪电',
+    currentThreatIcon: '🦠',
+    currentThreatTitle: '菌潮奔袭',
+    currentThreatDescription: '坏菌更多，但单体更脆。',
+    currentThreatCounterText: '推荐：胃酸 / 免疫脉冲',
     threatMissionText: '压制 0/6',
     threatMissionReady: false,
     commanderCost: COMMANDER_COST,
     commanderAiming: false,
-    commanderReadyText: '3 点可火力标记',
+    commanderReadyText: '3 点可标记集火区',
     commandPoints: 0,
     soundEnabled: true,
     isIOS: false,
-    inventoryBottomStyle: ''
+    inventoryBottomStyle: '',
+    highScore: 0,
+    maxWave: 1
   },
 
   canvas: null,
@@ -237,7 +239,7 @@ Page(Object.assign({
 
   onShareAppMessage() {
     return {
-      title: `合成塔防：我已经守到第${this.data.level || 1}关，你能超过吗？`,
+      title: `塔防: 肠道保卫战｜我已清剿到第${this.data.level || 1}段，你能超过吗？`,
       path: '/pages/index/index'
     }
   },
@@ -873,7 +875,7 @@ Page(Object.assign({
     this.flushQueuedStats()
 
     if ((this.data.commandPoints || 0) < 2) {
-      wx.showToast({ title: '至少需要 2 点战术点', icon: 'none' })
+      wx.showToast({ title: '至少需要 2 点免疫能量', icon: 'none' })
       return
     }
 
@@ -884,7 +886,7 @@ Page(Object.assign({
         gold: this.data.gold + 25
       })
       this.playSound('reward', { cooldown: 0 })
-      wx.showToast({ title: '仓库已满，改为空投金币 +25', icon: 'none' })
+      wx.showToast({ title: '细胞库已满，改为营养点 +25', icon: 'none' })
       return
     }
 
@@ -898,7 +900,7 @@ Page(Object.assign({
     this.floatingTexts.push({
       x: CONFIG.canvasWidth / 2,
       y: CONFIG.canvasHeight / 2 - 14,
-      text: `🛰️ 空投抵达：${TOWER_TYPES[type].name}`,
+      text: `🧬 细胞增殖：${TOWER_TYPES[type].name}`,
       color: '#a8f2ff',
       life: 90,
       maxLife: 90,
@@ -907,19 +909,19 @@ Page(Object.assign({
       scale: 1.16,
       isBold: true
     })
-    wx.showToast({ title: `空投 ${TOWER_TYPES[type].name}`, icon: 'none' })
+    wx.showToast({ title: `增殖 ${TOWER_TYPES[type].name}`, icon: 'none' })
   },
 
   toggleCommanderTargeting() {
     this.flushQueuedStats()
 
     if (this.data.gameState !== 'playing') {
-      wx.showToast({ title: '战斗中才能下达指挥', icon: 'none' })
+      wx.showToast({ title: '清菌时才能投放标记', icon: 'none' })
       return
     }
 
     if ((this.data.commandPoints || 0) < COMMANDER_COST) {
-      wx.showToast({ title: `至少需要 ${COMMANDER_COST} 点战术点`, icon: 'none' })
+      wx.showToast({ title: `至少需要 ${COMMANDER_COST} 点免疫能量`, icon: 'none' })
       return
     }
 
@@ -927,7 +929,7 @@ Page(Object.assign({
     this.setData({ commanderAiming: nextAiming })
     this.playSound('ui', { cooldown: 0, volume: 0.3 })
     if (nextAiming) {
-      wx.showToast({ title: '点地图投放集火区：优先攻击并增伤', icon: 'none' })
+      wx.showToast({ title: '点肠道投放免疫标记：优先攻击并增伤', icon: 'none' })
     }
   },
 
@@ -1131,7 +1133,7 @@ Page(Object.assign({
 
   buildThreatChainOptions(nextWave = this.data.wave + 1) {
     const favorSwarm = this.currentWaveThreat?.key === 'swarm'
-    const order = favorSwarm ? ['blitz', 'greed', 'hunt'] : ['hunt', 'blitz', 'greed']
+    const order = favorSwarm ? ['blitz', 'greed', 'fortress'] : ['fortress', 'blitz', 'greed']
     return order.map((key) => {
       const rule = THREAT_CHAIN_RULES[key]
       return {
@@ -1174,7 +1176,7 @@ Page(Object.assign({
     this.setData({
       showWaveChoice: false,
       waveChoiceMode: '',
-      waveChoicePanelTitle: '战术补给',
+      waveChoicePanelTitle: '肠道补给',
       waveChoiceTitle: '',
       waveChoiceHint: '',
       waveChoiceOptions: [],
@@ -1215,7 +1217,7 @@ Page(Object.assign({
 
     this.queueStatDelta({ commandPoints: amount })
 
-    const text = options.text || `🛰️ 战术点 +${amount}`
+    const text = options.text || `🧬 免疫能量 +${amount}`
     this.floatingTexts.push({
       x: options.x ?? (CONFIG.canvasWidth / 2),
       y: options.y ?? (CONFIG.canvasHeight / 2 - 10),
@@ -1275,7 +1277,7 @@ Page(Object.assign({
         break
       case 'gold':
         nextData.gold = this.data.gold + reward.amount
-        rewardLabel = `金币 +${reward.amount}`
+        rewardLabel = `营养点 +${reward.amount}`
         break
       case 'lives':
         nextData.lives = this.data.lives + reward.amount
@@ -1290,13 +1292,13 @@ Page(Object.assign({
           rewardLabel = `获得 ${TOWER_TYPES[towerType].name}`
         } else {
           nextData.gold = this.data.gold + 45
-          rewardLabel = '仓库满，改为金币 +45'
+          rewardLabel = '细胞库满，改为营养点 +45'
         }
         break
       }
       case 'summonCost':
         nextData.summonCost = Math.max(MIN_SUMMON_COST, this.data.summonCost - reward.amount)
-        rewardLabel = `召唤价格 -${reward.amount}`
+        rewardLabel = `培养价格 -${reward.amount}`
         break
       default:
         break
@@ -1334,7 +1336,7 @@ Page(Object.assign({
       this.setData({
         showWaveChoice: false,
         waveChoiceMode: '',
-        waveChoicePanelTitle: '战术补给',
+        waveChoicePanelTitle: '肠道补给',
         waveChoiceTitle: '',
         waveChoiceHint: '',
         waveChoiceOptions: [],
@@ -1426,12 +1428,12 @@ Page(Object.assign({
       totalWavesInLevel: 10,
       currentTheme: 'forest',
       selectedBlessingKey: '',
-      selectedBlessingName: '尚未选择战术祝福',
+      selectedBlessingName: '尚未选择开局增益',
       selectedBlessingIcon: '✨',
       fieldTowerCount: 0,
       canStartBattle: false,
       selectedInventoryIndex: -1,
-      prepActionHint: '先选祝福',
+      prepActionHint: '先选增益',
       runBuffSummary: '未激活',
       nextSupplyWave: 3,
       showWaveChoice: false,
@@ -1658,14 +1660,14 @@ Page(Object.assign({
 
   getPrepActionHint(selectedBlessingKey = this.data.selectedBlessingKey, fieldTowerCount = this.data.fieldTowerCount) {
     if (!selectedBlessingKey) {
-      return '先选祝福'
+      return '先选增益'
     }
 
     if (fieldTowerCount === 0) {
-      return '点仓库塔，再点发光塔位'
+      return '点细胞库中的细胞，再点发光部署位'
     }
 
-    return '已可开始第一波'
+    return '已可开始清菌'
   },
 
   updatePrepStatus(extraData = {}) {
@@ -2020,7 +2022,7 @@ Page(Object.assign({
     if (this.data.gameState !== 'prep') return
 
     if (!this.data.selectedBlessingKey) {
-      wx.showToast({ title: '先选祝福', icon: 'none' })
+      wx.showToast({ title: '先选增益', icon: 'none' })
       return
     }
 
@@ -2041,7 +2043,7 @@ Page(Object.assign({
     }
 
     if (this.grid[row][col]) {
-      wx.showToast({ title: '该塔位已有防御塔', icon: 'none' })
+      wx.showToast({ title: '该部署位已有免疫细胞', icon: 'none' })
       return
     }
 
@@ -2080,12 +2082,12 @@ Page(Object.assign({
 
   startBattle() {
     if (!this.data.selectedBlessingKey) {
-      wx.showToast({ title: '先选择一个战术祝福', icon: 'none' })
+      wx.showToast({ title: '先选择一个开局增益', icon: 'none' })
       return
     }
 
     if (this.towers.length === 0) {
-      wx.showToast({ title: '先拖一座塔到发光塔位', icon: 'none' })
+      wx.showToast({ title: '先拖一个免疫细胞到发光部署位', icon: 'none' })
       return
     }
 
@@ -2153,8 +2155,8 @@ Page(Object.assign({
     const key = `realm_${normalizedLevel}`
     if (MAP_THEMES[key] && MAP_THEMES[key].colorFormat === 'rgb-v1') return key
 
-    const adjectives = ['暮光', '星砂', '苍翠', '绯炎', '霜月', '雷鸣', '幽蓝', '金辉', '紫雾', '赤晶', '碧潮', '黑曜']
-    const nouns = ['荒原', '秘境', '峡谷', '高地', '沼泽', '天穹', '遗迹', '海岸', '盆地', '群岛', '裂谷', '庭院']
+    const adjectives = ['酸性', '温湿', '厌氧', '活跃', '失衡', '敏感', '黏膜', '深层', '褶皱', '菌群', '代谢', '屏障']
+    const nouns = ['前段', '中段', '后段', '十二指肠', '空肠', '回肠', '盲肠', '升结肠', '横结肠', '降结肠', '乙状结肠', '屏障区']
     const decorSets = [
       ['tree', 'bush', 'flower', 'mushroom', 'rock'],
       ['cactus', 'rock', 'skull', 'tumbleweed'],
@@ -2169,7 +2171,7 @@ Page(Object.assign({
     const decorIndex = (normalizedLevel * 5 + Math.floor(normalizedLevel / 3)) % decorSets.length
 
     MAP_THEMES[key] = {
-      name: `${adjectives[(normalizedLevel - 1) % adjectives.length]}${nouns[Math.floor((normalizedLevel - 1) / adjectives.length) % nouns.length]}·第${normalizedLevel}境`,
+      name: `${adjectives[(normalizedLevel - 1) % adjectives.length]}${nouns[Math.floor((normalizedLevel - 1) / adjectives.length) % nouns.length]}·第${normalizedLevel}段`,
       bgColors: [
         hslToHex(hue, 48, 8),
         hslToHex((hue + 12) % 360, 42, 15),
@@ -2601,7 +2603,7 @@ Page(Object.assign({
         : null) || {
         key: snapshot.currentWaveThreatKey || 'swarm',
         icon: savedData.currentThreatIcon || '🐜',
-        title: savedData.currentThreatTitle || '虫潮奔袭',
+        title: savedData.currentThreatTitle || '菌潮奔袭',
         description: savedData.currentThreatDescription || '',
         counterText: savedData.currentThreatCounterText || ''
       }
@@ -3067,7 +3069,7 @@ Page(Object.assign({
         this.setData({
           showWaveChoice: false,
           waveChoiceMode: '',
-          waveChoicePanelTitle: '战术补给',
+          waveChoicePanelTitle: '肠道补给',
           waveChoiceTitle: '',
           waveChoiceHint: '',
           waveChoiceOptions: [],
@@ -4656,44 +4658,42 @@ Page(Object.assign({
     ctx.stroke()
     ctx.setLineDash([])
 
-    // 起点标记 - 怪物传送门
+    // 起点标记 - 有害菌感染入口
     const startX = this.pathPoints[0].x + 15
     const startY = this.pathPoints[0].y
     ctx.save()
     ctx.shadowBlur = 15
-    ctx.shadowColor = '#ff00ff'
-    ctx.strokeStyle = '#aa00aa'
+    ctx.shadowColor = '#b6ff73'
+    ctx.strokeStyle = '#7cdb45'
     ctx.lineWidth = 3
     ctx.beginPath()
     ctx.ellipse(startX, startY, 12, 18, 0, 0, Math.PI * 2)
     ctx.stroke()
-    ctx.fillStyle = 'rgba(170, 0, 170, 0.3)'
+    ctx.fillStyle = 'rgba(130, 220, 80, 0.25)'
     ctx.fill()
     ctx.restore()
-    ctx.fillStyle = '#ff88ff'
+    ctx.fillStyle = '#d7ff9d'
     ctx.font = 'bold 10px Arial'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('👾', startX, startY)
+    ctx.fillText('🦠', startX, startY)
 
-    // 终点标记 - 城堡
+    // 终点标记 - 肠道健康屏障
     const endPoint = this.pathPoints[this.pathPoints.length - 1]
     const endX = endPoint.x - 15
     const endY = endPoint.y
     ctx.save()
     ctx.shadowBlur = 12
-    ctx.shadowColor = '#ffaa00'
-    ctx.fillStyle = '#8a7a6a'
-    ctx.fillRect(endX - 12, endY - 8, 24, 20)
-    ctx.fillStyle = '#4a3a2a'
+    ctx.shadowColor = '#ff9aaa'
+    ctx.fillStyle = '#ffbac3'
     ctx.beginPath()
-    ctx.arc(endX, endY + 4, 6, Math.PI, 0)
+    ctx.arc(endX, endY, 13, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillRect(endX - 6, endY + 4, 12, 8)
-    ctx.fillStyle = '#7a6a5a'
-    for (let i = -2; i <= 2; i++) {
-      ctx.fillRect(endX + i * 8 - 3, endY - 14, 6, 8)
-    }
+    ctx.fillStyle = '#fff1f3'
+    ctx.font = 'bold 13px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('🛡️', endX, endY)
     ctx.restore()
     ctx.restore()
   },
@@ -4729,7 +4729,7 @@ Page(Object.assign({
     ctx.font = 'bold 11px Arial'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillText(`第${level}关`, panelX - panelW / 2, panelY + 3)
+    ctx.fillText(`第${level}段`, panelX - panelW / 2, panelY + 3)
     
     // 波次进度
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
@@ -4922,7 +4922,7 @@ Page(Object.assign({
       }
     } else if (!silent) {
       wx.showToast({
-        title: hasMergePair ? '金币不足，暂时无法整理' : '没有可合成的同类同级塔',
+        title: hasMergePair ? '营养点不足，暂时无法整理' : '没有可合成的同类同级细胞',
         icon: 'none'
       })
     }
@@ -4944,7 +4944,7 @@ Page(Object.assign({
     const recycleGold = Math.max(6, Math.floor(8 * Math.pow(1.7, (tower.level || 1) - 1)))
     wx.showModal({
       title: `回收${config.name} Lv.${tower.level}`,
-      content: `回收后获得 ${recycleGold} 金币，此操作无法撤销。`,
+      content: `回收后获得 ${recycleGold} 营养点，此操作无法撤销。`,
       confirmText: '确认回收',
       confirmColor: '#d88a2e',
       success: (result) => {
@@ -4955,7 +4955,7 @@ Page(Object.assign({
           selectedInventoryIndex: -1
         })
         this.updateInventoryDisplay()
-        wx.showToast({ title: `回收获得 ${recycleGold} 金币`, icon: 'none' })
+        wx.showToast({ title: `回收获得 ${recycleGold} 营养点`, icon: 'none' })
       }
     })
   },
@@ -4964,13 +4964,13 @@ Page(Object.assign({
     if (this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS) {
       this._autoMergeInventory(true, this.data.summonCost)
       if (this.inventory.length >= INVENTORY_COLS * INVENTORY_ROWS) {
-        wx.showToast({ title: '仓库已满，请点整理或长按回收', icon: 'none' })
+        wx.showToast({ title: '细胞库已满，请点整理或长按回收', icon: 'none' })
         return
       }
     }
 
     if (this.data.gold < this.data.summonCost) {
-      wx.showToast({ title: '金币不足!', icon: 'none' })
+      wx.showToast({ title: '营养点不足!', icon: 'none' })
       return
     }
     
@@ -5415,7 +5415,7 @@ Page(Object.assign({
       }
     } else if (this.draggingFromInventory) {
       if (this.data.gameState === 'prep' && !this.data.selectedBlessingKey) {
-        wx.showToast({ title: '先选祝福', icon: 'none' })
+        wx.showToast({ title: '先选增益', icon: 'none' })
         this.resetDrag()
         return
       }
@@ -5485,7 +5485,7 @@ Page(Object.assign({
     const nextLevel = tower2.level + 1
     const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
     if (this.data.gold < upgradeCost) {
-      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      wx.showToast({ title: `营养点不足! 需要 ${upgradeCost}`, icon: 'none' })
       return
     }
 
@@ -5529,7 +5529,7 @@ Page(Object.assign({
     const nextLevel = invTower.level + 1
     const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
     if (this.data.gold < upgradeCost) {
-      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      wx.showToast({ title: `营养点不足! 需要 ${upgradeCost}`, icon: 'none' })
       return
     }
 
@@ -5628,7 +5628,7 @@ Page(Object.assign({
     const nextLevel = actualTarget.level + 1
     const upgradeCost = TOWER_UPGRADE_GOLD_BASE + TOWER_UPGRADE_GOLD_PER_LEVEL_SQ * nextLevel * nextLevel
     if (this.data.gold < upgradeCost) {
-      wx.showToast({ title: `金币不足! 需要 ${upgradeCost}`, icon: 'none' })
+      wx.showToast({ title: `营养点不足! 需要 ${upgradeCost}`, icon: 'none' })
       return
     }
 
@@ -5730,7 +5730,7 @@ Page(Object.assign({
         this.floatingTexts.push({
           x: CONFIG.canvasWidth / 2,
           y: CONFIG.canvasHeight / 2 - 60,
-          text: `🌍 进入${MAP_THEMES[nextTheme].name}地形!`,
+          text: `🫀 进入${MAP_THEMES[nextTheme].name}!`,
           color: '#ff88ff',
           life: 120,
           maxLife: 120,
@@ -5768,8 +5768,8 @@ Page(Object.assign({
 
           this.openChoiceOverlay({
             mode: 'supply',
-            panelTitle: '战术补给',
-            title: `第${newWave}波前，选 1 个战术补给`,
+            panelTitle: '肠道补给',
+            title: `第${newWave}波前，选 1 个肠道补给`,
             hint: '稳一手资源，还是赌更快成型。',
             options: this.buildWaveChoiceOptions(),
             returnState: 'playing'
@@ -5782,7 +5782,7 @@ Page(Object.assign({
           this.setData({
             showWaveChoice: false,
             waveChoiceMode: '',
-            waveChoicePanelTitle: '战术补给',
+            waveChoicePanelTitle: '肠道补给',
             waveChoiceTitle: '',
             waveChoiceHint: '',
             waveChoiceOptions: [],
@@ -5951,7 +5951,7 @@ Page(Object.assign({
     }
 
     if (this.data.gameState === 'choice') {
-      wx.showToast({ title: '先选 1 个战术补给', icon: 'none' })
+      wx.showToast({ title: '先选 1 个肠道补给', icon: 'none' })
       return
     }
 
@@ -5997,10 +5997,52 @@ Page(Object.assign({
     this.startGame()
   },
 
+  refreshMenuStats() {
+    let highScore = 0
+    let maxWave = 1
+    try {
+      highScore = wx.getStorageSync('highScore') || 0
+      maxWave = wx.getStorageSync('maxWave') || 1
+    } catch (e) { /* ignore */ }
+    this.setData({ highScore, maxWave })
+  },
+
+  // 小游戏无页面栈：从首页进入布阵
+  enterGameFromMenu() {
+    this.enableLeaveGuard()
+    this._openMenuAfterInit = false
+    if (typeof this.clearRunProgress === 'function') {
+      this.clearRunProgress()
+    }
+    this.stopGame()
+    this.initGame()
+    this.startGame()
+    this.requestRender()
+  },
+
   backToMenu() {
     this.persistRunProgress({ immediate: true })
     this.stopGame()
     this.disableLeaveGuard()
-    wx.navigateBack()
+    // 小游戏模式没有 navigateBack 的首页页栈，直接切回 canvas 首页
+    if (this._uiTopInset != null) {
+      this.refreshMenuStats()
+      this.setData({
+        gameState: 'menu',
+        showWaveChoice: false,
+        commanderAiming: false
+      })
+      this.startGame()
+      this.requestRender()
+      return
+    }
+    wx.navigateBack({
+      fail: () => {
+        this.refreshMenuStats()
+        this.setData({ gameState: 'menu' })
+        this.startGame()
+        this.requestRender()
+      }
+    })
   }
 }, renderTowers, renderMonsters, renderEffects))

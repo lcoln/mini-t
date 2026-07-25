@@ -19,7 +19,7 @@ Page({
 
   onShareAppMessage() {
     return {
-      title: '合成塔防：这塔还能再合｜你能守到第几关？',
+      title: '塔防: 肠道保卫战｜合成免疫细胞，清剿坏菌！',
       path: '/pages/index/index'
     }
   },

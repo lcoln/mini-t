@@ -3,12 +3,12 @@
   <view class="status-bar">
     <view class="status-main">
       <view class="status-item wave">
-        <text class="status-icon">🏰</text>
+        <text class="status-icon">🫀</text>
         <text class="status-value">{{level}}-{{waveInLevel}}</text>
-        <text class="status-label">关</text>
+        <text class="status-label">段</text>
       </view>
       <view class="status-item gold">
-        <text class="status-icon">💰</text>
+      <text class="status-icon">🥣</text>
         <text class="status-value gold-value">{{gold}}</text>
       </view>
       <view class="status-item lives">
@@ -37,15 +37,15 @@
     <view class="banner-chip banner-chip-subtle">
       <text>强化 {{runBuffSummary}}</text>
     </view>
-    <text class="banner-tip">拖动同塔合成升级 · 第{{nextSupplyWave}}波补给</text>
+    <text class="banner-tip">拖动同类细胞合成进化 · 第{{nextSupplyWave}}波补给</text>
   </view>
 
   <!-- 战前准备条 -->
   <view class="prep-hud" wx:if="{{gameState === 'prep'}}">
     <view class="prep-hud-top">
       <view class="prep-copy">
-        <text class="prep-hud-eyebrow">开波准备</text>
-        <text class="prep-hud-title">{{selectedBlessingKey ? '继续放 1 座塔，然后开第一波' : '先选 1 个战术祝福'}}</text>
+        <text class="prep-hud-eyebrow">免疫部署</text>
+        <text class="prep-hud-title">{{selectedBlessingKey ? '部署 1 个免疫细胞，然后开始清菌' : '先选 1 个开局增益'}}</text>
       </view>
       <view class="prep-progress {{fieldTowerCount > 0 ? 'ready' : ''}}">
         <text>{{fieldTowerCount > 0 ? '已布阵 1/1' : '待布阵 0/1'}}</text>
@@ -53,8 +53,8 @@
     </view>
 
     <view class="prep-step-line">
-      <text class="prep-step {{selectedBlessingKey ? 'done' : 'active'}}">1 选祝福</text>
-      <text class="prep-step {{selectedBlessingKey && fieldTowerCount === 0 ? 'active' : (fieldTowerCount > 0 ? 'done' : '')}}">2 放塔</text>
+      <text class="prep-step {{selectedBlessingKey ? 'done' : 'active'}}">1 选增益</text>
+      <text class="prep-step {{selectedBlessingKey && fieldTowerCount === 0 ? 'active' : (fieldTowerCount > 0 ? 'done' : '')}}">2 部署</text>
       <text class="prep-step {{canStartBattle ? 'active ready' : ''}}">3 开波</text>
     </view>
 
@@ -74,7 +74,7 @@
 
     <view class="prep-footer compact">
       <text class="prep-footnote {{canStartBattle ? 'ready' : ''}}">{{canStartBattle ? '已准备好，直接开第一波' : prepActionHint}}</text>
-      <button class="btn primary prep-start-btn {{canStartBattle ? '' : 'disabled'}}" bindtap="startBattle" disabled="{{!canStartBattle}}">开始第一波</button>
+      <button class="btn primary prep-start-btn {{canStartBattle ? '' : 'disabled'}}" bindtap="startBattle" disabled="{{!canStartBattle}}">开始清菌</button>
     </view>
   </view>
 
@@ -107,7 +107,7 @@
   <!-- 底部仓库区域 -->
   <view class="inventory-area" style="{{inventoryBottomStyle}}">
     <view class="inventory-header">
-      <text class="inventory-title">🏰 防御塔仓库</text>
+      <text class="inventory-title">🫀 免疫细胞库</text>
       <view class="inventory-actions">
         <view class="supply-drop-btn {{commandPoints >= 2 ? '' : 'disabled'}}" catchtap="callSupplyDrop">
           <text class="supply-drop-icon">📦</text>
@@ -128,7 +128,7 @@
     </view>
     
     <view class="inventory-hint">
-      <text>无漏怪或击杀精英可攒战术点，2 点空投补塔，3 点投放集火区 · 长按可回收</text>
+      <text>无漏菌或击杀精英可攒免疫能量，2 点增殖细胞，3 点标记集火区 · 长按可回收</text>
     </view>
     
     <view class="inventory-grid">
@@ -197,7 +197,7 @@
 
   <view class="overlay" wx:if="{{showWaveChoice}}">
     <view class="panel supply-panel">
-      <text class="panel-title">战术补给</text>
+      <text class="panel-title">肠道补给</text>
       <text class="supply-subtitle">{{waveChoiceTitle}}</text>
       <view class="supply-list">
         <view
@@ -222,10 +222,10 @@
       <view class="panel-stats">
         <view class="panel-stat">
           <text class="panel-stat-label">当前关卡</text>
-          <text class="panel-stat-value">第{{level}}关 第{{waveInLevel}}/{{totalWavesInLevel}}波</text>
+          <text class="panel-stat-value">第{{level}}段 第{{waveInLevel}}/{{totalWavesInLevel}}波</text>
         </view>
         <view class="panel-stat">
-          <text class="panel-stat-label">当前金币</text>
+          <text class="panel-stat-label">当前营养点</text>
           <text class="panel-stat-value gold-text">💰 {{gold}}</text>
         </view>
       </view>
@@ -238,7 +238,7 @@
   <!-- 游戏结束面板 -->
   <view class="overlay" wx:if="{{gameState === 'gameover'}}">
     <view class="panel gameover-panel">
-      <text class="panel-title gameover">💀 防守失败!</text>
+      <text class="panel-title gameover">💀 肠道屏障失守!</text>
       <view class="panel-stats">
         <view class="panel-stat">
           <text class="panel-stat-label">最终分数</text>

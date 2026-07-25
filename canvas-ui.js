@@ -105,11 +105,11 @@ function create(page, ctx, opts) {
   function drawHUD() {
     ctx.save()
     const g = ctx.createLinearGradient(0, 0, 0, HUD_BOTTOM)
-    g.addColorStop(0, 'rgba(30,60,30,0.98)')
-    g.addColorStop(1, 'rgba(15,30,15,0.94)')
+    g.addColorStop(0, 'rgba(82,35,45,0.98)')
+    g.addColorStop(1, 'rgba(48,20,28,0.95)')
     ctx.fillStyle = g
     ctx.fillRect(0, 0, W, HUD_BOTTOM)
-    ctx.strokeStyle = 'rgba(80,255,80,0.4)'
+    ctx.strokeStyle = 'rgba(255,155,175,0.42)'
     ctx.lineWidth = 1.5
     ctx.beginPath(); ctx.moveTo(0, HUD_BOTTOM); ctx.lineTo(W, HUD_BOTTOM); ctx.stroke()
 
@@ -130,11 +130,11 @@ function create(page, ctx, opts) {
     const soundCx = pauseCx - r * 2 - gapBtn
     const actionsLeft = soundCx - r - 8
 
-    // 左侧数值：只画放得下的，优先关卡/金币/生命，分数可省略
+    // 左侧数值：只画放得下的，优先肠段/营养点/健康度，分数可省略
     let x = 10
     const pills = [
-      { icon: '🏰', value: (d().level || 1) + '-' + (d().waveInLevel || 1), color: '#ffffff', suffix: '关' },
-      { icon: '💰', value: d().gold || 0, color: '#ffd700', suffix: '' },
+      { icon: '🫀', value: (d().level || 1) + '-' + (d().waveInLevel || 1), color: '#ffffff', suffix: '段' },
+      { icon: '🥣', value: d().gold || 0, color: '#ffd7a0', suffix: '' },
       { icon: '❤️', value: d().lives || 0, color: '#ff6666', suffix: '' },
       { icon: '⭐', value: d().score || 0, color: '#ffffff', suffix: '' }
     ]
@@ -157,11 +157,11 @@ function create(page, ctx, opts) {
     const y0 = HUD_BOTTOM
     ctx.save()
     const g = ctx.createLinearGradient(0, y0, 0, y0 + BANNER_H)
-    g.addColorStop(0, 'rgba(10,22,10,0.92)')
-    g.addColorStop(1, 'rgba(6,14,6,0.85)')
+    g.addColorStop(0, 'rgba(58,24,32,0.94)')
+    g.addColorStop(1, 'rgba(37,16,23,0.9)')
     ctx.fillStyle = g
     ctx.fillRect(0, y0, W, BANNER_H)
-    ctx.strokeStyle = 'rgba(80,255,80,0.16)'
+    ctx.strokeStyle = 'rgba(255,155,175,0.2)'
     ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(0, y0 + BANNER_H); ctx.lineTo(W, y0 + BANNER_H); ctx.stroke()
 
@@ -169,9 +169,9 @@ function create(page, ctx, opts) {
     const waveInLevel = d().waveInLevel || 1
     const totalWaves = d().totalWavesInLevel || 10
     const remaining = Math.max(0, totalWaves - waveInLevel)
-    const blessTxt = (d().selectedBlessingIcon || '⚡') + ' ' + (d().selectedBlessingName || '战术祝福')
+    const blessTxt = (d().selectedBlessingIcon || '🛡️') + ' ' + (d().selectedBlessingName || '开局增益')
 
-    text('第' + level + '关 · ' + waveInLevel + '/' + totalWaves + '波',
+    text('第' + level + '段 · ' + waveInLevel + '/' + totalWaves + '波',
       12, y0 + 12, 'bold 11px sans-serif', '#ffcc44', 'left')
     text('剩' + remaining + '波 · 第' + (d().nextSupplyWave || 3) + '波补给',
       W - 12, y0 + 12, '10px sans-serif', 'rgba(220,255,220,0.72)', 'right')
@@ -185,7 +185,7 @@ function create(page, ctx, opts) {
     ctx.fillRect(barX, barY, barW * (waveInLevel / totalWaves), 3)
 
     text(blessTxt, 12, y0 + 32, 'bold 11px sans-serif', '#f7f5d0', 'left')
-    text('拖动同塔合成升级', W - 12, y0 + 32, '10px sans-serif', 'rgba(220,255,220,0.7)', 'right')
+    text('同类细胞合成进化', W - 12, y0 + 32, '10px sans-serif', 'rgba(220,255,220,0.7)', 'right')
     ctx.restore()
   }
 
@@ -211,9 +211,9 @@ function create(page, ctx, opts) {
   function drawPrepBar() {
     const y0 = HUD_BOTTOM
     ctx.save()
-    ctx.fillStyle = 'rgba(12,22,18,0.92)'
+    ctx.fillStyle = 'rgba(55,24,32,0.94)'
     ctx.fillRect(0, y0, W, PREP_H)
-    ctx.strokeStyle = 'rgba(120,255,160,0.16)'
+    ctx.strokeStyle = 'rgba(255,165,185,0.2)'
     ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(0, y0 + PREP_H); ctx.lineTo(W, y0 + PREP_H); ctx.stroke()
 
@@ -221,7 +221,7 @@ function create(page, ctx, opts) {
     const fieldCount = d().fieldTowerCount || 0
     const canStart = !!d().canStartBattle
 
-    text(hasBless ? '选下方塔，拖到发光圈' : '先选 1 个战术祝福',
+    text(hasBless ? '选下方细胞，拖到发光部署位' : '先选 1 个开局增益',
       12, y0 + 14, '12px sans-serif', '#eafff2', 'left')
     text(fieldCount > 0 ? '已布阵 1/1' : '待布阵 0/1',
       W - 12, y0 + 14, '11px sans-serif', fieldCount > 0 ? '#8dffab' : '#c7b28a', 'right')
@@ -249,7 +249,7 @@ function create(page, ctx, opts) {
     const btnW = 132, btnH = 26
     const btnX = (W - btnW) / 2, btnY = y0 + PREP_H - btnH - 5
     roundRect(btnX, btnY, btnW, btnH, 13)
-    ctx.fillStyle = canStart ? '#37c26a' : 'rgba(120,140,128,0.35)'
+    ctx.fillStyle = canStart ? '#df7187' : 'rgba(140,115,122,0.35)'
     ctx.fill()
     text('开始第一波', btnX + btnW / 2, btnY + btnH / 2, '13px sans-serif', canStart ? '#fff' : '#9fb0a5', 'center')
     if (canStart) addHit(btnX, btnY, btnW, btnH, () => page.startBattle())
@@ -290,22 +290,22 @@ function create(page, ctx, opts) {
     const panelH = INV_H + SAFE_BOTTOM
     const y0 = H - panelH
     ctx.save()
-    ctx.fillStyle = 'rgba(10,16,13,0.9)'
+    ctx.fillStyle = 'rgba(39,18,25,0.93)'
     ctx.fillRect(0, y0, W, panelH)
-    ctx.strokeStyle = 'rgba(120,255,160,0.16)'
+    ctx.strokeStyle = 'rgba(255,165,185,0.18)'
     ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke()
 
     // 标题 + 动作按钮
-    text('🏰 防御塔仓库', 12, y0 + 16, '13px sans-serif', '#eafff2', 'left')
+    text('🫀 免疫细胞库', 12, y0 + 16, '13px sans-serif', '#eafff2', 'left')
 
     // 三个动作按钮：空投 / 指挥 / 召唤
     const btnH = 26, btnY = y0 + 6
     const cp = d().commandPoints || 0
     const btns = [
-      { label: '📦空投', sub: cp + '/2', enabled: cp >= 2, handler: () => page.callSupplyDrop() },
-      { label: '🛰️指挥', sub: cp + '/' + (d().commanderCost || 3), enabled: cp >= (d().commanderCost || 3), handler: () => page.toggleCommanderTargeting() },
-      { label: '✨召唤', sub: '💰' + (d().summonCost || 20), enabled: (d().gold || 0) >= (d().summonCost || 20) && !d().inventoryFull, handler: () => page.summonTower() }
+      { label: '🧬增殖', sub: cp + '/2', enabled: cp >= 2, handler: () => page.callSupplyDrop() },
+      { label: '🎯标记', sub: cp + '/' + (d().commanderCost || 3), enabled: cp >= (d().commanderCost || 3), handler: () => page.toggleCommanderTargeting() },
+      { label: '✨培养', sub: '🥣' + (d().summonCost || 20), enabled: (d().gold || 0) >= (d().summonCost || 20) && !d().inventoryFull, handler: () => page.summonTower() }
     ]
     const bw = 64
     let bx = W - 12 - (bw * 3 + 12)
@@ -323,7 +323,7 @@ function create(page, ctx, opts) {
     }
 
     // 提示行
-    text('无漏怪/杀精英攒战术点 · 2点空投 · 3点集火 · 长按回收', 12, y0 + 38, '9px sans-serif', '#8fb3a1', 'left')
+    text('无漏菌/杀精英攒免疫能量 · 2点增殖 · 3点标记 · 长按回收', 12, y0 + 38, '9px sans-serif', '#8fb3a1', 'left')
 
     // 5x4 仓库格
     const COLS = 5, ROWS = 4
@@ -395,7 +395,7 @@ function create(page, ctx, opts) {
       roundRect(panelX, py, panelW, panelH, 14)
       ctx.fillStyle = '#14201a'; ctx.fill()
       ctx.strokeStyle = 'rgba(120,255,160,0.3)'; ctx.lineWidth = 1; ctx.stroke()
-      text(d().waveChoicePanelTitle || '战术补给', panelX + panelW / 2, py + 24, '17px sans-serif', '#ffd76a', 'center')
+      text(d().waveChoicePanelTitle || '肠道补给', panelX + panelW / 2, py + 24, '17px sans-serif', '#ffd76a', 'center')
       text(d().waveChoiceTitle || '', panelX + panelW / 2, py + 48, '12px sans-serif', '#cfe8d8', 'center')
       let oy = py + 68
       for (let i = 0; i < options.length; i++) {
@@ -413,7 +413,7 @@ function create(page, ctx, opts) {
       ctx.fillStyle = '#14201a'; ctx.fill()
       ctx.strokeStyle = 'rgba(120,255,160,0.3)'; ctx.lineWidth = 1; ctx.stroke()
       text('游戏暂停', panelX + panelW / 2, panelY + 28, '18px sans-serif', '#ffd76a', 'center')
-      text('第' + (d().level || 1) + '关 第' + (d().waveInLevel || 1) + '/' + (d().totalWavesInLevel || 10) + '波', panelX + panelW / 2, panelY + 58, '12px sans-serif', '#cfe8d8', 'center')
+      text('第' + (d().level || 1) + '段 第' + (d().waveInLevel || 1) + '/' + (d().totalWavesInLevel || 10) + '波', panelX + panelW / 2, panelY + 58, '12px sans-serif', '#f1cfd5', 'center')
       text('💰 ' + (d().gold || 0), panelX + panelW / 2, panelY + 80, '13px sans-serif', '#ffd76a', 'center')
       drawPanelBtn(panelX, panelY + 108, panelW, '继续游戏', '#37c26a', () => page.resumeGame())
       drawPanelBtn(panelX, panelY + 150, panelW, '重新开始', 'rgba(255,255,255,0.12)', () => page.restartGame())
@@ -422,7 +422,7 @@ function create(page, ctx, opts) {
       roundRect(panelX, panelY, panelW, panelH, 14)
       ctx.fillStyle = '#20140f'; ctx.fill()
       ctx.strokeStyle = 'rgba(255,120,120,0.4)'; ctx.lineWidth = 1; ctx.stroke()
-      text('💀 防守失败!', panelX + panelW / 2, panelY + 30, '18px sans-serif', '#ff8a8a', 'center')
+      text('💀 肠道屏障失守!', panelX + panelW / 2, panelY + 30, '18px sans-serif', '#ff8a8a', 'center')
       text('最终分数 ' + (d().score || 0), panelX + panelW / 2, panelY + 64, '15px sans-serif', '#fff', 'center')
       text('坚持波数 ' + (d().wave || 0), panelX + panelW / 2, panelY + 90, '12px sans-serif', '#cfe8d8', 'center')
       if (d().isNewRecord) text('🏆 新纪录!', panelX + panelW / 2, panelY + 112, '13px sans-serif', '#ffd76a', 'center')
@@ -440,6 +440,130 @@ function create(page, ctx, opts) {
     addHit(btnX, y, btnW, btnH, handler)
   }
 
+  // ---------- 首页：分档 + 呼吸感间距；三步改轻量文案，降低密度 ----------
+  function getHomeLayout() {
+    const top = SAFE_TOP + 28
+    const bottom = H - SAFE_BOTTOM - 24
+    const avail = bottom - top
+    if (avail < 560) {
+      return {
+        mode: 'compact', top, bottom, avail, padX: 24,
+        titleSize: 34, subSize: 16, descSize: 12,
+        heroH: 120, ctaH: 48, statsH: 58, stepsH: 36,
+        // 段间距：标题后 / 按钮后 / 战绩后
+        gaps: [20, 24, 22], btnMaxW: 240, centerBias: 0.08
+      }
+    }
+    if (avail < 700) {
+      return {
+        mode: 'regular', top, bottom, avail, padX: 28,
+        titleSize: 38, subSize: 18, descSize: 13,
+        heroH: 136, ctaH: 52, statsH: 68, stepsH: 40,
+        gaps: [28, 32, 28], btnMaxW: 260, centerBias: 0.18
+      }
+    }
+    return {
+      mode: 'tall', top, bottom, avail, padX: 32,
+      titleSize: 44, subSize: 20, descSize: 14,
+      heroH: 150, ctaH: 54, statsH: 74, stepsH: 42,
+      gaps: [36, 40, 36], btnMaxW: 280, centerBias: 0.2
+    }
+  }
+
+  function drawHomeMenu() {
+    ctx.save()
+    const L = getHomeLayout()
+    const padX = L.padX
+    const [g1, g2, g3] = L.gaps
+
+    const bg = ctx.createLinearGradient(0, 0, 0, H)
+    bg.addColorStop(0, '#2a1118')
+    bg.addColorStop(0.55, '#421c27')
+    bg.addColorStop(1, '#241016')
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, W, H)
+
+    ctx.fillStyle = 'rgba(255,145,165,0.1)'
+    ctx.beginPath(); ctx.arc(W * 0.85, L.top + 40, L.mode === 'tall' ? 170 : 120, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = 'rgba(180,85,110,0.08)'
+    ctx.beginPath(); ctx.arc(W * 0.1, H * 0.78, L.mode === 'tall' ? 190 : 140, 0, Math.PI * 2); ctx.fill()
+
+    const contentH = L.heroH + g1 + L.ctaH + g2 + L.statsH + g3 + L.stepsH
+    const extra = Math.max(0, L.avail - contentH)
+    let y = L.top + extra * L.centerBias
+
+    // Hero —— 按字号累加行距（textBaseline=middle，不能写死挤在一起）
+    const badges = ['3分钟一局', '拖拽合成', '每3波补给']
+    let bx = padX
+    for (let i = 0; i < badges.length; i++) {
+      const label = badges[i]
+      ctx.font = '11px sans-serif'
+      const tw = ctx.measureText(label).width
+      const bw = tw + 18
+      roundRect(bx, y, bw, 24, 12)
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'
+      ctx.fill()
+      text(label, bx + bw / 2, y + 12, '11px sans-serif', 'rgba(234,255,220,0.8)', 'center')
+      bx += bw + 10
+    }
+    const lineGap = L.mode === 'tall' ? 18 : (L.mode === 'regular' ? 14 : 12)
+    const homeTitle = '塔防: 肠道保卫战'
+    let titleSize = L.titleSize
+    ctx.font = 'bold ' + titleSize + 'px sans-serif'
+    const maxTitleW = W - padX * 2
+    const measuredTitleW = ctx.measureText(homeTitle).width
+    if (measuredTitleW > maxTitleW) {
+      titleSize = Math.max(24, Math.floor(titleSize * maxTitleW / measuredTitleW))
+    }
+    let ty = y + 24 + 12 + titleSize * 0.55
+    text(homeTitle, padX, ty, 'bold ' + titleSize + 'px sans-serif', '#ff9dad', 'left')
+    ty += titleSize * 0.55 + lineGap + L.subSize * 0.55
+    text('细胞出动，清剿坏菌', padX, ty, 'bold ' + L.subSize + 'px sans-serif', '#ffe4e7', 'left')
+    ty += L.subSize * 0.55 + lineGap + L.descSize * 0.55
+    text('合成升级，守住肠道健康屏障', padX, ty, L.descSize + 'px sans-serif', 'rgba(255,210,215,0.7)', 'left')
+    // hero 实际占位随字号走，避免下一块顶上来
+    const heroUsed = (ty + L.descSize * 0.55) - y + 8
+    y += Math.max(L.heroH, heroUsed) + g1
+
+    // CTA
+    const btnW = Math.min(L.btnMaxW, W - padX * 2)
+    const btnX = (W - btnW) / 2
+    roundRect(btnX, y, btnW, L.ctaH, L.ctaH / 2)
+    const btnG = ctx.createLinearGradient(btnX, y, btnX, y + L.ctaH)
+    btnG.addColorStop(0, '#ef8ba0')
+    btnG.addColorStop(1, '#cf5f78')
+    ctx.fillStyle = btnG
+    ctx.fill()
+    text('开始清菌', btnX + btnW / 2, y + L.ctaH / 2, 'bold 17px sans-serif', '#fff', 'center')
+    addHit(btnX, y, btnW, L.ctaH, () => {
+      if (typeof page.enterGameFromMenu === 'function') page.enterGameFromMenu()
+    })
+    y += L.ctaH + g2
+
+    // Stats —— 更高更疏
+    const cardGap = 14
+    const cardW = (W - padX * 2 - cardGap) / 2
+    ;[
+      { label: '最高分数', value: String(d().highScore || 0), color: '#ffd76a' },
+      { label: '最高波数', value: String(d().maxWave || 1), color: '#ff9dad' }
+    ].forEach((item, i) => {
+      const cx = padX + i * (cardW + cardGap)
+      roundRect(cx, y, cardW, L.statsH, 16)
+      ctx.fillStyle = 'rgba(255,255,255,0.04)'
+      ctx.fill()
+      text(item.label, cx + 18, y + L.statsH * 0.34, '12px sans-serif', 'rgba(210,235,210,0.55)', 'left')
+      text(item.value, cx + 18, y + L.statsH * 0.7, 'bold 24px sans-serif', item.color, 'left')
+    })
+    y += L.statsH + g3
+
+    // Steps —— 单行文案，不再堆三张卡片
+    const stepLine = '1 选增益    ·    2 部署细胞    ·    3 清剿菌潮'
+    text(stepLine, W / 2, y + L.stepsH / 2, '13px sans-serif', 'rgba(190,220,190,0.7)', 'center')
+
+    text('v1.1', W / 2, L.bottom, '10px sans-serif', 'rgba(150,180,150,0.32)', 'center')
+    ctx.restore()
+  }
+
   // ---------- 主绘制入口 ----------
   function draw() {
     hitRegions = []
@@ -450,11 +574,17 @@ function create(page, ctx, opts) {
     ctx.setLineDash([])
 
     const gs = d().gameState
+    if (gs === 'menu') {
+      drawHomeMenu()
+      ctx.restore()
+      return
+    }
+
     drawHUD()
     if (gs === 'prep') {
       drawPrepBar()
       drawPrepSlots()
-    } else if (gs !== 'menu') {
+    } else {
       drawBattleBanner()
     }
     drawInventory()
