@@ -121,10 +121,14 @@ function create(page, ctx, opts) {
 
     const r = 13
     const gapBtn = 6
-    // 右侧留给：音效 + 暂停，再空出胶囊
-    let rightLimit = W - 10
-    if (MENU_RECT && Number.isFinite(MENU_RECT.left)) {
-      rightLimit = MENU_RECT.left - 8
+    // 右侧留给：音效 + 暂停，再空出微信胶囊（…+关闭）
+    // 胶囊拿不到时也要兜底预留，否则暂停键会被系统胶囊盖住、点开变“相关游戏”
+    let rightLimit
+    if (MENU_RECT && Number.isFinite(MENU_RECT.left) && MENU_RECT.left > 0) {
+      rightLimit = MENU_RECT.left - 10
+    } else {
+      // 微信胶囊标准宽约 87px、右边距约 7px，再留 4px 间隙
+      rightLimit = W - 98
     }
     const pauseCx = rightLimit - r
     const soundCx = pauseCx - r * 2 - gapBtn
